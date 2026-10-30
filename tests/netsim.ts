@@ -191,8 +191,9 @@ export function runScenario(cfg: Scenario): Result {
       lastKey = key;
       lastSend = now;
       const s = ++seq;
-      up.send({ move: { ...move }, aim: { x: 1, y: 0 }, attack, seq: s }, now);
-      predictor.record(s, move, self?.slow ?? 0);
+      const t = now / 1000;
+      up.send({ move: { ...move }, aim: { x: 1, y: 0 }, attack, seq: s, t }, now);
+      predictor.record(s, move, self?.slow ?? 0, t);
       if (attack) attacksSent++;
     }
     maxPending = Math.max(maxPending, predictor.pending.length);
@@ -211,7 +212,7 @@ export function runScenario(cfg: Scenario): Result {
       speed,
       self.slow,
       move,
-      frameMs / 1000,
+      now / 1000,
       canPredict,
     );
     if (r.correction !== null) corrections.push(r.correction);

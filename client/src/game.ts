@@ -393,8 +393,8 @@ export class ArenaScene extends Phaser.Scene {
           p.pos,
           FIGHTERS[p.fighter].speed,
           p.slow,
-          this.bridge.input.move,
-          dt,
+          this.bridge.paused ? { x: 0, y: 0 } : this.bridge.input.move,
+          performance.now() / 1000,
           canPredict,
         );
         rp = result.pos;
@@ -602,12 +602,14 @@ export class ArenaScene extends Phaser.Scene {
     const move = this.bridge.paused
       ? { x: 0, y: 0 }
       : { ...this.bridge.input.move };
+    // Client clock for the movement timeline; same clock as predictor.frame.
+    const t = performance.now() / 1000;
     const payload: Input = this.bridge.paused
-      ? { move, aim: this.bridge.input.aim, seq }
-      : { ...this.bridge.input, move, seq };
+      ? { move, aim: this.bridge.input.aim, seq, t }
+      : { ...this.bridge.input, move, seq, t };
     this.bridge.send(payload);
     const me = s.players.find((pl) => pl.id === this.bridge.id);
-    this.predictor.record(seq, move, me?.slow ?? 0);
+    this.predictor.record(seq, move, me?.slow ?? 0, t);
     this.bridge.input.attack = false;
     this.bridge.input.super = false;
   }

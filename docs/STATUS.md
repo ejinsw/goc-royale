@@ -230,3 +230,34 @@ All four now meet the <= 75 KB/s ingress and <= 3 Mbps host-outbound targets, in
 `tests/delta.test.ts` adds eight tests: primitive, nested, and deleted-key diffs; keyed add/remove/change/reorder; whole-array replacement; 400 randomized structures round-tripping byte-identically; gap detection and keyframe recovery; keyframe cadence; and full 10-player Showdown and 6-player Broomball matches whose every per-viewer snapshot decodes byte-identically while sending under 40% of the full bytes.
 
 Verified: `npm run typecheck`, `npm test` (72 pass), `npm run build`, `npm run netsim`. Not verified: measured bytes on a real PeerJS connection. PeerJS JSON serialization adds its own framing, and the numbers above are JSON payload sizes.
+
+### Step 8 — authority applies movement from the client's input timeline (done; authoritative timing change approved by the user)
+
+Before this, the authority applied only the newest received move each tick. Under loss, the reliable channel delivers inputs late and in bursts (head-of-line blocking). Delayed inputs were then skipped or stretched, and correction p95 missed the 0.25-unit target at 100 ms/1% (0.262) and 200 ms/3% (0.350).
+
+What changed, and what did not:
+- Movement inputs carry `t`, the client clock time the input became active. The authority keeps a per-player timeline and each tick applies 1/30 s of it, segment by segment, with the existing substepped collision. Average speed is unchanged.
+- It may run past the newest input by at most 60 ms. Beyond that the stream is treated as stalled and the fighter holds position instead of guessing.
+- Unused time is banked (max 0.25 s) and allows catch-up at no more than 2x once the delayed inputs arrive. A backlog larger than the bank is skipped, not replayed, so a long stall cannot leave permanent lag. Total movement is bounded by speed × (real elapsed time + 0.25 s), so forged timestamps cannot speed-hack.
+- Stun and disconnect consume timeline time without moving, so a stunned period is not replayed as movement afterward. Countdown, the goal pause, and death re-anchor the timeline, so pre-"Go" inputs never become a burst.
+- A client clock that jumps back by more than 1 s (page reload, new renderer) starts a fresh timeline.
+- **Unchanged:** aim, attacks, Supers, and ball release still latch on arrival and resolve on the next tick, exactly as before. Inputs without `t` keep the old latest-wins movement, so every pre-existing simulation and room test still runs unmodified against the old path.
+- Snapshots carry `ackTime` per viewer: the point on that viewer's own timeline up to which movement has been applied. This replaces step 6's `ackAge` heuristic. The client replays its timeline from `ackTime` to now.
+
+`npm run netsim` before → after:
+
+| Case | Correction p95 | Max per-frame jump |
+|---|---|---|
+| LAN 10 ms | 0.092 → 0.123 | 0.075 → 0.087 |
+| 50 ms RTT, 0% loss | 0.092 → 0.127 | 0.080 → 0.070 |
+| 100 ms RTT, 1% loss | **0.262 → 0.148** | 0.149 → 0.138 |
+| 200 ms RTT, 3% loss | **0.350 → 0.153** | 0.202 → 0.215 |
+| 100 ms + 500 ms outage | 0.093 → 0.130 | 0.373 → 0.138 |
+
+Correction p50 dropped from ~0.08 to ~0.006 units in every case. Correction p95 now meets the 0.25-unit target in every §4.4 case, and the worst per-frame visible jump is <= 0.25 in every case, including outage recovery. The small p95 increase at LAN/50 ms comes from the 60 ms extrapolation window: when a turn lands inside it, the authority briefly applies the old direction. Attacks were presented exactly once in every case.
+
+Trade-off for other viewers: a guest whose uplink stalls now visibly holds still for the stall (after 60 ms) and then catches up at up to 2x, instead of drifting in the last direction. This is the authority's honest view of an unknown input stream.
+
+Tests: six new engine tests (held-duration ordering, stall hold plus <= 2x catch-up recovering the full path, forged-timestamp speed bound, no countdown burst, stun consumes time without moving, clock-reset restart). The netsim tests now assert the 0.25 p95 target and <= 0.25 per-frame jump in all five cases, and p50 < 0.05. `npm run typecheck`, `npm test` (78 pass), `npm run build`, `npm run netsim` all pass.
+
+Not verified: a live two-browser match with this change, and any real-network or physical-device measurement. The harness limits from step 6 still apply.

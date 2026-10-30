@@ -702,3 +702,108 @@ test("snapshot compaction quantizes the wire copy without mutating authority", (
   assert.deepEqual(p.pos, authoritativeBefore);
   assert.equal(p.hp, 4211.7);
 });
+
+// --- Timestamped movement timeline (authority input queue) ---------------
+const speed0 = (e: Engine) => FIGHTERS[e.playerList[0].fighter].speed;
+const timed = (e: Engine, t: number, move: { x: number; y: number }) =>
+  e.setInput("p0", { move, aim: { x: 1, y: 0 }, t });
+
+test("timeline applies each input for the time it was held, in order", () => {
+  const e = engine("brandon");
+  const p = e.playerList[0];
+  p.pos = { x: 18, y: 6 };
+  const start = { ...p.pos };
+  // Streamed 30 Hz inputs: +x for 0.2 s, then a turn to +y between ticks.
+  for (let k = 0; k < 12; k++) {
+    timed(e, 10 + k / 30, k < 6 ? { x: 1, y: 0 } : { x: 0, y: 1 });
+    e.step();
+  }
+  const applied = e.snapshot("p0").ackTime - 10;
+  assert.ok(applied > 0.35, `applied ${applied}`);
+  // x moved exactly while +x was held; y covers the rest of applied time.
+  assert.ok(Math.abs(p.pos.x - start.x - speed0(e) * 0.2) < 0.02, `x ${p.pos.x}`);
+  assert.ok(
+    Math.abs(p.pos.y - start.y - speed0(e) * (applied - 0.2)) < 0.03,
+    `y ${p.pos.y}`,
+  );
+});
+
+test("timeline holds position during a stall, then catches up at no more than 2x", () => {
+  const e = engine("brandon");
+  const p = e.playerList[0];
+  p.pos = { x: 6, y: 6 };
+  timed(e, 0, { x: 1, y: 0 });
+  // No further inputs for 0.3 s: the authority extrapolates 60 ms and holds.
+  for (let i = 0; i < 9; i++) e.step();
+  const held = p.pos.x - 6;
+  assert.ok(Math.abs(held - speed0(e) * 0.06) < 0.02, `held ${held}`);
+  // The delayed inputs arrive: +x actually continued to t=0.3, then stop.
+  timed(e, 0.3, { x: 0, y: 0 });
+  let maxStep = 0;
+  for (let i = 0; i < 15; i++) {
+    const x = p.pos.x;
+    e.step();
+    maxStep = Math.max(maxStep, p.pos.x - x);
+  }
+  assert.ok(maxStep <= (2 * speed0(e)) / 30 + 1e-6, `step ${maxStep}`);
+  // Full intended path recovered (0.3 s of movement), within banked limits.
+  assert.ok(Math.abs(p.pos.x - 6 - speed0(e) * 0.3) < 0.03, `x ${p.pos.x}`);
+});
+
+test("timeline cannot exceed real-time speed even with forged timestamps", () => {
+  const e = engine("brandon");
+  const p = e.playerList[0];
+  p.pos = { x: 4, y: 12 };
+  // A client claims 10 s of held movement in one instant.
+  timed(e, 0, { x: 1, y: 0 });
+  timed(e, 10, { x: 1, y: 0 });
+  const x0 = p.pos.x;
+  for (let i = 0; i < 30; i++) e.step();
+  // One real second: at most speed x (1 s + bankMax).
+  assert.ok(p.pos.x - x0 <= speed0(e) * 1.25 + 1e-6, `moved ${p.pos.x - x0}`);
+});
+
+test("timeline does not turn countdown inputs into a burst at Go", () => {
+  const e = new Engine("showdown", members());
+  const p = e.playerList[0];
+  const start = { ...p.pos };
+  for (let i = 0; i < 89; i++) {
+    timed(e, i / 30, { x: 1, y: 0 });
+    e.step();
+  }
+  assert.deepEqual(p.pos, start, "no movement during countdown");
+  timed(e, 89 / 30, { x: 1, y: 0 });
+  e.step();
+  e.step();
+  assert.ok(p.pos.x - start.x <= (2 * speed0(e)) / 30 + 1e-6, `${p.pos.x - start.x}`);
+});
+
+test("timeline consumes time without moving while stunned", () => {
+  const e = engine("brandon");
+  const p = e.playerList[0];
+  p.pos = { x: 6, y: 12 };
+  p.stunUntil = e.state.time + 0.5;
+  for (let i = 0; i < 15; i++) {
+    timed(e, 20 + i / 30, { x: 1, y: 0 });
+    e.step();
+  }
+  assert.equal(p.pos.x, 6, "stunned fighter does not move");
+  for (let i = 15; i < 18; i++) {
+    timed(e, 20 + i / 30, { x: 1, y: 0 });
+    e.step();
+  }
+  // After the stun, no replay of the stunned period.
+  assert.ok(p.pos.x - 6 < speed0(e) * 0.15, `moved ${p.pos.x - 6}`);
+});
+
+test("timeline restarts when the client clock jumps back (reload)", () => {
+  const e = engine("brandon");
+  timed(e, 500, { x: 1, y: 0 });
+  e.step();
+  timed(e, 1, { x: 0, y: 1 });
+  const p = e.playerList[0];
+  const y = p.pos.y;
+  e.step();
+  e.step();
+  assert.ok(p.pos.y > y, "new timeline is applied");
+});

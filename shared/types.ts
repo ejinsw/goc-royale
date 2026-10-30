@@ -55,6 +55,12 @@ export interface Input {
    * can discard acknowledged inputs and replay the rest after a correction.
    */
   seq?: number;
+  /**
+   * Client clock (seconds, monotonic) when this input became active. When
+   * present, the authority consumes movement from the client's input timeline
+   * at a bounded rate instead of applying only the newest move each tick.
+   */
+  t?: number;
 }
 export interface Projectile {
   id: number;
@@ -168,11 +174,11 @@ export interface Match {
    */
   ackSeq: number;
   /**
-   * Sim seconds the authority has been applying the input identified by
-   * `ackSeq` (time since it arrived). The client subtracts this from that
-   * input's locally active duration so replay covers only the unapplied part.
+   * Point on the recipient's own input timeline (client clock, seconds) up
+   * to which the authority has applied movement. The client replays its
+   * timeline from here to now. 0 when no timestamped input has been applied.
    */
-  ackAge: number;
+  ackTime: number;
 }
 export type Command =
   | { type: "select"; fighter: FighterId }

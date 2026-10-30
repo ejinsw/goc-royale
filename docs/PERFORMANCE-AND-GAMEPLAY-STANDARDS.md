@@ -345,10 +345,10 @@ preferred conventions:
   over a reliable ordered channel. The schema still carries fields the client
   does not read, and per-entity ids are long UUIDs; a compact binary or
   index-keyed schema would cut the remaining bytes further.
-- The authority applies the latest received input each tick rather than a
-  per-tick input queue, so retransmission-delayed inputs are stretched or
-  skipped. Correction p95 exceeds the 0.25-unit target at 100 ms/1% and
-  200 ms/3% in the scripted harness (`npm run netsim`).
+- Movement inputs are applied from the client's timestamped timeline with
+  bounded extrapolation and catch-up. A stall longer than the 0.25 s bank is
+  skipped rather than replayed, and a stalled fighter visibly holds and then
+  catches up at up to 2x for other viewers.
 - Movement is predicted and reconciled with sequence/ack/replay, but there is
   no predicted action presentation path (attack/Super cues wait for the
   authoritative event).
@@ -360,7 +360,9 @@ Resolved on the `refactor/performance-gameplay-standards` branch (see
 carry sequences with per-viewer acknowledgement and client replay; static map
 art is no longer redrawn every frame; a development overlay and scripted
 latency/loss harness exist; snapshots are delta-encoded and measured within
-the ingress and host-outbound budgets up to 10 players.
+the ingress and host-outbound budgets up to 10 players; the authority applies
+each movement input for the time it was held, and correction p95 meets the
+0.25-unit target in every scripted §4.4 case.
 - Character presentation primarily uses portrait images, simple wobble, shapes,
   text, and modest effects.
 - The Three.js studies and GLB models are separate from the multiplayer renderer.

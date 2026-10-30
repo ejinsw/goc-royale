@@ -52,6 +52,24 @@ interface Dash {
   dir: Vec;
   hit: Set<string>;
 }
+/**
+ * A player's timestamped movement timeline on the authority. Segment i is
+ * active from segs[i].t until segs[i + 1].t; the last segment is open.
+ * `c` is how far along the client's clock movement has been applied.
+ */
+interface MoveTrack {
+  segs: { t: number; move: Vec }[];
+  c: number | null;
+  /** Unused real time (s) available for bounded catch-up after a stall. */
+  bank: number;
+}
+/** Tuning for timeline movement consumption. */
+export const TIMELINE = {
+  /** How far (s) the authority may extrapolate past the newest input. */
+  extrapolate: 0.06,
+  /** Maximum banked catch-up time (s); bounds bursts and speed abuse. */
+  bankMax: 0.25,
+};
 /** Transport independent authority. Call step exactly once per fixed simulation tick. */
 export class Engine {
   state: Match;
@@ -59,8 +77,8 @@ export class Engine {
   histories = new Map<string, History[]>();
   /** Highest input sequence processed per player, echoed back as ackSeq. */
   lastSeq = new Map<string, number>();
-  /** Sim time at which each player's acknowledged input arrived. */
-  lastSeqAt = new Map<string, number>();
+  /** Timestamped movement timelines, per player (see MoveTrack). */
+  tracks = new Map<string, MoveTrack>();
   pending: Pending[] = [];
   dashes: Dash[] = [];
   private serial = 0;
@@ -127,7 +145,7 @@ export class Engine {
       aliveCount: players.length,
       sampleTime: 0,
       ackSeq: 0,
-      ackAge: 0,
+      ackTime: 0,
     };
   }
   get playerList() {
@@ -145,12 +163,20 @@ export class Engine {
     // Record the highest processed sequence (monotonic) for acknowledgement.
     if (typeof input.seq === "number" && Number.isFinite(input.seq)) {
       const prevSeq = this.lastSeq.get(id) ?? 0;
-      if (input.seq > prevSeq) {
-        this.lastSeq.set(id, input.seq);
-        // Inputs arrive between ticks; state.time is the last tick, so every
-        // later tick applies this input and ackAge equals applied duration.
-        this.lastSeqAt.set(id, this.state.time);
+      if (input.seq > prevSeq) this.lastSeq.set(id, input.seq);
+    }
+    if (typeof input.t === "number" && Number.isFinite(input.t)) {
+      let track = this.tracks.get(id);
+      const last = track?.segs.at(-1);
+      // A clock that jumps back (page reload, new renderer) starts a new
+      // timeline; small reorderings are ignored for movement.
+      if (!track || (last && input.t < last.t - 1)) {
+        track = { segs: [], c: null, bank: 0 };
+        this.tracks.set(id, track);
       }
+      const tail = track.segs.at(-1);
+      if (!tail || input.t > tail.t) track.segs.push({ t: input.t, move: m });
+      if (track.segs.length > 300) track.segs.splice(0, track.segs.length - 300);
     }
     this.inputs.set(id, {
       move: m,
@@ -163,6 +189,58 @@ export class Engine {
           : clamp(Number.isFinite(input.power) ? input.power! : 0.35, 0.35, 1),
     });
     return true;
+  }
+  /**
+   * Advance a player's movement timeline by one tick (standard §4.3: apply
+   * each input for the time it was held, in order, instead of only the newest
+   * input per tick).
+   *
+   * - Normally consumes exactly `dt` of client time, so speed is unchanged.
+   * - May extrapolate the newest (open) input by at most
+   *   TIMELINE.extrapolate; beyond that the stream is stalled and the fighter
+   *   holds position rather than guessing.
+   * - Time not consumed is banked (capped at TIMELINE.bankMax) and lets the
+   *   fighter catch up at no more than 2x once delayed inputs arrive. Total
+   *   movement therefore never exceeds speed x real elapsed time + bankMax,
+   *   which also bounds timestamp abuse.
+   * - Backlog that banked time cannot recover (a stall longer than bankMax)
+   *   is skipped, not replayed, so a long stall never leaves permanent lag.
+   */
+  private consumeTimeline(p: Player, track: MoveTrack, dt: number, moves: boolean) {
+    const segs = track.segs;
+    if (!segs.length) return;
+    const newest = segs[segs.length - 1].t;
+    if (track.c === null) track.c = segs[0].t;
+    if (newest - track.c > track.bank + TIMELINE.extrapolate)
+      track.c = newest - track.bank;
+    const budget = dt + Math.min(track.bank, dt);
+    const target = Math.max(
+      track.c,
+      Math.min(track.c + budget, newest + TIMELINE.extrapolate),
+    );
+    const used = target - track.c;
+    track.bank = clamp(track.bank + dt - used, 0, TIMELINE.bankMax);
+    if (moves) {
+      const speed = FIGHTERS[p.fighter].speed * (1 - p.slow);
+      for (let i = 0; i < segs.length; i++) {
+        const start = Math.max(segs[i].t, track.c);
+        const end = Math.min(i + 1 < segs.length ? segs[i + 1].t : Infinity, target);
+        if (end > start) this.move(p, mul(segs[i].move, speed * (end - start)));
+      }
+    }
+    track.c = target;
+    // Drop segments that ended at or before the consumption point.
+    let drop = 0;
+    while (drop + 1 < segs.length && segs[drop + 1].t <= target) drop++;
+    if (drop) segs.splice(0, drop);
+  }
+  /** Re-anchor a timeline at its newest input (no backlog, no bank). */
+  private anchorTimeline(track: MoveTrack) {
+    const last = track.segs.at(-1);
+    if (!last) return;
+    track.segs = [last];
+    track.c = last.t;
+    track.bank = 0;
   }
   valid(pos: Vec, r = RULES.radius) {
     const m = MAPS[this.state.mode];
@@ -753,17 +831,26 @@ export class Engine {
         s.phase = "playing";
         s.notice = "Go!";
         s.ball.state = "free";
-      } else return;
+      } else {
+        // Inputs sent before play must not become a backlog at "Go".
+        for (const t of this.tracks.values()) this.anchorTimeline(t);
+        return;
+      }
     }
     if (s.phase === "goal") {
       if (s.time >= s.phaseUntil) {
         this.kickoff();
         s.phase = "playing";
         s.notice = "Go!";
-      } else return;
+      } else {
+        for (const t of this.tracks.values()) this.anchorTimeline(t);
+        return;
+      }
     }
     for (const p of s.players) {
       if (!p.alive) {
+        const t = this.tracks.get(p.id);
+        if (t) this.anchorTimeline(t);
         if (s.mode === "broomball" && p.connected && s.time >= p.respawn) {
           const sp = MAPS.broomball.spawns[p.team === 0 ? 0 : 3];
           p.pos = { ...sp };
@@ -787,9 +874,14 @@ export class Engine {
           this.heal(p, (a.kind === "welcome" ? 220 : 350) * dt, owner, false);
         else if (a.kind === "welcome") p.slow = 0.3;
       }
-      if (input && p.connected && s.time >= p.stunUntil) {
+      const canAct = !!input && p.connected && s.time >= p.stunUntil;
+      const track = this.tracks.get(p.id);
+      // Timeline time always advances; it only produces movement when the
+      // fighter can act (stun/disconnect consume time without moving).
+      if (track) this.consumeTimeline(p, track, dt, canAct);
+      if (input && canAct) {
         p.aim = input.aim;
-        this.move(p, mul(input.move, f.speed * (1 - p.slow) * dt));
+        if (!track) this.move(p, mul(input.move, f.speed * (1 - p.slow) * dt));
         if (input.super) this.activateSuper(p);
         if (input.attack) this.attack(p);
       }
@@ -949,8 +1041,7 @@ export class Engine {
     });
     snap.sampleTime = s.time;
     snap.ackSeq = this.lastSeq.get(viewerId) ?? 0;
-    const arrived = this.lastSeqAt.get(viewerId);
-    snap.ackAge = arrived === undefined ? 0 : Math.max(0, s.time - arrived);
+    snap.ackTime = this.tracks.get(viewerId)?.c ?? 0;
     this.compact(snap);
     return snap;
   }
@@ -969,7 +1060,7 @@ export class Engine {
       v.y = Math.round(v.y * 100) / 100;
     };
     snap.sampleTime = Math.round(snap.sampleTime * 1000) / 1000;
-    snap.ackAge = Math.round(snap.ackAge * 1000) / 1000;
+    // Not rounded: ackTime is a replay boundary on the client's own clock.
     for (const p of snap.players) {
       q2(p.pos);
       q2(p.aim);

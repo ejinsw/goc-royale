@@ -29,13 +29,13 @@ test("netsim: local movement responds on the frame the input is sampled", () => 
   for (const r of all) assert.equal(r.responseFrames.max, 0, r.name);
 });
 
-test("netsim: correction p95 meets the 0.25-unit target at LAN, 50 ms, and through a 500 ms outage", () => {
-  for (const r of [lan, rtt50, outage])
+test("netsim: correction p95 meets the 0.25-unit target in every standard case", () => {
+  for (const r of all)
     assert.ok(r.corrections.p95 <= TARGET, `${r.name}: p95 ${r.corrections.p95}`);
 });
 
 test("netsim: corrections render as small per-frame glides, not snaps", () => {
-  for (const r of [lan, rtt50, rtt100])
+  for (const r of all)
     assert.ok(r.visibleJumpMax <= TARGET, `${r.name}: ${r.visibleJumpMax}`);
 });
 
@@ -45,10 +45,7 @@ test("netsim: outage recovers and prediction state stays bounded", () => {
   for (const r of all) assert.ok(r.maxPendingInputs < 60, `${r.name}: pending bounded`);
 });
 
-test("netsim: regression ceiling for 100 ms/1% and 200 ms/3% (target NOT yet met)", () => {
-  // These exceed the 0.25 target because the authority applies the latest
-  // input each tick, so retransmission-delayed inputs are stretched or skipped.
-  // This guards against regressions only; see docs/STATUS.md.
-  for (const r of [rtt100, rtt200])
-    assert.ok(r.corrections.p95 < 0.45, `${r.name}: p95 ${r.corrections.p95}`);
+test("netsim: typical corrections are near zero", () => {
+  for (const r of all)
+    assert.ok(r.corrections.p50 < 0.05, `${r.name}: p50 ${r.corrections.p50}`);
 });

@@ -6,6 +6,12 @@ import type { Match } from "../../shared/types";
  *
  * Kept free of Phaser/DOM so the same code runs in the arena renderer and in
  * the scripted latency/loss harness (tests/netsim.ts).
+ *
+ * The client keeps its own input timeline (each sent move and the client
+ * clock time it became active). The authority applies that timeline in order
+ * and reports `ackTime`, the point up to which it has applied movement. On a
+ * fresh snapshot the client starts from the authoritative position and
+ * replays its timeline from `ackTime` to now.
  */
 
 /**
@@ -46,17 +52,13 @@ export function stepMove(
   return out;
 }
 
-/** A sent move input and how long it has been the active local input. */
+/** A sent move input and the client time (s) it became active. */
 export interface PendingInput {
   seq: number;
   move: Vec;
   slow: number;
-  /** Seconds this input has been active locally (grows until superseded). */
-  duration: number;
+  t: number;
 }
-
-/** Visual correction blend time constant (s). */
-const CORRECTION_TAU = 0.1;
 
 export interface FrameResult {
   /** Position to draw: predicted position plus the decaying visual offset. */
@@ -69,6 +71,11 @@ export interface FrameResult {
   correction: number | null;
 }
 
+/** Visual correction blend time constant (s). */
+const CORRECTION_TAU = 0.1;
+/** Longest frame step applied to local prediction (s), e.g. after a stall. */
+const MAX_FRAME = 0.25;
+
 export class LocalPredictor {
   pending: PendingInput[] = [];
   /** Reconciled predicted position (the simulation-consistent estimate). */
@@ -80,29 +87,37 @@ export class LocalPredictor {
   offset: Vec = { x: 0, y: 0 };
   private lastAck = -1;
   private lastSample = -1;
+  private lastNow: number | null = null;
 
-  /** Record an input at the moment it is sent. */
-  record(seq: number, move: Vec, slow: number) {
-    this.pending.push({ seq, move: { ...move }, slow, duration: 0 });
-    if (this.pending.length > 240) this.pending.shift();
+  /** Record an input at the moment it is sent, at client time `t` (s). */
+  record(seq: number, move: Vec, slow: number, t: number) {
+    this.pending.push({ seq, move: { ...move }, slow, t });
+    if (this.pending.length > 300) this.pending.shift();
   }
 
   /** Drop prediction state (e.g. the local fighter died or left the match). */
   reset() {
     this.pos = null;
     this.offset = { x: 0, y: 0 };
-    this.pending = [];
     this.lastAck = -1;
     this.lastSample = -1;
   }
 
+  /** Replay the local timeline over [from, now] starting at `base`. */
+  private replay(match: Match, base: Vec, from: number, now: number, speed: number) {
+    let pos = { ...base };
+    for (let i = 0; i < this.pending.length; i++) {
+      const seg = this.pending[i];
+      const start = Math.max(seg.t, from);
+      const end = Math.min(i + 1 < this.pending.length ? this.pending[i + 1].t : now, now);
+      if (end > start) pos = stepMove(match, pos, seg.move, seg.slow, speed, end - start);
+    }
+    return pos;
+  }
+
   /**
-   * Advance one rendered frame.
-   *
-   * On a fresh snapshot: start from the authoritative position, replay the
-   * unapplied remainder of the acknowledged input (its active duration minus
-   * `ackAge`) and every later input in full. Between snapshots: lead with the
-   * live input for immediate response.
+   * Advance one rendered frame at client time `now` (s, same clock as the
+   * `t` sent with inputs).
    */
   frame(
     match: Match,
@@ -110,11 +125,12 @@ export class LocalPredictor {
     speed: number,
     slow: number,
     liveMove: Vec,
-    dt: number,
+    now: number,
     canPredict: boolean,
   ): FrameResult {
-    if (canPredict && this.pending.length)
-      this.pending[this.pending.length - 1].duration += dt;
+    const dt =
+      this.lastNow === null ? 0 : Math.min(MAX_FRAME, Math.max(0, now - this.lastNow));
+    this.lastNow = now;
     if (this.pos === null) this.pos = { ...auth };
     const decay = Math.exp(-dt / CORRECTION_TAU);
     this.offset = { x: this.offset.x * decay, y: this.offset.y * decay };
@@ -127,22 +143,17 @@ export class LocalPredictor {
     if (fresh) {
       this.lastAck = match.ackSeq;
       this.lastSample = match.sampleTime;
-      // Keep the acked input: the authority may not have finished applying it.
-      this.pending = this.pending.filter((i) => i.seq >= match.ackSeq);
-      if (!canPredict) {
-        // Server-forced state (countdown, stun, knockback): follow authority.
+      // Keep the segment containing ackTime; earlier ones are fully applied.
+      while (this.pending.length > 1 && this.pending[1].t <= match.ackTime)
+        this.pending.shift();
+      if (!canPredict || match.ackTime <= 0) {
+        // Server-forced state (countdown, stun, knockback) or no applied
+        // timeline yet: follow authority.
         this.pos = { ...auth };
         this.offset = { x: 0, y: 0 };
         return { pos: draw(), correction: null };
       }
-      let base = { ...auth };
-      for (const i of this.pending) {
-        const d =
-          i.seq === match.ackSeq
-            ? Math.max(0, i.duration - match.ackAge)
-            : i.duration;
-        base = stepMove(match, base, i.move, i.slow, speed, d);
-      }
+      const base = this.replay(match, auth, match.ackTime, now, speed);
       // Where this frame would have been without the correction; the
       // difference is authority divergence, not ordinary movement.
       const expected = stepMove(match, this.pos, liveMove, slow, speed, dt);
@@ -162,8 +173,7 @@ export class LocalPredictor {
       }
       return { pos: draw(), correction };
     }
-    if (canPredict)
-      this.pos = stepMove(match, this.pos, liveMove, slow, speed, dt);
+    if (canPredict) this.pos = stepMove(match, this.pos, liveMove, slow, speed, dt);
     else {
       // Server-forced movement: ease toward authority between snapshots.
       const blend = Math.min(1, (dt * 1000) / 60);
