@@ -59,6 +59,8 @@ export class Engine {
   histories = new Map<string, History[]>();
   /** Highest input sequence processed per player, echoed back as ackSeq. */
   lastSeq = new Map<string, number>();
+  /** Sim time at which each player's acknowledged input arrived. */
+  lastSeqAt = new Map<string, number>();
   pending: Pending[] = [];
   dashes: Dash[] = [];
   private serial = 0;
@@ -125,6 +127,7 @@ export class Engine {
       aliveCount: players.length,
       sampleTime: 0,
       ackSeq: 0,
+      ackAge: 0,
     };
   }
   get playerList() {
@@ -142,7 +145,12 @@ export class Engine {
     // Record the highest processed sequence (monotonic) for acknowledgement.
     if (typeof input.seq === "number" && Number.isFinite(input.seq)) {
       const prevSeq = this.lastSeq.get(id) ?? 0;
-      if (input.seq > prevSeq) this.lastSeq.set(id, input.seq);
+      if (input.seq > prevSeq) {
+        this.lastSeq.set(id, input.seq);
+        // Inputs arrive between ticks; state.time is the last tick, so every
+        // later tick applies this input and ackAge equals applied duration.
+        this.lastSeqAt.set(id, this.state.time);
+      }
     }
     this.inputs.set(id, {
       move: m,
@@ -941,6 +949,8 @@ export class Engine {
     });
     snap.sampleTime = s.time;
     snap.ackSeq = this.lastSeq.get(viewerId) ?? 0;
+    const arrived = this.lastSeqAt.get(viewerId);
+    snap.ackAge = arrived === undefined ? 0 : Math.max(0, s.time - arrived);
     this.compact(snap);
     return snap;
   }
@@ -959,6 +969,7 @@ export class Engine {
       v.y = Math.round(v.y * 100) / 100;
     };
     snap.sampleTime = Math.round(snap.sampleTime * 1000) / 1000;
+    snap.ackAge = Math.round(snap.ackAge * 1000) / 1000;
     for (const p of snap.players) {
       q2(p.pos);
       q2(p.aim);

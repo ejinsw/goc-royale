@@ -170,3 +170,39 @@ Measured effect (scripted 8-player Showdown, 120 ticks of random movement with p
 Honest conclusion: quantization is a real but modest win. The dominant cost is the schema itself (full state every snapshot). Closing the gap to the 75 KB/s budget needs **delta-against-baseline encoding and omission of unchanged entities**, which is deliberately deferred as the next bandwidth step because it requires per-client baseline tracking that interacts with the per-viewer bush-concealment filter. Tracked as future work; the budget is not yet met for the worst-case 8-player scene, and 10-player Showdown (the new cap) is further over.
 
 Verified: `npm run typecheck`, `npm test` (58 pass, 1 new), and `npm run build` all pass.
+
+### Step 6 — instrumentation, development overlay, and controlled-network harness (done)
+
+Standard §4.3 (ping/pong is incomplete until RTT, jitter, loss and stale snapshot age are measured and visible in a development overlay), §4.4 (controlled 50/100/200 ms RTT, loss, and 500 ms interruption verification) and §5.3 (profiling evidence).
+
+- `client/src/metrics.ts`: allocation-light ring buffers and rate counters for frame time, correction error, RTT, jitter (RFC 3550-style), late pings, snapshot gaps/age/rate, bytes in/out, host sim and snapshot rates. Payload byte counting runs only while the overlay is visible.
+- `client/src/devOverlay.ts`: a plain `<pre>` updated at 4 Hz, hidden by default and outside the normal HUD. Toggle with the backtick key or open with `?debug`. No React state is involved.
+- Guests now send a 1 Hz `ping`; the host replies `pong` with the same timestamp. The client measures RTT and jitter and counts pings unanswered after 3 s as late (the reliable channel surfaces loss as delay). Pongs never reach React.
+- Prediction and reconciliation moved into `client/src/prediction.ts` (no Phaser/DOM), shared by the renderer and the harness. The input send now happens at the start of the frame.
+
+**Bug found and fixed by the harness:** step 3's replay recorded one frame of movement per sent input, while each input actually stays active for ~2 frames, and it ignored how much of the acknowledged input the authority had already applied. That produced a systematic under-prediction and a correction on every snapshot. Fixes:
+- Each pending input now accumulates the time it is active locally.
+- Snapshots carry a per-viewer `ackAge`: sim seconds the authority has been applying the acknowledged input. Replay covers only the unapplied remainder of that input plus every later input.
+- Corrections no longer snap: the reconciled position is adopted immediately but drawn through a visual offset that decays over ~100 ms.
+
+`npm run netsim` runs the real `Room`/`Engine` against a simulated guest that uses the renderer's predictor and send policy, over an ordered reliable link (latency, jitter, retransmission as ~1 RTT + 20 ms, outage). 20 s of scripted movement changing direction every 400 ms, plus an attack every 1.5 s:
+
+| Case | Correction p50 / p95 / max (units) | Max per-frame jump | Stale snapshot age p95 / max | Attacks sent/shown |
+|---|---|---|---|---|
+| LAN 10 ms | 0.055 / 0.092 / 0.350 | 0.075 | 50 / 50 ms | 10/10 |
+| 50 ms RTT, 0% loss | 0.078 / 0.092 / 0.350 | 0.080 | 50 / 50 ms | 10/10 |
+| 100 ms RTT, 1% loss | 0.081 / **0.262** / 0.688 | 0.149 | 50 / 167 ms | 10/10 |
+| 200 ms RTT, 3% loss | 0.078 / **0.350** / 1.120 | 0.202 | 167 / 267 ms | 10/10 |
+| 100 ms + 500 ms outage | 0.080 / 0.093 / 2.430 | 0.373 | 50 / 567 ms | 10/10 |
+
+Reading the results against the standard:
+- Local movement responds on the frame the input is sampled in every case (0 extra frames). This is by construction and independent of network delay.
+- No action was lost or doubled in any case. Repeated event ids from the rolling window were absorbed by id dedupe.
+- Correction p95 meets the <= 0.25-unit target at LAN, 50 ms, and across the 500 ms outage. It **misses** at 100 ms/1% (0.262) and 200 ms/3% (0.350). Cause: the authority applies the latest received input each tick, so inputs delayed by retransmission behind head-of-line blocking are stretched or skipped. The fix is a per-tick authoritative input queue, which changes input-to-tick timing on the authority and should be its own reviewed change.
+- The outage produces one large correction (2.43 units) on recovery. It is spread over ~100 ms, so its worst per-frame jump is 0.373 units, which is visible.
+
+`tests/netsim.test.ts` adds six tests. They assert exact-once actions, same-frame response, the 0.25 target where it is met, per-frame jumps <= 0.25 at LAN/50/100 ms, bounded pending inputs, outage recovery, and a regression ceiling (not the target) for 100/1% and 200/3%.
+
+Harness limits: the retransmit model is optimistic compared with real SCTP timers; frames run at an ideal 60 Hz; there is no browser, renderer, device, or real network in the loop. These numbers do not replace the physical-device and real-network checks in §4.4/§11.
+
+Verified: `npm run typecheck`, `npm test` (64 pass), `npm run build`, and `npm run netsim` all pass. Not verified: the overlay was not opened in a live browser match during this session. Its code paths compile and build, but their on-screen output has not been observed.

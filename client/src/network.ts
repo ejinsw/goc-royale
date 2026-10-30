@@ -6,6 +6,7 @@ import type {
   HostMessage,
   Input,
 } from "../../shared/types";
+import { metrics, payloadBytes } from "./metrics";
 export type Listener = (m: HostMessage) => void;
 const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const randomCode = () =>
@@ -33,6 +34,9 @@ export class Network {
   private snapshotAccrued = 0;
   /** Snapshot send interval: ~18 Hz, independent of the 30 Hz simulation. */
   static readonly snapshotIntervalMs = 1000 / 18;
+  /** Guest RTT probe (standard §4.3): outstanding ping send times. */
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private outstandingPings = new Set<number>();
   constructor(
     public onMessage: Listener,
     public onStatus: (s: string) => void,
@@ -50,9 +54,15 @@ export class Network {
         this.deliver(msg);
       } else {
         const c = this.peers.get(id);
-        if (c?.open) c.send(msg);
+        if (c?.open) {
+          c.send(msg);
+          if (metrics.enabled)
+            metrics.bytesOut.add(payloadBytes(msg), performance.now());
+        }
       }
     });
+    metrics.reset();
+    metrics.role = "host";
     const local = this.room.join(name);
     this.id = local.id;
     this.token = local.token;
@@ -77,6 +87,7 @@ export class Network {
         this.lastTick += 1000 / 30;
         ticked++;
       }
+      if (ticked) metrics.simTicks.add(ticked, now);
       // Snapshot cadence is independent of the simulation rate (standard §3,
       // §4.2): the sim runs at a fixed 30 Hz but authoritative snapshots are
       // broadcast at ~18 Hz. Immediate action/change feedback is local; remote
@@ -85,6 +96,7 @@ export class Network {
         this.snapshotAccrued += ticked * (1000 / 30);
         if (this.snapshotAccrued >= Network.snapshotIntervalMs) {
           this.room?.snapshots();
+          metrics.snapshotsOut.add(1, now);
           // Keep the remainder so cadence does not drift against the sim.
           this.snapshotAccrued %= Network.snapshotIntervalMs;
         }
@@ -168,6 +180,14 @@ export class Network {
       });
       conn.on("data", (raw) => {
         const m = raw as HostMessage;
+        if (metrics.enabled)
+          metrics.bytesIn.add(payloadBytes(raw), performance.now());
+        if (m.type === "pong") {
+          // Measured here; never forwarded to React.
+          if (typeof m.at === "number" && this.outstandingPings.delete(m.at))
+            metrics.recordRtt(performance.now() - m.at);
+          return;
+        }
         if (m.type === "welcome") {
           welcomed = true;
           clearTimeout(timeout);
@@ -175,6 +195,7 @@ export class Network {
           this.token = m.token;
           resolve();
           this.onStatus("Connected to browser host");
+          this.startPing();
         }
         if (m.type === "error" && !welcomed) {
           clearTimeout(timeout);
@@ -250,6 +271,13 @@ export class Network {
           clearTimeout(timeout);
         } else if (id && m.type === "command")
           this.room?.command(id, m.command);
+        else if (
+          id &&
+          m.type === "ping" &&
+          typeof m.at === "number" &&
+          Number.isFinite(m.at)
+        )
+          conn.send({ type: "pong", at: m.at } satisfies HostMessage);
       } catch (e) {
         conn.send({
           type: "error",
@@ -266,7 +294,26 @@ export class Network {
     });
   }
   private deliver(m: HostMessage) {
+    if (m.type === "snapshot") metrics.snapshotArrived(performance.now());
     this.onMessage(structuredClone(m));
+  }
+  /** 1 Hz RTT probe over the existing ping/pong messages (guest only). */
+  private startPing() {
+    if (this.pingTimer) return;
+    metrics.reset();
+    metrics.role = "guest";
+    this.pingTimer = setInterval(() => {
+      if (!this.connection?.open) return;
+      const now = performance.now();
+      for (const at of this.outstandingPings)
+        if (now - at > 3000) {
+          this.outstandingPings.delete(at);
+          metrics.late++;
+        }
+      this.outstandingPings.add(now);
+      metrics.pingsSent++;
+      this.connection.send({ type: "ping", at: now } satisfies ClientMessage);
+    }, 1000);
   }
   command(command: Command) {
     if (this.isHost) this.room?.command(this.id, command);
@@ -294,6 +341,9 @@ export class Network {
   close() {
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.pingTimer = null;
+    metrics.role = "menu";
     this.connection?.close();
     this.peer?.destroy();
     this.peers.clear();

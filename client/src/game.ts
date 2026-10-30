@@ -12,6 +12,8 @@ import {
 } from "../../shared/definitions";
 import type { Match, Input, GameEvent } from "../../shared/types";
 import { preferences, sound } from "./audio";
+import { LocalPredictor } from "./prediction";
+import { metrics } from "./metrics";
 export interface GameBridge {
   match: Match | null;
   id: string;
@@ -20,13 +22,7 @@ export interface GameBridge {
   send: (input: Input) => void;
   paused: boolean;
 }
-/** One locally-applied move input retained for reconciliation (standard §4.3). */
-interface LocalInput {
-  seq: number;
-  move: Vec;
-  slow: number;
-  dt: number;
-}
+
 const col = (s: string) => parseInt(s.replace("#", ""), 16);
 export class ArenaScene extends Phaser.Scene {
   bridge: GameBridge;
@@ -52,11 +48,8 @@ export class ArenaScene extends Phaser.Scene {
   lastInputKey = "";
   /** Local input sequence counter stamped on every sent input. */
   localSeq = 0;
-  /** Unacknowledged local move inputs, replayed after each correction. */
-  localInputs: LocalInput[] = [];
-  /** Last authoritative ackSeq/sampleTime observed, to detect new snapshots. */
-  lastAckSeq = -1;
-  lastSampleTime = -1;
+  /** Local prediction + reconciliation, shared with the netsim harness. */
+  predictor = new LocalPredictor();
   /** Cached camera-layout inputs; fit() recomputes only when these change. */
   private lastFitKey = "";
   offset = { x: 0, y: 0 };
@@ -291,16 +284,10 @@ export class ArenaScene extends Phaser.Scene {
       z = this.zoomFactor,
       g = this.g;
     g.clear();
-    // A new authoritative snapshot triggers one reconciliation of the local
-    // fighter: drop acknowledged inputs, then replay the rest (standard §4.3).
-    const freshSnapshot =
-      s.ackSeq !== this.lastAckSeq || s.sampleTime !== this.lastSampleTime;
-    if (freshSnapshot) {
-      this.lastAckSeq = s.ackSeq;
-      this.lastSampleTime = s.sampleTime;
-      // Discard inputs the authority has already applied.
-      this.localInputs = this.localInputs.filter((i) => i.seq > s.ackSeq);
-    }
+    metrics.recordFrame(delta);
+    // Send this frame's input before drawing so it leaves as early as
+    // possible and the predictor attributes this frame to the right input.
+    this.sendInput(s, _time);
     const map = MAPS[s.mode];
     // Static map art: build once per mode, then just transform it to match the
     // camera this frame (standard §5.2) instead of redrawing every shape.
@@ -390,6 +377,8 @@ export class ArenaScene extends Phaser.Scene {
       }
     }
     const visible = new Set<string>();
+    if (!s.players.some((p) => p.id === this.bridge.id && p.alive))
+      this.predictor.reset();
     for (const p of s.players) {
       if (!p.alive) continue;
       visible.add(p.id);
@@ -398,46 +387,19 @@ export class ArenaScene extends Phaser.Scene {
       const canPredict =
         !this.bridge.paused && s.phase === "playing" && s.time >= p.stunUntil;
       if (local) {
-        // On a fresh snapshot, reconcile: start from the authoritative
-        // position and replay every input the server has not yet acked
-        // (standard §4.3). This corrects drift without snapping, because the
-        // replay reproduces the player's own recent intent.
-        if (freshSnapshot) {
-          let base = { ...p.pos };
-          if (canPredict)
-            for (const inp of this.localInputs)
-              base = this.predictStep(
-                base,
-                inp.move,
-                inp.slow,
-                FIGHTERS[p.fighter].speed,
-                inp.dt,
-              );
-          // If the corrected result diverges far (teleport, knockback, death),
-          // accept authority directly instead of a visible rubber-band.
-          rp = distance(rp, base) > 3 ? { ...p.pos } : base;
-        } else if (canPredict) {
-          // Between snapshots, lead with the current live input for immediate
-          // response. This frame is also buffered when it is sent.
-          rp = this.predictStep(
-            rp,
-            this.bridge.input.move,
-            p.slow,
-            FIGHTERS[p.fighter].speed,
-            dt,
-          );
-        } else {
-          // Not predicting (countdown, stun, knockback): ease toward authority
-          // between snapshots so forced movement reads smoothly.
-          const blend = Math.min(1, delta / 60);
-          rp =
-            distance(rp, p.pos) > 3
-              ? { ...p.pos }
-              : {
-                  x: rp.x + (p.pos.x - rp.x) * blend,
-                  y: rp.y + (p.pos.y - rp.y) * blend,
-                };
-        }
+        // Prediction + reconciliation (standard §4.3); see prediction.ts.
+        const result = this.predictor.frame(
+          s,
+          p.pos,
+          FIGHTERS[p.fighter].speed,
+          p.slow,
+          this.bridge.input.move,
+          dt,
+          canPredict,
+        );
+        rp = result.pos;
+        if (result.correction !== null)
+          metrics.recordCorrection(result.correction);
       } else {
         // Remote entities interpolate toward the latest authoritative sample
         // (standard §4.3). Lowered snapshot rate is absorbed by this smoothing.
@@ -619,38 +581,35 @@ export class ArenaScene extends Phaser.Scene {
     if (this.consumedEffects.size > 3000)
       this.consumedEffects = new Set(s.effects.map((e) => e.id));
     this.playEvents(s);
+  }
+  /**
+   * Send the local input when movement changes, an action is pressed, or the
+   * 30 Hz steady cadence elapses. Each send gets a monotonic seq and is
+   * recorded in the predictor, which tracks how long it stays active.
+   */
+  sendInput(s: Match, time: number) {
     const inputKey = `${this.bridge.input.move.x},${this.bridge.input.move.y},${this.bridge.paused}`;
     if (
-      inputKey !== this.lastInputKey ||
-      this.bridge.input.attack ||
-      this.bridge.input.super ||
-      _time - this.lastSend >= 1000 / 30
-    ) {
-      this.lastInputKey = inputKey;
-      this.lastSend = _time;
-      const seq = ++this.localSeq;
-      const move = this.bridge.paused
-        ? { x: 0, y: 0 }
-        : { ...this.bridge.input.move };
-      const payload: Input = this.bridge.paused
-        ? { move, aim: this.bridge.input.aim, seq }
-        : { ...this.bridge.input, move, seq };
-      this.bridge.send(payload);
-      // Retain this move for reconciliation. dt here is the frame delta the
-      // local prediction will advance by; the exact value is approximate
-      // relative to the server's fixed tick, but close enough to keep the
-      // predicted position near authority between corrections.
-      const me = s.players.find((pl) => pl.id === this.bridge.id);
-      this.localInputs.push({
-        seq,
-        move,
-        slow: me?.slow ?? 0,
-        dt,
-      });
-      if (this.localInputs.length > 180) this.localInputs.shift();
-      this.bridge.input.attack = false;
-      this.bridge.input.super = false;
-    }
+      inputKey === this.lastInputKey &&
+      !this.bridge.input.attack &&
+      !this.bridge.input.super &&
+      time - this.lastSend < 1000 / 30
+    )
+      return;
+    this.lastInputKey = inputKey;
+    this.lastSend = time;
+    const seq = ++this.localSeq;
+    const move = this.bridge.paused
+      ? { x: 0, y: 0 }
+      : { ...this.bridge.input.move };
+    const payload: Input = this.bridge.paused
+      ? { move, aim: this.bridge.input.aim, seq }
+      : { ...this.bridge.input, move, seq };
+    this.bridge.send(payload);
+    const me = s.players.find((pl) => pl.id === this.bridge.id);
+    this.predictor.record(seq, move, me?.slow ?? 0);
+    this.bridge.input.attack = false;
+    this.bridge.input.super = false;
   }
   /**
    * Consume the authoritative presentation event stream (standard §6.2) once
@@ -680,36 +639,6 @@ export class ArenaScene extends Phaser.Scene {
     }
     if (this.consumedEvents.size > 4000)
       this.consumedEvents = new Set(s.events.map((e) => e.id));
-  }
-  /**
-   * Advance a predicted position by one move input, mirroring the engine's
-   * substepped movement and wall/bounds validity (standard §4.3 replay). Used
-   * both for per-frame local prediction and for replaying unacknowledged
-   * inputs after an authoritative correction.
-   */
-  predictStep(from: Vec, move: Vec, slow: number, speed: number, dt: number): Vec {
-    const s = this.bridge.match!;
-    const map = MAPS[s.mode];
-    const r = 0.42;
-    const valid = (x: number, y: number) =>
-      x >= r &&
-      y >= r &&
-      x <= map.w - r &&
-      y <= map.h - r &&
-      !s.walls.some(
-        (w) =>
-          x + r > w.x && x - r < w.x + w.w && y + r > w.y && y - r < w.y + w.h,
-      );
-    const delta = mul(move, speed * (1 - slow) * dt);
-    const n = Math.max(1, Math.ceil(length2(delta) / 0.18));
-    const out = { ...from };
-    for (let i = 0; i < n; i++) {
-      const dx = delta.x / n,
-        dy = delta.y / n;
-      if (valid(out.x + dx, out.y)) out.x += dx;
-      if (valid(out.x, out.y + dy)) out.y += dy;
-    }
-    return out;
   }
   /** Importance weight (0..1) for an event's camera impulse. */
   eventImpulse(e: GameEvent): number {

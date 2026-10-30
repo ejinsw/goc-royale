@@ -341,12 +341,25 @@ The HUD is a combat instrument panel, not an informational webpage.
 The following describe the current implementation and MUST NOT be copied as
 preferred conventions:
 
-- Browser-host simulation and full snapshots currently run at 30 Hz.
-- Full match snapshots currently replace top-level React state.
-- Local movement has lightweight prediction, but there is no sequence,
-  acknowledgement, replay, or complete action prediction path.
-- The Phaser Canvas arena clears and procedurally redraws static and dynamic
-  scenery each frame.
+- Snapshots are full-state JSON (quantized, ~18 Hz, independent of the 30 Hz
+  simulation). Delta encoding and omission of unchanged entities are not yet
+  implemented, and the 75 KB/s ingress budget is not met for busy 8+ player
+  scenes.
+- The authority applies the latest received input each tick rather than a
+  per-tick input queue, so retransmission-delayed inputs are stretched or
+  skipped. Correction p95 exceeds the 0.25-unit target at 100 ms/1% and
+  200 ms/3% in the scripted harness (`npm run netsim`).
+- Movement is predicted and reconciled with sequence/ack/replay, but there is
+  no predicted action presentation path (attack/Super cues wait for the
+  authoritative event).
+- The Phaser Canvas arena caches static map art, but dynamic scenery (zone,
+  walls, areas, actors, effects) is still procedurally redrawn each frame.
+
+Resolved on the `refactor/performance-gameplay-standards` branch (see
+`docs/STATUS.md`): snapshots no longer replace top-level React state; inputs
+carry sequences with per-viewer acknowledgement and client replay; static map
+art is no longer redrawn every frame; a development overlay and scripted
+latency/loss harness exist.
 - Character presentation primarily uses portrait images, simple wobble, shapes,
   text, and modest effects.
 - The Three.js studies and GLB models are separate from the multiplayer renderer.

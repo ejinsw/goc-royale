@@ -167,6 +167,12 @@ export interface Match {
    * recipient when this snapshot was produced (standard §4.3). Per-viewer.
    */
   ackSeq: number;
+  /**
+   * Sim seconds the authority has been applying the input identified by
+   * `ackSeq` (time since it arrived). The client subtracts this from that
+   * input's locally active duration so replay covers only the unapplied part.
+   */
+  ackAge: number;
 }
 export type Command =
   | { type: "select"; fighter: FighterId }

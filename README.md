@@ -56,7 +56,9 @@ Guest reconnect identity uses a private random token in sessionStorage, separate
 - `docs/PILOT-SPEC.txt`: supplied design document, renamed GOC Royale and amended for the chosen hosting model.
 - `docs/STATUS.md`: verified behavior and remaining release work.
 
-The host simulates 30 fixed ticks/second and sends 30 snapshots/second. Guests send bounded movement/aim/action inputs. Guests cannot supply damage, HP, ball ownership, or scores. Projectiles and the ball use small swept substeps to avoid tunneling. The renderer predicts local movement, corrects toward the host, and smooths remote snapshots. This is lightweight reconciliation rather than a full input-acknowledgement replay protocol.
+The host simulates 30 fixed ticks/second and broadcasts snapshots at about 18 Hz, independent of the tick. Guests send bounded movement/aim/action inputs stamped with a monotonic sequence number; each snapshot carries the authoritative sample time and acknowledges the last input processed for that viewer. Guests cannot supply damage, HP, ball ownership, or scores. Projectiles and the ball use small swept substeps to avoid tunneling. The renderer predicts local movement immediately, reconciles on each snapshot by replaying unacknowledged inputs from the authoritative position, and blends any correction out over about 100 ms. Remote fighters ease toward the latest snapshot. Snapshot positions are quantized to 0.01 units for transmission.
+
+Development overlay: press the backtick key during play (or open the app with `?debug`) to show frame time, RTT, jitter, late pings, snapshot rate and stale age, correction error, and bandwidth. `npm run netsim` runs the scripted controlled-network harness for the 50/100/200 ms RTT, loss, and 500 ms outage cases.
 
 ## Design and character production
 
@@ -73,4 +75,4 @@ Host authority is appropriate for a private, trusted friend group: the host can 
 
 There is no public matchmaking, progression, gadgets, extra fighters, or additional mode. The placeholders and synthesized music/effects are original; fonts are self-hosted via Fontsource with included font licenses. See `docs/STATUS.md` before calling this a completed pilot release.
 
-Latest roster update: Ethan uses Rizz (two 420-damage notes) and Aura Pulse (instant knockout of enemies within 4 units, blocked by walls and spawn protection). Brandon's current 2D portrait uses blue/gold; the next 3D specification uses a beige jacket with unchanged mechanics. The camera follows your fighter at 1.65× arena-fit scale, or the selected survivor when spectating. Movement changes and actions send on the next rendered frame; steady inputs remain 30 Hz. Remote smoothing is shortened to 35 ms. Actual Internet delay is not eliminated; the doubled snapshot rate uses more bandwidth.
+Latest roster update: Ethan uses Rizz (two 420-damage notes) and Aura Pulse (instant knockout of enemies within 4 units, blocked by walls and spawn protection). Brandon's current 2D portrait uses blue/gold; the next 3D specification uses a beige jacket with unchanged mechanics. The camera follows your fighter at 1.65× arena-fit scale, or the selected survivor when spectating. Movement changes and actions send on the next rendered frame; steady inputs remain 30 Hz. Actual Internet delay is not eliminated. (Networking was since reworked; see the paragraph above and docs/STATUS.md.)

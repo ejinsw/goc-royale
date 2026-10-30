@@ -12,6 +12,7 @@ import type { Lobby, Match, HostMessage } from "../../shared/types";
 import { fighterArt } from "./art";
 import { Network } from "./network";
 import { GameStore, useGameSelector } from "./gameStore";
+import { installDevOverlay } from "./devOverlay";
 import type { GameBridge } from "./game";
 import { preferences, setMusic, unlockAudio } from "./audio";
 import "@fontsource/barlow/latin-400.css";
@@ -1089,4 +1090,8 @@ const mvp = (p: Match["players"][number]) =>
 const root =
   import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
 if (import.meta.hot) import.meta.hot.data.root = root;
+if (!import.meta.hot?.data.overlay) {
+  installDevOverlay();
+  if (import.meta.hot) import.meta.hot.data.overlay = true;
+}
 root.render(<App />);
