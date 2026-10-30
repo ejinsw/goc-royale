@@ -144,3 +144,16 @@ Standard §4.2–4.3: inputs must carry a monotonic sequence; snapshots must ack
 Verified: `npm run typecheck`, `npm test` (57 pass, 5 new), and `npm run build` all pass. Authoritative gameplay unchanged — every pre-existing simulation/room test passes without modification.
 
 Not yet verified (requires a running match and instrumentation, which arrive in the later steps): the controlled 50/100/200 ms RTT and loss campaign (standard §4.4), measured local-input-to-response latency, correction magnitude, and that no action double-plays or disappears under loss. The reconciliation and rate decoupling are implemented and unit-covered; their feel and latency numbers still need the dev overlay (step 6) and a live/controlled-network capture before they can be called certified.
+
+### Step 4 — renderer: cached static scenery and resize-gated layout (done)
+
+Standard §5.2 and the named prototype debt in §10: the Phaser Canvas arena cleared and procedurally redrew all static and dynamic scenery every frame, and camera-fit layout ran unconditionally every frame.
+
+- Static map art (ground fill, the checkerboard grid, Showdown cream stripes and bushes, Broomball rink lines/circles/goals/border) is now drawn once per mode into a dedicated `staticLayer` Graphics in world units. Each frame that layer is only transformed (`setPosition(offset)` + `setScale(zoom)`) to match the camera, rather than re-issuing hundreds of fill calls. It rebuilds only when the mode changes.
+- The dynamic graphics object now draws only genuinely dynamic scenery: the shrinking Showdown danger zone (continuous), walls (destructible), areas, projectiles, players, ball, effects, labels, and the aim indicator.
+- `fit()` (camera zoom/offset) is gated by a quantized layout key (viewport size, mode, focus position to ~1/20 unit) and recomputes only when an input changes or on a forced resize, instead of every frame.
+- Avatars and name/number labels remain pooled through their existing Maps; no new per-frame renderer object churn was introduced.
+
+Verified: `npm run typecheck`, `npm test` (57 pass, unchanged — this is presentation-only, no authority touched), and `npm run build` all pass. The static layer is a scene-owned Graphics torn down with the scene; resize calls `fit(true)` and only re-transforms the cached layer.
+
+Not yet verified (needs a live capture): before/after frame-time profile, the resize/teardown stress test, and the complete-match memory trend required by standard §5.2/§11. The per-frame draw-call reduction is structural and clear from the code (static shapes went from every-frame to once-per-mode), but the measured FPS/frame-time improvement on a target device has not been captured here.

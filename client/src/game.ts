@@ -31,6 +31,14 @@ const col = (s: string) => parseInt(s.replace("#", ""), 16);
 export class ArenaScene extends Phaser.Scene {
   bridge: GameBridge;
   g!: Phaser.GameObjects.Graphics;
+  /**
+   * Static map art (ground, grid, stripes, bushes, rink markings) drawn once
+   * in world units and reused every frame via a transform, instead of
+   * procedurally redrawing hundreds of shapes per frame (standard §5.2,
+   * resolves the named prototype debt in §10).
+   */
+  staticLayer!: Phaser.GameObjects.Graphics;
+  staticKey = "";
   labels = new Map<string, Phaser.GameObjects.Text>();
   avatars = new Map<string, Phaser.GameObjects.Image>();
   renderPos = new Map<string, Vec>();
@@ -49,6 +57,8 @@ export class ArenaScene extends Phaser.Scene {
   /** Last authoritative ackSeq/sampleTime observed, to detect new snapshots. */
   lastAckSeq = -1;
   lastSampleTime = -1;
+  /** Cached camera-layout inputs; fit() recomputes only when these change. */
+  private lastFitKey = "";
   offset = { x: 0, y: 0 };
   keyDown!: (e: KeyboardEvent) => void;
   keyUp!: (e: KeyboardEvent) => void;
@@ -64,9 +74,12 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
   create() {
+    // Static layer sits behind the dynamic graphics and is drawn in world
+    // units; each frame it is only transformed, not rebuilt.
+    this.staticLayer = this.add.graphics().setDepth(-1);
     this.g = this.add.graphics();
-    this.scale.on("resize", () => this.fit());
-    this.fit();
+    this.scale.on("resize", () => this.fit(true));
+    this.fit(true);
     this.keyDown = (e) => {
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
       if (
@@ -141,16 +154,26 @@ export class ArenaScene extends Phaser.Scene {
       window.removeEventListener("blur", this.blur);
     });
   }
-  fit() {
+  /**
+   * Recompute camera zoom/offset. Expensive layout runs only when an input
+   * changes (viewport size, mode, focus target, or focus position), not
+   * unconditionally every frame (standard §5.2). Pass force=true on resize.
+   */
+  fit(force = false) {
     const m = MAPS[this.bridge.match?.mode || "showdown"];
-    this.zoomFactor =
-      1.65 * Math.min(this.scale.width / m.w, this.scale.height / m.h);
     const target = this.bridge.match?.players.find(
       (p) => p.id === (this.bridge.spectate || this.bridge.id),
     );
     const focus = target
       ? this.renderPos.get(target.id) || target.pos
       : { x: m.w / 2, y: m.h / 2 };
+    // Quantize the focus so sub-pixel camera drift does not force a recompute
+    // every frame; a change of ~1/20 world unit is the threshold.
+    const key = `${this.scale.width}x${this.scale.height}:${this.bridge.match?.mode}:${Math.round(focus.x * 20)},${Math.round(focus.y * 20)}`;
+    if (!force && key === this.lastFitKey) return;
+    this.lastFitKey = key;
+    this.zoomFactor =
+      1.65 * Math.min(this.scale.width / m.w, this.scale.height / m.h);
     const axis = (size: number, world: number, center: number) =>
       world * this.zoomFactor <= size
         ? (size - world * this.zoomFactor) / 2
@@ -163,6 +186,62 @@ export class ArenaScene extends Phaser.Scene {
       x: axis(this.scale.width, m.w, focus.x),
       y: axis(this.scale.height, m.h, focus.y),
     };
+  }
+  /**
+   * Draw the unchanging map art into staticLayer once, in world units. The
+   * layer is positioned/scaled each frame to match the camera, so this runs
+   * only when the mode changes rather than every frame.
+   */
+  buildStaticLayer(mode: Match["mode"]) {
+    const g = this.staticLayer;
+    g.clear();
+    const map = MAPS[mode];
+    const wr = (
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+      color: number,
+      alpha = 1,
+    ) => {
+      g.fillStyle(color, alpha);
+      g.fillRoundedRect(x, y, w, h, 0.15);
+    };
+    const wc = (x: number, y: number, r: number, color: number, alpha = 1) => {
+      g.fillStyle(color, alpha);
+      g.fillCircle(x, y, r);
+    };
+    wr(0, 0, map.w, map.h, mode === "showdown" ? 0x83b66a : 0xb8e0e7);
+    for (let x = 0; x < map.w; x += 2)
+      for (let y = 0; y < map.h; y += 2)
+        if ((x + y) % 4 === 0)
+          wr(x, y, 2, 2, mode === "showdown" ? 0x7eaf65 : 0xb0d9e3, 0.4);
+    if (mode === "showdown") {
+      wr(0, 11, 36, 2, 0xe3d5a0, 0.75);
+      wr(17, 0, 2, 24, 0xe3d5a0, 0.75);
+      for (const b of map.bushes) {
+        wr(b.x, b.y, b.w, b.h, 0x2f754b);
+        for (let x = b.x + 0.4; x < b.x + b.w; x += 0.7)
+          for (let y = b.y + 0.4; y < b.y + b.h; y += 0.7)
+            wc(x, y, 0.43, 0x409157);
+      }
+    } else {
+      g.lineStyle(3 / 24, 0xdb6372, 0.6);
+      g.lineBetween(17, 0, 17, 20);
+      g.lineStyle(3 / 24, 0x6193be, 0.6);
+      g.lineBetween(10, 0, 10, 20);
+      g.lineBetween(24, 0, 24, 20);
+      g.lineStyle(3 / 24, 0x5f91b0, 0.7);
+      g.strokeCircle(17, 10, 3);
+      wr(0, 8, 0.5, 4, 0x3d7cc2);
+      wr(33.5, 8, 0.5, 4, 0xd8606d);
+      g.lineStyle(5 / 24, 0x396977);
+      g.strokeRoundedRect(0, 0, 34, 20, 0.5);
+      g.lineStyle(2 / 24, 0x3d7cc2, 0.6);
+      g.strokeCircle(3, 10, 2.5);
+      g.lineStyle(2 / 24, 0xd8606d, 0.6);
+      g.strokeCircle(31, 10, 2.5);
+    }
   }
   point(p: Vec) {
     return {
@@ -223,22 +302,19 @@ export class ArenaScene extends Phaser.Scene {
       this.localInputs = this.localInputs.filter((i) => i.seq > s.ackSeq);
     }
     const map = MAPS[s.mode];
-    this.rect(0, 0, map.w, map.h, s.mode === "showdown" ? 0x83b66a : 0xb8e0e7);
-    for (let x = 0; x < map.w; x += 2)
-      for (let y = 0; y < map.h; y += 2) {
-        if ((x + y) % 4 === 0)
-          this.rect(
-            x,
-            y,
-            2,
-            2,
-            s.mode === "showdown" ? 0x7eaf65 : 0xb0d9e3,
-            0.4,
-          );
-      }
+    // Static map art: build once per mode, then just transform it to match the
+    // camera this frame (standard §5.2) instead of redrawing every shape.
+    if (this.staticKey !== s.mode) {
+      this.staticKey = s.mode;
+      this.buildStaticLayer(s.mode);
+    }
+    this.staticLayer
+      .setPosition(this.offset.x, this.offset.y)
+      .setScale(z)
+      .setVisible(true);
+    // Dynamic scenery only (depends on live state): the shrinking Showdown
+    // zone is redrawn each frame because it changes continuously.
     if (s.mode === "showdown") {
-      this.rect(0, 11, 36, 2, 0xe3d5a0, 0.75);
-      this.rect(17, 0, 2, 24, 0xe3d5a0, 0.75);
       for (let y = 0; y < 24; y += 0.4) {
         const d = Math.abs(y + 0.2 - 12),
           extent = Math.sqrt(Math.max(0, s.zone * s.zone - d * d));
@@ -258,28 +334,6 @@ export class ArenaScene extends Phaser.Scene {
       const c = this.point({ x: 18, y: 12 });
       g.lineStyle(3, 0xffde9f, 0.9);
       g.strokeCircle(c.x, c.y, s.zone * z);
-      for (const b of map.bushes) {
-        this.rect(b.x, b.y, b.w, b.h, 0x2f754b);
-        for (let x = b.x + 0.4; x < b.x + b.w; x += 0.7)
-          for (let y = b.y + 0.4; y < b.y + b.h; y += 0.7)
-            this.circle({ x, y }, 0.43, 0x409157);
-      }
-    } else {
-      this.line({ x: 17, y: 0 }, { x: 17, y: 20 }, 0xdb6372, 3, 0.6);
-      this.line({ x: 10, y: 0 }, { x: 10, y: 20 }, 0x6193be, 3, 0.6);
-      this.line({ x: 24, y: 0 }, { x: 24, y: 20 }, 0x6193be, 3, 0.6);
-      const c = this.point({ x: 17, y: 10 });
-      g.lineStyle(3, 0x5f91b0, 0.7);
-      g.strokeCircle(c.x, c.y, 3 * z);
-      this.rect(0, 8, 0.5, 4, 0x3d7cc2);
-      this.rect(33.5, 8, 0.5, 4, 0xd8606d);
-      g.lineStyle(5, 0x396977);
-      g.strokeRoundedRect(this.offset.x, this.offset.y, 34 * z, 20 * z, 12);
-      for (const x of [3, 31]) {
-        const p = this.point({ x, y: 10 });
-        g.lineStyle(2, x === 3 ? 0x3d7cc2 : 0xd8606d, 0.6);
-        g.strokeCircle(p.x, p.y, 2.5 * z);
-      }
     }
     for (const w of s.walls) {
       this.rect(w.x, w.y + 0.12, w.w, w.h, 0x36544a);
