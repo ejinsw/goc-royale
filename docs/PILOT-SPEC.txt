@@ -1,0 +1,2417 @@
+Here is the finalized GOC Royale — Game Design Document v1.0, structured as a build-ready specification for ChatGPT Work or a development team.
+
+It locks in exactly two pilot modes, seven playable fighters, and the multiplayer requirements. It also separates launch requirements from future additions to prevent the project from expanding before the core game is playable.
+
+# GOC ROYALE
+
+## Game Design Document & Technical Implementation Specification
+
+**Version:** 1.0 — Pilot Release\
+**Status:** Approved pilot design; title and browser-host architecture amended October 23, 2026; roster art workflow amended October 29, 2026\
+**Genre:** Multiplayer top-down hero arena brawler\
+**Platform:** Mobile web (iOS Safari, Android Chrome) and desktop web\
+**Primary Audience:** Grace on Campus (GOC) fellowship members and friends\
+**Player Count:** 2–8 for Showdown; exactly 6 for Broomball\
+**Game Modes:** Showdown FFA and 3v3 Broomball\
+**Launch Roster:** 7 playable ministry leaders\
+**Authority:** Room creator’s browser (WebRTC host authority)\
+**Hosting:** Static HTTPS site; no application server\
+**Authentication:** None required\
+**Match Length:** Approximately 2–3 minutes\
+**Design Priority:** Responsive combat, reliable multiplayer, memorable characters, and replayability
+
+---
+
+# 1. Product Overview
+
+## 1.1 Game Concept
+
+**GOC Royale** is a fast-paced, multiplayer arena combat game featuring exaggerated cartoon representations of Grace on Campus ministry leaders.
+
+Each playable fighter has unique attacks, movement characteristics, statistics, and a powerful Super ability inspired by their ministry team's responsibilities.
+
+Players join private rooms through a room code or invitation link, select their favorite leader, and compete against their friends.
+
+The game is inspired by the accessible, competitive gameplay of top-down hero brawlers such as Brawl Stars, but must have its own original characters, visual identity, interface, maps, and gameplay presentation.
+
+The pilot features two game modes:
+
+**Showdown FFA:** A battle-royale-inspired free-for-all in which players fight to become the last survivor as the arena gradually shrinks.
+
+**Broomball:** A 3v3 hockey-inspired game based on GOC's broomball tradition. Players battle for possession of a ball and score goals using directional passing, shooting, positioning, and their fighters' unique abilities.
+
+The goal is to make a genuinely entertaining multiplayer game that happens to feature recognizable GOC personalities.
+
+It should not feel like a ministry administration simulator or educational application.
+
+## 1.2 Design Philosophy
+
+The game must prioritize five principles.
+
+### 1. Fun Before Complexity
+
+Moving, aiming, attacking, dodging, scoring, and eliminating opponents must feel satisfying before additional systems are introduced.
+
+A simple, polished game is preferable to a feature-rich but unreliable game.
+
+### 2. Mobile-First Interaction
+
+The game must be fully playable on a mobile browser.
+
+The interface should feel like a native mobile action game, with comfortable dual-thumb controls and clear visual feedback.
+
+### 3. Meaningfully Different Fighters
+
+Every leader must have a distinct gameplay identity.
+
+Changing characters should meaningfully alter the player's combat strategy rather than simply changing the sprite and attack color.
+
+### 4. Short, Repeatable Matches
+
+Players should be able to finish a match within approximately three minutes and immediately start another.
+
+The experience should work for casual friend-group game nights.
+
+### 5. Low Friction
+
+Players should not need to install an application, create an account, or configure complicated settings.
+
+Joining through a room code or link should be enough.
+
+---
+
+# 2. Pilot Scope
+
+## 2.1 Required Launch Features
+
+The initial release must include:
+
+1. Seven unique playable fighters: Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, and Ethan Ha.
+2. Character-specific basic attacks.
+3. Character-specific Super abilities.
+4. Health, damage, ammunition, reloading, cooldowns, healing, and eliminations.
+5. Smooth multidirectional movement.
+6. Directional aiming and attacking.
+7. **Showdown FFA** with permanent round eliminations, a shrinking arena, and survival rankings.
+8. **3v3 Broomball** with ball possession, directional passing, shooting, goals, scoring, and respawning.
+9. One complete arena for each game mode.
+10. Landscape mobile controls and desktop keyboard/mouse controls.
+11. Private multiplayer rooms with codes and invitation links.
+12. Character selection and ready-up lobby.
+13. Real-time synchronized multiplayer gameplay.
+14. Host-authoritative combat, collisions, cooldowns, and scoring.
+15. Results screens showing relevant player statistics.
+16. Rematch functionality.
+17. Original cartoon character artwork or original illustrated placeholders.
+18. Basic animations, attack effects, Super effects, and sound.
+
+## 2.2 Explicitly Out of Scope
+
+Do not implement the following as part of the pilot:
+
+- Additional playable fighters.
+- Additional game modes.
+- Character leveling or upgrades.
+- Equipment and item inventories.
+- Monetization.
+- Purchasable skins.
+- Global leaderboards.
+- Ranked matchmaking.
+- Public matchmaking.
+- Persistent accounts.
+- Achievements and progression systems.
+- In-game voice chat.
+- Full replay recording.
+- Character gadgets.
+- Character passive abilities.
+- Combination Supers.
+- Power-up crates or loot systems.
+- Spectator slots for people who were not participating in the match.
+- Multiple maps per game mode.
+
+These features may be considered after successful testing of the pilot.
+
+**Development rule:** Do not implement future features at the expense of completing or polishing the required gameplay.
+
+---
+
+# 3. Core Combat System
+
+## 3.1 World Coordinates
+
+Use a consistent 2D world-coordinate system.
+
+Recommended values:
+
+| Property                 | Initial Value                 |
+| ------------------------ | ----------------------------- |
+| Player collision radius  | 0.42 world units              |
+| Normal movement speed    | 5.2 units/second              |
+| Fast movement speed      | 5.8 units/second              |
+| Slow movement speed      | 4.6 units/second              |
+| Basic attack ammo        | Character-specific            |
+| Basic attack reload      | Character-specific            |
+| Super charge requirement | 5,000 effective charge points |
+| Passive heal delay       | 4 seconds                     |
+| Passive healing          | 12% max HP per second         |
+| Client rendering target  | 60 FPS                        |
+| Host simulation rate   | 30 ticks/second               |
+
+These values are initial balancing targets, not immutable requirements.
+
+Use frame-rate-independent movement and physics.
+
+## 3.2 Movement
+
+Characters move freely in two dimensions.
+
+Movement must include:
+
+- Analog directional movement.
+- Normalized diagonal movement.
+- Smooth starting and stopping.
+- Collision with solid terrain.
+- Movement speed modifiers.
+- Knockback.
+- Temporary stun and slow effects.
+- Movement while aiming.
+
+Characters cannot move through walls or outside arena boundaries.
+
+Teammates should not physically block one another.
+
+Movement should feel responsive rather than floaty.
+
+Broomball may use subtly different acceleration and friction to convey movement on ice, provided controls remain precise.
+
+## 3.3 Health and Damage
+
+Each character has a maximum HP value.
+
+Successful damaging attacks subtract HP.
+
+When HP reaches zero, the character is eliminated.
+
+Implement:
+
+- Direct projectile damage.
+- Area-of-effect damage.
+- Multi-hit attacks.
+- Healing.
+- Damage-over-time from arena hazards.
+- Temporary protective status effects where specified.
+- Invulnerability during designated respawn protection windows.
+
+Health cannot exceed maximum HP.
+
+Damage cannot reduce health below zero.
+
+The browser host is authoritative over health values.
+
+## 3.4 Basic Attacks and Ammunition
+
+Each fighter has character-specific attack statistics.
+
+All fighters begin with full ammunition.
+
+Each attack consumes one ammo charge.
+
+Spent ammo reloads sequentially according to the fighter's reload time.
+
+A player cannot attack without available ammunition.
+
+Attack direction is determined by the player's aim input.
+
+Basic attacks must display:
+
+- Attack animation.
+- Projectile or area effect.
+- Hit feedback.
+- Damage indicators.
+- Appropriate sound feedback.
+
+No attack may be fired more frequently than its defined rate.
+
+## 3.5 Super Charge System
+
+Players charge their Super through successful combat actions.
+
+Suggested charge formula:
+
+- 1 damage dealt to enemies = 1 charge point.
+- 1 effective HP healed on allies = 0.6 charge points.
+- Self-healing does not generate charge.
+- Damage from Super abilities does not generate charge.
+
+A Super becomes available at 5,000 charge points.
+
+The meter resets to zero when a valid Super activation succeeds.
+
+A Super activation that fails host validation should not consume the meter.
+
+Supers must have:
+
+- Character-specific effects.
+- Clear visual indicators.
+- Host-validated activation.
+- Correct targeting.
+- Appropriate collision checks.
+- Distinctive animations and sound.
+
+Super charge persists through normal Broomball respawning.
+
+## 3.6 Passive Healing
+
+Players begin regenerating health after four continuous seconds without receiving damage or using a basic attack.
+
+Healing rate: 12% of maximum HP per second.
+
+Receiving damage or using a basic attack restarts the healing delay.
+
+Passive healing stops at maximum HP.
+
+In Showdown, passive healing is important to make multiple encounters survivable.
+
+## 3.7 Status Effects
+
+The combat engine must support at least:
+
+- **Slow:** Reduces movement speed by a percentage.
+- **Stun:** Temporarily prevents movement and attacking.
+- **Knockback:** Pushes a character in a direction.
+- **Reveal:** Makes a hidden target visible to opponents.
+- **Healing:** Restores HP over time or instantly.
+- **Invulnerability:** Prevents damage for a defined duration.
+
+Effects should use standardized definitions so that abilities are consistent and maintainable.
+
+Status-effect durations must be tracked by the browser host.
+
+Multiple slowing effects should not stack additively without a defined cap. For the pilot, use the strongest active slow.
+
+## 3.8 Collision Model
+
+The browser host validates collisions involving:
+
+- Players and solid walls.
+- Projectiles and walls.
+- Projectiles and players.
+- Explosions and players.
+- Characters and arena boundaries.
+- Broomball and terrain.
+- Broomball and players.
+- Broomball and goal areas.
+
+Fast-moving projectiles should use swept collision detection or equivalent methods to prevent tunneling through targets.
+
+All collision dimensions should be defined in shared gameplay data.
+
+---
+
+# 4. Playable Fighter Roster
+
+## 4.1 Roster Overview
+
+| Fighter        | Team                | Role       | HP    | Speed  |
+| -------------- | ------------------- | ---------- | ----- | ------ |
+| Brandon | Welcome & Follow-Up | Controller | 5,700 | Normal |
+| Daniel Hon     | Rides               | Tank       | 8,200 | Slow   |
+| Rich Lai       | Media               | Marksman   | 4,600 | Normal |
+| Samuel Lam     | Care                | Healer     | 5,900 | Normal |
+| Josh Chang     | Sound               | Artillery  | 5,600 | Normal |
+| Elijah Won     | Web                 | Trickster  | 5,100 | Fast   |
+| Ethan Ha | Music | Burst | 5,400 | Normal |
+
+Each fighter has:
+
+- A unique visual appearance.
+- A unique basic attack.
+- A unique Super.
+- Distinct attack statistics.
+- A recognizable gameplay role.
+- Character-specific attack and Super visual effects.
+
+These are initial balance values that must be tested.
+
+## 4.2 Brandon Kam — The Welcomer
+
+**Class:** Controller\
+**Team:** Welcome & Follow-Up\
+**HP:** 5,700\
+**Speed:** 5.2 units/second\
+**Visual Theme:** Clipboard, nametags, blue-and-gold effects
+
+### Basic Attack: Nametag Toss
+
+Brandon throws a nametag at opponents.
+
+| Property         | Value           |
+| ---------------- | --------------- |
+| Damage           | 700             |
+| Range            | 8 units         |
+| Projectile speed | 12 units/second |
+| Ammunition       | 3               |
+| Reload           | 1.3 seconds     |
+| Mark duration    | 4 seconds       |
+
+Enemies struck by the projectile become marked.
+
+Marked enemies remain visible while hiding in bushes.
+
+Repeated hits refresh the mark duration but do not create multiple independent marks.
+
+### Super: WELCOME COMMITTEE
+
+Brandon places a large welcoming circle at a target position.
+
+- Radius: 3.5 units.
+- Duration: 5 seconds.
+- Enemies inside are slowed by 30%.
+- Allies inside recover 220 HP per second.
+- Brandon can benefit from their own healing area.
+- The circle remains stationary after deployment.
+
+The circle should be clearly visible to both teams.
+
+### Intended Gameplay
+
+Brandon specializes in area control, enemy tracking, and defensive team utility.
+
+Brandon should be especially effective at controlling the center of the Broomball rink.
+
+**Strengths:** Crowd control, detection, zone defense.\
+**Weaknesses:** Limited burst damage, average mobility.
+
+---
+
+## 4.3 Daniel Hon — The Driver
+
+**Class:** Tank\
+**Team:** Rides\
+**HP:** 8,200\
+**Speed:** 4.6 units/second\
+**Visual Theme:** Car keys, traffic cones, cartoon utility van
+
+### Basic Attack: Key Toss
+
+Daniel throws a cluster of five keys in a spread.
+
+| Property                   | Value       |
+| -------------------------- | ----------- |
+| Projectiles                | 5           |
+| Damage per key             | 330         |
+| Maximum close-range damage | 1,650       |
+| Range                      | 5.5 units   |
+| Ammunition                 | 3           |
+| Reload                     | 1.6 seconds |
+
+A single enemy can be hit by multiple keys from one attack.
+
+The attack is especially effective at close range.
+
+### Super: FULL CARPOOL
+
+Daniel temporarily transforms into or rides inside a cartoon van and charges in the aimed direction.
+
+- Maximum charge distance: 10 units.
+- Damage: 1,400.
+- Knockback distance: 2 units.
+- Brief visible windup before charging.
+- Can destroy designated destructible obstacles.
+- Stops at indestructible walls and arena boundaries.
+- Each enemy can be damaged only once per charge.
+
+### Intended Gameplay
+
+Daniel is a front-line tank capable of initiating fights and breaking defensive formations.
+
+In Broomball, his charge can clear defenders away from a route to goal.
+
+**Strengths:** High HP, close-range damage, initiation.\
+**Weaknesses:** Slow movement, short attack range.
+
+---
+
+## 4.4 Rich Lai — The Photographer
+
+**Class:** Marksman\
+**Team:** Media\
+**HP:** 4,600\
+**Speed:** 5.2 units/second\
+**Visual Theme:** Camera, lens, bright flashes, purple effects
+
+### Basic Attack: Shutter Shot
+
+Rich fires a narrow, long-distance camera flash.
+
+| Property            | Value       |
+| ------------------- | ----------- |
+| Base damage         | 1,350       |
+| Maximum-range bonus | +200        |
+| Range               | 11 units    |
+| Ammunition          | 2           |
+| Reload              | 1.7 seconds |
+
+The bonus applies to targets struck in the final 20% of the projectile's maximum range.
+
+This attack requires accurate aiming.
+
+### Super: GROUP PHOTO!
+
+Rich projects a rectangular camera frame forward and takes an explosive group photo.
+
+- Range: 8 units.
+- Width: 5 units.
+- Visible targeting windup: approximately 0.35 seconds.
+- Damage: 900.
+- Stun duration: 0.75 seconds.
+- All enemies within the frame are affected.
+
+Display a prominent camera flash and frozen-photo effect when the Super activates.
+
+### Intended Gameplay
+
+Rich is a precision-based long-range damage dealer.
+
+He should be threatening in open areas but vulnerable when approached by close-range fighters.
+
+**Strengths:** Long range, burst damage, precision.\
+**Weaknesses:** Low HP, limited ammo, poor close-range survivability.
+
+---
+
+## 4.5 Samuel Lam — The Care Package
+
+**Class:** Healer\
+**Team:** Care\
+**HP:** 5,900\
+**Speed:** 5.2 units/second\
+**Visual Theme:** Cookies, snack bags, yellow healing effects
+
+### Basic Attack: Munchie Toss
+
+Samuel throws snack projectiles.
+
+The projectile affects the first valid character it strikes.
+
+| Property     | Value       |
+| ------------ | ----------- |
+| Enemy damage | 800         |
+| Ally healing | 850 HP      |
+| Range        | 7.5 units   |
+| Ammunition   | 3           |
+| Reload       | 1.4 seconds |
+
+Rules:
+
+- Striking an enemy damages them.
+- Striking an injured teammate heals them.
+- Full-health teammates do not intercept the projectile.
+- Samuel cannot heal himself through his basic attack.
+- Healing is capped by the target's missing HP.
+
+### Super: MIDTERM MUNCHIES
+
+Samuel deploys a giant snack table.
+
+- Duration: 6 seconds.
+- Radius: 3 units.
+- Healing: 350 HP per second.
+- Station HP: 2,000.
+- Enemies can attack and destroy the station.
+- Samuel can benefit from the station's healing.
+
+The station should be visually recognizable as a cartoon table full of snacks.
+
+### Intended Gameplay
+
+Samuel provides strong team sustain and defensive utility.
+
+For Showdown, his damage-dealing basic attack and self-healing station must allow him to compete independently.
+
+**Strengths:** Healing, sustain, defending teammates.\
+**Weaknesses:** Lower offensive burst, vulnerable when isolated.
+
+---
+
+## 4.6 Josh Chang — The Sound Engineer
+
+**Class:** Artillery\
+**Team:** Sound\
+**HP:** 5,600\
+**Speed:** 5.2 units/second\
+**Visual Theme:** Speakers, sound mixers, microphones, orange shockwaves
+
+### Basic Attack: Feedback Burst
+
+Josh fires a wide cone-shaped soundwave.
+
+| Property   | Value       |
+| ---------- | ----------- |
+| Damage     | 950         |
+| Range      | 6.5 units   |
+| Cone angle | 40 degrees  |
+| Ammunition | 3           |
+| Reload     | 1.5 seconds |
+
+The soundwave can strike multiple enemies.
+
+One attack deals damage at most once to each affected enemy.
+
+### Super: SOUNDCHECK!
+
+Josh fires an enormous directional sound blast.
+
+- Range: 10 units.
+- Width: 4 units.
+- Damage: 1,400.
+- Knockback: 3 units.
+- Pierces enemy characters.
+- Stops at indestructible obstacles.
+
+The attack should have distinctive audio feedback, a large shockwave, and modest screen shake.
+
+Players must be able to disable screen shake in accessibility settings.
+
+### Intended Gameplay
+
+Josh specializes in pushing enemies away, defending chokepoints, and damaging grouped opponents.
+
+**Strengths:** Area damage, knockback, controlling space.\
+**Weaknesses:** Predictable attack patterns, moderate effective range.
+
+---
+
+## 4.7 Elijah Won — The Developer
+
+**Class:** Trickster\
+**Team:** Web\
+**HP:** 5,100\
+**Speed:** 5.8 units/second\
+**Visual Theme:** Digital glitches, code fragments, cyan-and-green projectiles
+
+### Basic Attack: Bug Report
+
+Elijah launches a bouncing software-bug projectile.
+
+| Property                | Value       |
+| ----------------------- | ----------- |
+| Damage                  | 750         |
+| Maximum travel distance | 8 units     |
+| Ammunition              | 3           |
+| Reload                  | 1.3 seconds |
+| Terrain ricochets       | 1           |
+
+Rules:
+
+- The projectile ricochets once after hitting a compatible wall.
+- The projectile disappears on contact with an enemy.
+- The projectile disappears after exhausting its travel distance.
+- A second wall collision destroys it.
+
+The ricochet trajectory must follow predictable collision physics.
+
+### Super: PRODUCTION ROLLBACK
+
+Elijah rewinds to a recently occupied position, restoring some lost HP and leaving behind an explosive glitch.
+
+Sequence:
+
+1. The browser host maintains a rolling history of Elijah's position and HP.
+2. Elijah activates his Super.
+3. The browser host identifies his valid position approximately two seconds earlier.
+4. Elijah returns to that position.
+5. His HP is restored toward the historical value, up to 2,500 recovered HP.
+6. An explosive glitch detonates at his pre-rewind position.
+7. Enemies inside the explosion take 1,200 damage.
+
+Safety rules:
+
+- Rollback cannot resurrect an eliminated player.
+- Rollback cannot undo goals or other game events.
+- Rollback cannot restore spent ammo or Super charge.
+- Rollback cannot place Elijah inside invalid terrain.
+- Historical HP below current HP must not reduce current HP.
+- If the historical position is invalid, use the nearest valid recorded position.
+- Record character history using host state, not client-provided history.
+
+### Intended Gameplay
+
+Elijah rewards mobility, creative attack angles, and careful Super timing.
+
+**Strengths:** Mobility, ricochets, escape options.\
+**Weaknesses:** Lower immediate burst, precise timing requirements.
+
+---
+
+# 5. Game Mode One: Showdown FFA
+
+## 5.1 Overview
+
+Showdown is a free-for-all survival game.
+
+Every player fights independently.
+
+The objective is to become the last player standing.
+
+Players are eliminated permanently for the current match.
+
+There are no teams and no respawning.
+
+## 5.2 Player Count
+
+- Minimum: 2 players.
+- Recommended: 4–8 players.
+- Maximum: 8 players.
+
+A lobby can launch Showdown with any valid player count.
+
+The mode should support different player counts without requiring bots.
+
+## 5.3 Match Flow
+
+1. Players select fighters and ready up.
+2. The browser host assigns distinct spawn positions.
+3. A three-second countdown begins.
+4. All players spawn at full HP and ammunition.
+5. Players fight and reposition.
+6. The arena's safe zone begins shrinking.
+7. Players outside the safe zone receive increasing damage.
+8. Eliminated players enter spectator mode.
+9. The match ends when one player remains alive.
+10. Final placement and combat statistics appear.
+
+## 5.4 Arena: Central Lawn
+
+**Theme:** Stylized campus lawn with bushes, paths, benches, and colorful obstacles.
+
+Recommended logical dimensions: 36 × 24 world units.
+
+Map elements:
+
+- Central open combat area.
+- Decorative campus-themed terrain.
+- Bushes for concealment.
+- Solid stone obstacles.
+- Destructible crates used as cover, without loot drops.
+- Side passages.
+- Several balanced starting locations.
+
+The map should be symmetrical enough to avoid obvious spawn advantages while still feeling visually varied.
+
+## 5.5 Spawn Rules
+
+Players spawn at predetermined valid points distributed around the arena.
+
+The spawn system must:
+
+- Maintain a reasonable minimum separation between players.
+- Avoid spawning anyone inside obstacles.
+- Avoid selecting neighboring spawn locations when distant locations are available.
+- Avoid placing players within immediate unavoidable attack range of another player.
+
+Use the browser host to select spawn positions.
+
+## 5.6 Shrinking Arena
+
+A visible circular safe zone gradually shrinks over the course of the match.
+
+Proposed progression:
+
+| Elapsed Time    | Safe Zone                         |
+| --------------- | --------------------------------- |
+| 0–20 seconds    | Full starting area                |
+| 20–70 seconds   | Gradually shrinks to 75%          |
+| 70–120 seconds  | Gradually shrinks to 45%          |
+| 120–150 seconds | Gradually shrinks to 20%          |
+| 150–180 seconds | Shrinks toward a small final area |
+
+Percentages refer to the original safe-zone radius.
+
+The circle's center may move toward a predetermined final destination, but the complete sequence must be chosen by the browser host.
+
+The final destination should be a reachable location with reasonable cover and no inaccessible areas.
+
+### Danger Zone Damage
+
+Players outside the safe zone take damage every second.
+
+Initial values:
+
+- Early phase: 350 HP/second.
+- Middle phase: 650 HP/second.
+- Late phase: 1,100 HP/second.
+- Final phase: 1,800 HP/second.
+
+Damage should be applied continuously or in small host-authoritative intervals.
+
+Damage indicators must make it obvious when a player is outside the safe zone.
+
+A warning animation should appear shortly before each major shrink phase.
+
+## 5.7 Elimination and Placement
+
+When a player reaches zero HP, they are eliminated.
+
+Placement depends on elimination order.
+
+Example:
+
+- First player eliminated in an eight-player match: 8th.
+- Second player eliminated: 7th.
+- Final surviving player: 1st.
+
+For simultaneous eliminations, use deterministic host event ordering, with ties allowed if events are truly simultaneous.
+
+The browser host should end the round when one survivor remains.
+
+If an unusual stalemate prevents completion after the final danger phase, use a hard match limit of 210 seconds and resolve remaining placements deterministically by remaining health percentage, then damage dealt.
+
+## 5.8 Spectator Mode
+
+Eliminated players automatically enter spectator mode.
+
+They can:
+
+- Observe surviving characters.
+- Switch between surviving players.
+- View remaining player count.
+- View match progression.
+
+They cannot attack, move a fighter, or influence gameplay.
+
+Spectators remain connected to the room and receive match results.
+
+## 5.9 Showdown Results
+
+Display:
+
+- Final placement.
+- Winner.
+- Eliminations.
+- Damage dealt.
+- Damage received.
+- Healing performed.
+- Survival time.
+
+The winner receives a distinctive victory presentation.
+
+Offer Rematch and Return to Lobby actions.
+
+---
+
+# 6. Game Mode Two: Broomball
+
+## 6.1 Overview
+
+Broomball is the pilot's signature team-based mode.
+
+It combines top-down arena combat with hockey-inspired scoring and movement.
+
+Two teams of three attempt to score goals using a shared ball.
+
+The game is inspired by GOC's broomball tradition and should have a distinct icy rink aesthetic.
+
+**Blue Team:** 3 fighters.\
+**Red Team:** 3 fighters.
+
+## 6.2 Victory Conditions
+
+Match duration: 150 seconds.
+
+A team wins when:
+
+- It scores two goals, or
+- It has more goals when the timer expires.
+
+If the match ends tied, begin 30 seconds of golden-goal overtime.
+
+The first team to score in overtime wins.
+
+If overtime expires without a goal, the match ends in a draw.
+
+The match timer and score are controlled by the browser host.
+
+## 6.3 Arena: Broomball Night
+
+**Theme:** A stylized ice rink inspired by GOC's traditional broomball outings.
+
+Recommended logical dimensions: 34 × 20 world units.
+
+Visual elements:
+
+- Light-blue ice surface.
+- Hockey-style markings.
+- Blue and red goal areas.
+- Rink boards.
+- Decorative bleachers.
+- Colorful lights.
+- Optional GOC-inspired banners.
+- Minimal environmental obstacles.
+
+The center should be open enough to support passing and coordinated offensive movement.
+
+### Goal Locations
+
+Blue goal: left side.
+
+Red goal: right side.
+
+Goals should have a clearly defined opening, scoring plane, and collision geometry.
+
+Suggested goal opening: 4 world units wide.
+
+Goal detection occurs only when the free ball crosses the goal plane in the valid scoring region.
+
+Carrying the ball directly into the goal should not automatically score; the player must release it.
+
+Own goals count for the opposing team.
+
+## 6.4 Ball Possession
+
+A free ball can be acquired by touching it.
+
+Ball states:
+
+1. **Free:** Moving or stationary on the rink.
+2. **Carried:** Attached to a player.
+3. **In Flight:** Traveling after being shot or passed.
+4. **Resetting:** Temporarily inactive after a goal or kickoff.
+
+A free or in-flight ball becomes carried when it collides with a valid player who is eligible to receive possession.
+
+An in-flight ball may be intercepted.
+
+To avoid immediate accidental reacquisition, the player who released or lost the ball cannot reacquire that same ball for approximately 0.4 seconds.
+
+The browser host is authoritative over possession.
+
+Only one player may possess the ball at a time.
+
+## 6.5 Controls While Carrying the Ball
+
+When a player gains possession:
+
+- The normal attack joystick changes into a pass/shoot joystick.
+- The attack icon changes to a ball or broom icon.
+- Basic attacks become unavailable.
+- The Super button becomes unavailable.
+- The player's ammunition is preserved.
+- Movement remains available.
+
+This introduces an important tactical choice:
+
+**Players can carry and shoot the ball, or use their combat abilities, but not both simultaneously.**
+
+The UI should make the change immediately obvious.
+
+## 6.6 Passing and Shooting
+
+Both passing and shooting use the same directional control.
+
+The player drags the right-side control toward an intended direction.
+
+Releasing launches the ball.
+
+Initial power model:
+
+- Short drag: low-power pass.
+- Medium drag: medium-power pass or shot.
+- Long drag: high-power shot.
+
+Map normalized drag distance to a launch power between 0.35 and 1.0.
+
+Suggested ball launch speed:
+
+- Minimum: 8 units/second.
+- Maximum: 16 units/second.
+
+The player can aim in any direction.
+
+Do not automatically redirect shots toward a goal or teammate.
+
+Ball direction and power must be validated by the browser host.
+
+The control should display an aiming line and approximate shot direction.
+
+## 6.7 Ball Physics
+
+The ball should:
+
+- Travel smoothly.
+- Decelerate gradually from ice friction.
+- Bounce off rink boards.
+- Interact with player collision circles.
+- Enter either goal through its valid opening.
+- Remain synchronized across clients.
+
+Suggested physics:
+
+- Ball radius: 0.32 world units.
+- Board collision restitution: approximately 0.8.
+- Friction: tuned so an unimpeded high-power shot can travel most of the rink.
+
+Use continuous or swept collision detection to avoid high-speed ball tunneling.
+
+Ball movement and scoring must be simulated on the browser host.
+
+For the pilot, prioritize consistent physics over advanced realism.
+
+## 6.8 Defending and Interceptions
+
+Defenders can stop scoring opportunities by:
+
+- Moving into the ball's trajectory.
+- Intercepting passes.
+- Attacking the carrier.
+- Using knockback abilities.
+- Using stuns.
+- Positioning near the goal.
+- Blocking shooting lanes.
+
+A player who touches the ball while it is free or moving can gain possession, provided pickup eligibility rules are satisfied.
+
+The ball should remain a physics object, not a projectile that automatically passes through players.
+
+## 6.9 Dropping the Ball
+
+The ball carrier loses possession when:
+
+- The carrier is eliminated.
+- A qualifying knockback effect strikes the carrier.
+- A stun successfully affects the carrier.
+- The carrier voluntarily passes or shoots.
+
+Ordinary damage alone does not automatically cause a drop.
+
+When forcibly dropped:
+
+- The ball appears at the player's current location.
+- It receives a small separation impulse.
+- The former carrier receives the standard reacquisition lockout.
+- The ball becomes available to other players.
+
+The ball must never remain attached to an eliminated or disconnected character indefinitely.
+
+## 6.10 Fighter Abilities in Broomball
+
+Characters retain their standard attacks and Supers while not carrying the ball.
+
+Examples:
+
+- Brandon creates a slowing zone near the goal.
+- Daniel charges through opposing defenders.
+- Rich stuns players preparing to intercept.
+- Samuel protects teammates during an attack.
+- Josh pushes opponents away from scoring lanes.
+- Elijah repositions using his rollback ability.
+
+Supers cannot be activated while holding the ball.
+
+Existing active effects can continue after a player picks up the ball.
+
+Avoid introducing separate Broomball-exclusive versions of every fighter's Super.
+
+## 6.11 Respawning
+
+When eliminated in Broomball:
+
+1. The player drops the ball if carrying it.
+2. The opposing team receives no elimination score toward victory.
+3. The character enters a three-second respawn timer.
+4. The character respawns near their team's side.
+5. HP and basic ammunition return to full.
+6. The player gains 1.5 seconds of spawn protection.
+7. Protection ends immediately if they attack.
+
+Super charge remains unchanged after respawning.
+
+Spawning should occur behind the team's defensive zone, away from immediate enemy pressure.
+
+## 6.12 Goal Scoring
+
+A goal occurs when the ball crosses a valid goal plane.
+
+Upon scoring:
+
+1. The browser host confirms the goal.
+2. The scoreboard updates.
+3. The ball becomes inactive.
+4. A goal animation and sound play.
+5. The scoring team receives credit.
+6. Player possession is cleared.
+7. After a short celebration, both teams reset to kickoff positions.
+8. The ball returns to center.
+9. Players resume after a brief countdown.
+
+Reset player health and ammunition to full on kickoff.
+
+Preserve Super charge so that Supers remain meaningful during short matches.
+
+## 6.13 Broomball Statistics
+
+Track:
+
+- Goals scored.
+- Assists.
+- Eliminations.
+- Deaths.
+- Damage dealt.
+- Healing performed.
+
+An assist is credited to the most recent teammate who passed the ball to the goal scorer within the previous eight seconds, provided the opposing team did not gain possession afterward.
+
+Advanced statistics such as saves and shot accuracy can be added later.
+
+## 6.14 Broomball Results Screen
+
+Display:
+
+- Winning team.
+- Final score.
+- Player goals.
+- Player assists.
+- Eliminations and deaths.
+- Damage dealt.
+- Healing performed.
+- Match MVP.
+
+The MVP calculation should reward scoring and assists alongside combat contributions.
+
+---
+
+# 7. Multiplayer Lobby and Room System
+
+## 7.1 Guest Identity
+
+Players may join without creating accounts.
+
+Each player enters a nickname.
+
+The browser host assigns a unique temporary player identifier.
+
+Use a secure random reconnect token for restoring the same player session after a temporary disconnection.
+
+Do not use nicknames as authentication.
+
+## 7.2 Creating a Room
+
+A player chooses Create Room.
+
+The browser host creates a unique six-character alphanumeric room code.
+
+The creator becomes the room host.
+
+The lobby displays:
+
+- Room code.
+- Copy code button.
+- Shareable invitation URL.
+- Selected game mode.
+- Connected players.
+- Character selections.
+- Ready states.
+- Start button.
+
+## 7.3 Joining a Room
+
+Players can join through:
+
+- Room code.
+- Invitation URL.
+
+Joining should require only a nickname and a valid room.
+
+Handle:
+
+- Invalid room codes.
+- Full rooms.
+- Expired rooms.
+- Matches already in progress.
+- Duplicate connection attempts.
+- Reconnecting players.
+
+## 7.4 Lobby Capacity
+
+Showdown supports up to eight active players.
+
+Broomball supports six active players.
+
+If the host selects Broomball while eight players are present, prevent starting until the active roster is reduced to six.
+
+Changing modes must clear incompatible ready states and team configurations.
+
+## 7.5 Character Selection
+
+Display seven selectable fighters.
+
+Each selection card contains:
+
+- Fighter name.
+- Ministry team.
+- Role.
+- Portrait.
+- Health.
+- Attack summary.
+- Super summary.
+
+Allow duplicate fighter selections across opposing teams.
+
+For Broomball, prevent duplicate fighters within the same team.
+
+For Showdown, duplicate fighters are permitted.
+
+## 7.6 Team Assignment
+
+Broomball teams can be assigned manually by the host.
+
+The lobby should also provide a Shuffle Teams button.
+
+Display three slots for each team.
+
+Showdown does not use team assignment.
+
+## 7.7 Ready-Up
+
+Every participant must confirm readiness.
+
+Only the host can start a match.
+
+Start conditions:
+
+**Showdown**
+
+- At least two participants.
+- No more than eight.
+- All active players have selected characters.
+- All active players are ready.
+
+**Broomball**
+
+- Exactly six participants.
+- Three on each team.
+- All players have selected characters.
+- All players are ready.
+
+Once starting begins, lock lobby configuration and enter the match-loading sequence.
+
+## 7.8 Disconnect Handling
+
+Provide short reconnect grace periods.
+
+Suggested values:
+
+- Lobby: 30 seconds.
+- Active match: 20 seconds.
+
+A disconnected fighter remains in the simulation and cannot act while disconnected.
+
+If the player reconnects in time, restore control of the existing fighter.
+
+If the grace period expires:
+
+- In Showdown, eliminate the fighter without granting another player a kill.
+- In Broomball, remove the inactive fighter from play and clear their ball possession, if applicable.
+
+Do not invent a replacement bot unless bot support is explicitly added later.
+
+Matches should remain playable if a participant disconnects, though the user interface should indicate the missing player.
+
+---
+
+# 8. Mobile and Desktop Controls
+
+## 8.1 Mobile Orientation
+
+Gameplay is designed for landscape orientation.
+
+Lobby and menus may be displayed in portrait orientation.
+
+If a player enters a match in portrait orientation, show a Rotate Device prompt.
+
+Do not rely on browser fullscreen or orientation locking as a mandatory feature.
+
+## 8.2 Mobile Movement Joystick
+
+Position: lower left.
+
+Requirements:
+
+- 360-degree analog movement.
+- Smooth movement vector.
+- Multi-touch support.
+- Clear idle and active visual states.
+- Movement stops when released.
+- Joystick remains within a comfortable thumb-accessible region.
+
+## 8.3 Mobile Attack Joystick
+
+Position: lower right.
+
+Behavior:
+
+- Drag to aim.
+- Release to attack.
+- Quick tap attempts auto-aim at the nearest valid enemy in range and line of sight.
+- If no valid target is found, use the last aim direction.
+- Display an aiming indicator while dragging.
+
+For Samuel, manual aiming must allow targeting teammates for healing.
+
+## 8.4 Mobile Super Control
+
+Place the Super button adjacent to the attack control.
+
+When unavailable:
+
+- Show a charge meter.
+- Disable activation.
+
+When available:
+
+- Highlight the button.
+- Allow aiming for directional or targeted Supers.
+- Activate on release or tap, depending on ability type.
+
+When carrying the Broomball:
+
+- Disable Super activation.
+- Replace basic attack with pass/shoot.
+
+## 8.5 Desktop Controls
+
+| Input                          | Action                   |
+| ------------------------------ | ------------------------ |
+| W/A/S/D                        | Move                     |
+| Mouse                          | Aim                      |
+| Left click                     | Basic attack             |
+| Right click or Space           | Super                    |
+| Esc                            | Settings                 |
+| Left click while carrying ball | Pass/shoot toward cursor |
+
+For desktop ball power, use a simple press-and-hold charge indicator, then release to shoot.
+
+The same minimum and maximum ball power values apply across mobile and desktop.
+
+## 8.6 Mobile Quality Requirements
+
+- Prevent browser page scrolling during active gameplay.
+- Prevent unintended text selection.
+- Handle multiple simultaneous pointers.
+- Respect device safe areas.
+- Avoid controls overlapping the gameplay HUD.
+- Maintain reasonable battlefield visibility across aspect ratios.
+- Avoid making some devices reveal significantly more of the playable map than others.
+
+---
+
+# 9. UI/UX Specification
+
+## 9.1 Required Screens
+
+Implement the following:
+
+1. Home screen.
+2. Create Room screen.
+3. Join Room screen.
+4. Lobby.
+5. Character selection.
+6. Match loading/countdown.
+7. Live gameplay.
+8. Showdown spectator interface.
+9. Match results.
+10. Settings.
+
+## 9.2 Home Screen
+
+Display:
+
+- GOC Royale logo.
+- Create Room.
+- Join Room.
+- Character Gallery.
+- Settings.
+
+The home screen should use a colorful arena-brawler presentation with strong typography and original cartoon illustrations.
+
+Avoid a generic dashboard appearance.
+
+## 9.3 Lobby Interface
+
+Display:
+
+- Room code prominently.
+- Copy invite link.
+- Current game mode.
+- Player list.
+- Character selections.
+- Ready indicators.
+- Host controls.
+- Team configuration where applicable.
+
+Room state updates should appear immediately for all connected players.
+
+## 9.4 Match HUD
+
+### Shared Elements
+
+- Health bars above fighters.
+- Nicknames.
+- Team colors in Broomball.
+- Current timer.
+- Ability charge.
+- Ammunition indicator.
+- Attack controls.
+- Super controls.
+- Elimination notifications.
+- Connection status.
+
+### Showdown HUD
+
+Additionally display:
+
+- Players alive.
+- Danger-zone warning.
+- Shrink progress.
+- Placement after elimination.
+
+### Broomball HUD
+
+Additionally display:
+
+- Blue team goals.
+- Red team goals.
+- Ball possession indicator.
+- Current carrier.
+- Pass/shoot controls.
+- Goal notifications.
+- Overtime indicator.
+
+## 9.5 Results Interface
+
+The results screen must be clear and celebratory.
+
+Show:
+
+- Winner or winning team.
+- Relevant player rankings.
+- Match statistics.
+- Rematch option.
+- Return to Lobby option.
+
+All players must receive the same authoritative match outcome.
+
+## 9.6 Settings
+
+Minimum settings:
+
+- Music volume.
+- Sound effects volume.
+- Screen shake toggle.
+- Display quality preference, if needed.
+- Leave match or room.
+
+Settings should be accessible without accidentally activating combat controls.
+
+---
+
+# 10. Visual Art Direction
+
+## 10.1 Overall Aesthetic
+
+All seven fighters use painterly, anime-inspired chibi 3D: coherent sculpted forms, expressive faces, articulated hands, believable stylized clothing and dynamic motion. Begin around 2.8–3.2 heads tall, then review each silhouette at the overhead game camera. Low polygon count is an optimization technique, not a blocky or toy-like visual treatment.
+
+Follow [ART-AND-AUDIO-DIRECTION.md](ART-AND-AUDIO-DIRECTION.md) for palette, shading, environments, UI and sound; [CHARACTER_3D_PIPELINE.md](CHARACTER_3D_PIPELINE.md) governs the common eight-pass modeling workflow. Runtime constraints and acceptance remain governed by [PERFORMANCE-AND-GAMEPLAY-STANDARDS.md](PERFORMANCE-AND-GAMEPLAY-STANDARDS.md). The art update does not change gameplay, collision, timing or network authority.
+
+## 10.2 Character Visual Concepts
+
+- **Brandon:** Beige jacket, fitted glasses, clipboard and nametags; retain readable welcome effects.
+- **Daniel:** Broad silhouette, keys and blue utility-vehicle motifs.
+- **Rich:** Camera, flashes and lavender/cream lens motifs.
+- **Samuel:** Snack bag, warm mustard clothing and mint healing effects.
+- **Josh:** Speaker/mixer equipment and orange soundwaves.
+- **Elijah:** Laptop, teal/ink clothing and green/cyan digital effects.
+- **Ethan Ha:** Dark tee, gray joggers, plum/gold music accents, Rizz notes and Aura Pulse; guitar remains a proposed visual prop.
+
+These are fictionalized visual briefs. Record reference provenance and unresolved likeness decisions; the other five fighters currently lack supplied likeness references. Every fighter needs an individual asset specification before production modeling. Brandon's specification is the first example, not permission to copy his face, jacket or choreography onto everyone.
+
+## 10.3 Modeling and Animation Requirements
+
+Every fighter follows eight passes: references/proportions, primary sculpt, garments/secondary forms, deforming mesh/rig, textures/browser look, face/grip/garment proof, first gameplay clips, and optimization/integration.
+
+Require a shaped expression-ready face, both hands with four articulated fingers and an opposable thumb, garment construction and major folds, tested skin weights and authored garment follow-through. Bake fine creases into portable maps where appropriate. Runtime cloth simulation is not required. Validate actual prop grips and release poses for each character; a reused rig is not a passed deformation test.
+
+The first animation proof is a close-up face/grip/garment performance, followed by idle, run and basic attack. Live integration requires the full animation set from performance standard section 7: directional locomotion, basic attack, Super, hit, disabled, elimination, respawn, victory, and Broomball carry/release, with tested transitions and event markers. Feet and held objects must remain stable. Motion stays in-place and gameplay truth remains authoritative; no added cast delay, collision reach or damage radius.
+
+Sprite transformations and old mitten/static-face studies are prototype history, not acceptance substitutes for the new 3D assets. Confirm portable shading and animation in the browser and test eight fighters plus effects on physical target phones before declaring production readiness.
+
+## 10.4 Attack Effects
+
+Each fighter must be visually distinguishable during combat.
+
+Examples:
+
+- Brandon: spinning nametag projectiles.
+- Daniel: flying car keys and a van dash.
+- Rich: bright camera flashes.
+- Samuel: bouncing snack projectiles and healing sparkles.
+- Josh: expanding soundwave cones.
+- Elijah: glitch projectiles and rollback trails.
+- Ethan: Rizz notes and a clearly bounded Aura Pulse matching its existing radius, wall and spawn-protection rules.
+
+Avoid relying on color alone to distinguish important combat effects.
+
+## 10.5 Arena Art
+
+### Central Lawn
+
+- Grassy field.
+- Stylized campus paths.
+- Benches.
+- Bushes.
+- Stone obstacles.
+- Decorative scenery.
+
+### Broomball Night
+
+- Ice rink.
+- Hockey-style goals.
+- Dashed markings and center line.
+- Arena boards.
+- Decorative spectator stands.
+- Distinctive goal celebration effects.
+
+Do not reproduce copyrighted arena graphics or interface assets from existing games.
+
+---
+
+# 11. Audio Design
+
+## 11.1 Music
+
+Provide:
+
+- Home screen theme.
+- Showdown background music.
+- Broomball background music.
+- Victory sting.
+- Defeat sting.
+
+Music must be original or appropriately licensed.
+
+## 11.2 Sound Effects
+
+Minimum effects:
+
+- Button interaction.
+- Match countdown.
+- Basic attack for each character.
+- Attack impact.
+- Damage received.
+- Healing.
+- Super charge completion.
+- Super activation for each character.
+- Elimination.
+- Respawn.
+- Showdown danger warning.
+- Broomball possession.
+- Broomball pass.
+- Broomball goal.
+- Match end.
+
+Sound effects should be responsive and distinguishable.
+
+Audio must respect mobile browser restrictions that require user interaction before playback.
+
+Do not require audio for players to understand critical gameplay information.
+
+---
+
+# 12. Technical Architecture
+
+## 12.1 Recommended Stack
+
+**Current client implementation**
+
+- TypeScript
+- Phaser 3 for the current 2D presentation; shared TypeScript owns authoritative simulation and collision
+- React for menus, lobby, character selection, and results
+- Vite for development and builds
+
+**3D presentation target:** the new asset pipeline describes planned production art. Separate 3D studies are not a completed multiplayer renderer migration. Use one live arena renderer when integrating 3D, preserve the existing simulation coordinate system, and meet the performance standard before rollout.
+
+**Browser Host**
+
+- The room creator’s browser runs the authoritative TypeScript fixed-timestep simulation.
+- PeerJS / WebRTC data channels carry inputs and snapshots between the host and guests.
+- Public PeerJS signaling and STUN discovery support connection setup.
+- No Node.js application server, Socket.IO, database, or persistent paid backend is deployed.
+- TURN may be configured for networks that cannot connect directly; relay availability and cost are external constraints.
+- The host must keep the room tab open and active. Host migration is outside this pilot implementation.
+
+**Shared**
+
+- TypeScript gameplay definitions, character statistics, message schemas, maps, and collision constants.
+- Rendering, simulation, and transport remain separate modules.
+
+**Infrastructure**
+
+- Static HTTPS hosting, compatible with a free static hosting tier.
+- WebRTC encrypted data channels for live gameplay.
+- Temporary rooms and results live in the host tab’s memory.
+- Host authority trusts the room creator; it cannot prevent a modified host from cheating.
+
+This architecture supersedes the original Node/Socket.IO recommendation by user decision on October 23, 2026.
+
+## 12.2 Suggested Repository Layout
+
+- `client/` — Web game, Phaser scenes, React UI, touch controls.
+- `shared/room.ts` and `client/src/network.ts` — Rooms, host simulation lifecycle, and WebRTC transport.
+- `shared/` — Shared types, fighter data, gameplay constants, protocol schemas.
+- `client/public/art/` — Original sprites, sounds, map art, fonts, and effects.
+- `tests/` — Gameplay tests, room tests, and browser-based end-to-end tests.
+- `docs/` — Game design documentation, networking protocol, testing checklist.
+
+The project should separate game rendering from authoritative game logic.
+
+## 12.3 Host-Authoritative Model
+
+The browser host must own:
+
+- Player positions.
+- Player HP.
+- Ammunition.
+- Reload state.
+- Super charge.
+- Status effects.
+- Projectiles.
+- Collision results.
+- Elimination state.
+- Respawn timers.
+- Showdown safe zone.
+- Broomball position and velocity.
+- Broomball possession.
+- Scoring.
+- Match timer.
+- Win conditions.
+
+Clients should send player intentions, not final outcomes.
+
+For example, clients send:
+
+- Movement direction.
+- Aim direction.
+- Attack input.
+- Super input.
+- Ball shot direction and requested power.
+
+Clients must not be allowed to submit arbitrary damage, positions, health changes, goals, or eliminations.
+
+## 12.4 Simulation Timing
+
+Recommended initial configuration:
+
+- Host simulation: 30 Hz.
+- Client input transmission: up to 30 Hz.
+- Host snapshots: approximately 30 Hz.
+- Client rendering: target 60 FPS.
+- Remote player interpolation buffer: approximately 100 milliseconds, tunable.
+
+Use sequence-numbered inputs and host timestamps.
+
+The host simulation should use a fixed timestep independent of rendering performance.
+
+## 12.5 Client-Side Prediction
+
+Implement local prediction for player movement.
+
+The client should:
+
+1. Read local movement input.
+2. Predict the local character's movement.
+3. Send sequenced inputs to the browser host.
+4. Receive authoritative snapshots.
+5. Reconcile local prediction with authoritative state.
+6. Replay unacknowledged inputs when necessary.
+
+Apply interpolation to remote players and appropriate visual smoothing.
+
+This is essential for responsive mobile gameplay.
+
+## 12.6 Projectile and Combat Synchronization
+
+Projectiles should have unique host-generated identifiers.
+
+The browser host validates:
+
+- Attack availability.
+- Ammo.
+- Fire rate.
+- Aim vectors.
+- Spawn position.
+- Projectile travel.
+- Collision.
+- Damage.
+- Elimination.
+
+Clients may immediately display cosmetic attack feedback, but authoritative hits and damage must be confirmed by the browser host.
+
+## 12.7 Broomball Synchronization
+
+Ball state is especially important because possession and goals are contested.
+
+Represent ball state explicitly:
+
+- Ball ID.
+- Position.
+- Velocity.
+- State.
+- Carrier ID, if any.
+- Last releasing player.
+- Pickup eligibility or cooldown.
+- Last relevant teammate pass.
+- Host timestamp.
+
+The browser host alone determines:
+
+- Ball acquisition.
+- Ball release.
+- Ball collision.
+- Possession transfer.
+- Goal detection.
+- Goal reset.
+
+Clients should interpolate ball movement and smoothly transition between free and carried states.
+
+## 12.8 Room Lifecycle
+
+Use an explicit room-state machine:
+
+**Waiting → Character Selection / Ready → Countdown → In Match → Results → Waiting**
+
+Support disconnect/reconnect transitions without allowing contradictory room states.
+
+Room codes must be unique among active rooms.
+
+Expired rooms should be cleaned up automatically.
+
+Recommended cleanup:
+
+- Abandoned empty room: 30 minutes maximum idle lifetime.
+- Completed room with no connected players: delete after a short grace period.
+
+Use temporary, expiring session data.
+
+## 12.9 Network Safety and Validation
+
+Validate all incoming messages.
+
+Enforce:
+
+- Movement vector limits.
+- Attack rate limits.
+- Super activation requirements.
+- Ball shot power bounds.
+- Valid room membership.
+- Allowed actions for the player's current game state.
+- Legal character selections.
+- Legal team assignments.
+- Maximum message size and input frequency.
+
+Reconnect tokens should be unpredictable and kept separate from public room codes.
+
+Rate-limit room creation and code guessing.
+
+Do not trust client timers or client-generated gameplay outcomes.
+
+## 12.10 Deployment
+
+Build static assets with `npm run build` and deploy `dist/` to an HTTPS static host.
+
+No long-lived Node process, Socket.IO endpoint, database, or serverless gameplay function is required. Signaling is provided by PeerJS Cloud by default. The creator’s tab performs live simulation. If the host closes or reloads, the room ends; create a fresh room to continue.
+
+Do not promise universal zero-cost connectivity: restrictive networks can require TURN relay access, and third-party free service terms or availability may change. Direct WebRTC is the default first-use implementation.
+
+---
+
+# 13. Match State and Data Structures
+
+## 13.1 Player State
+
+Each player should have:
+
+- Player ID.
+- Session/reconnect identifier.
+- Display nickname.
+- Connected status.
+- Team identifier or FFA status.
+- Selected fighter.
+- Position.
+- Velocity.
+- Aim direction.
+- Health and maximum health.
+- Ammunition.
+- Reload progress.
+- Super charge.
+- Active status effects.
+- Alive/eliminated state.
+- Respawn timer.
+- Combat statistics.
+
+## 13.2 Match State
+
+Each match should track:
+
+- Match ID.
+- Room ID.
+- Selected game mode.
+- Match phase.
+- Match start time.
+- Remaining time.
+- Participating players.
+- Projectiles and active ability effects.
+- Map state.
+- Elimination history.
+- Final results, once completed.
+
+## 13.3 Showdown-Specific State
+
+Track:
+
+- Safe-zone center.
+- Safe-zone radius.
+- Current shrink phase.
+- Alive player count.
+- Player placements.
+- Danger damage phase.
+- Spectator targets.
+
+## 13.4 Broomball-Specific State
+
+Track:
+
+- Blue team score.
+- Red team score.
+- Ball state.
+- Ball position.
+- Ball velocity.
+- Current carrier.
+- Last valid pass.
+- Goal reset phase.
+- Overtime state.
+- Player goals and assists.
+
+## 13.5 Shared Fighter Definitions
+
+Character configuration should be declarative.
+
+Each fighter definition should specify:
+
+- Unique fighter ID.
+- Display name.
+- Ministry team.
+- Class.
+- Health.
+- Speed.
+- Attack configuration.
+- Super configuration.
+- Animation asset references.
+- Sound effect references.
+- HUD color and visual properties.
+
+Avoid hardcoding fighter statistics separately throughout the client and host.
+
+Use a centralized shared configuration with host-side validation.
+
+---
+
+# 14. Gameplay Architecture
+
+## 14.1 Recommended Systems
+
+Implement separate systems for:
+
+1. Input processing.
+2. Movement and physics.
+3. Collision detection.
+4. Projectile simulation.
+5. Damage and healing.
+6. Ammunition and reload.
+7. Super charging and activation.
+8. Status effects.
+9. Character elimination and respawning.
+10. Match timers and lifecycle.
+11. Showdown zone management.
+12. Broomball ball physics and possession.
+13. Goal detection.
+14. Scoring and statistics.
+15. Networking and state replication.
+16. UI presentation and visual effects.
+
+These systems should be modular and testable.
+
+## 14.2 Ability Framework
+
+Implement abilities as reusable gameplay behaviors.
+
+Useful primitive effects include:
+
+- Spawn projectile.
+- Fire cone attack.
+- Apply direct damage.
+- Apply healing.
+- Apply slow.
+- Apply stun.
+- Apply knockback.
+- Spawn area effect.
+- Dash character.
+- Spawn destructible object.
+- Rewind player to historical state.
+
+Fighter-specific abilities can compose these effects.
+
+This will make adding the remaining GOC leaders significantly easier after the pilot.
+
+---
+
+# 15. Performance Requirements
+
+## 15.1 Client Performance
+
+Targets:
+
+- Smooth gameplay on recent iOS and Android phones.
+- Target 60 FPS under normal conditions.
+- Graceful degradation on slower devices.
+- Low input latency.
+- No unnecessary rendering of off-screen objects.
+- Efficient particle effects.
+- Minimal layout work during active gameplay.
+
+Use object pooling for frequently created projectiles and effects where useful.
+
+## 15.2 Network Performance
+
+The pilot should remain playable under ordinary home Wi-Fi and mobile-network conditions.
+
+Validate behavior with simulated:
+
+- 50 ms latency.
+- 100 ms latency.
+- 200 ms latency.
+- Packet loss.
+- Brief disconnections.
+- Reconnection during combat.
+
+Players should see authoritative results without duplicate eliminations, inconsistent ball possession, or mismatched scores.
+
+## 15.3 Scalability
+
+The pilot is intended for private friend groups, not massive public matchmaking.
+
+Each room has an independent browser host. Multiple hosts may run independent rooms.
+
+Measure host CPU, memory, network traffic, and eight-participant room performance before expanding scope.
+
+Do not overengineer infrastructure.
+
+---
+
+# 16. Accessibility and Usability
+
+Include:
+
+- Toggle for screen shake.
+- Independent music and sound volume.
+- Readable text.
+- High-contrast health bars.
+- Team indicators beyond color alone.
+- Clear disabled ability states.
+- Touch targets large enough for phones.
+- No essential gameplay information communicated only through audio.
+- Responsive layouts.
+- Support for different mobile aspect ratios.
+- Clear connection-error messages.
+
+Avoid excessive flashing effects.
+
+---
+
+# 17. Development Milestones
+
+Development should proceed through vertical slices.
+
+Every milestone must produce something executable and testable.
+
+## Milestone 1 — Core Engine Prototype
+
+**Goal:** One character can move and attack in a local test arena.
+
+Build:
+
+- Project structure.
+- Phaser rendering.
+- Basic terrain.
+- Movement and wall collision.
+- Aiming.
+- Basic attack.
+- Health and damage.
+- Basic mobile controls.
+- Desktop controls.
+
+**Exit criteria:** One player can move smoothly, fire projectiles, and damage a test target.
+
+## Milestone 2 — Multiplayer Foundation
+
+**Goal:** Multiple users can play in the same synchronized arena.
+
+Build:
+
+- Browser-hosted WebRTC room transport.
+- Room creation and joining.
+- Temporary player sessions.
+- Player synchronization.
+- Host-authoritative movement.
+- Host-authoritative attacks and damage.
+- Client-side movement prediction.
+- Remote player interpolation.
+- Reconnection handling.
+
+**Exit criteria:** At least two users on separate devices can move, attack, and see consistent combat results.
+
+## Milestone 3 — Seven Fighter Roster
+
+**Goal:** Every selected ministry leader is uniquely playable.
+
+Build:
+
+- Seven fighter definitions.
+- Seven basic attacks.
+- Seven Super abilities.
+- Super charge system.
+- Character selection.
+- Health balancing.
+- Attack effects.
+- Super effects.
+- Basic character-specific sound.
+
+**Exit criteria:** All seven characters have visibly and mechanically distinct, functional attacks and Supers.
+
+## Milestone 4 — Showdown FFA
+
+**Goal:** Complete playable survival mode.
+
+Build:
+
+- Central Lawn map.
+- FFA spawn logic.
+- Shrinking safe zone.
+- Danger-zone damage.
+- Permanent eliminations.
+- Survival ranking.
+- Spectator mode.
+- Match results.
+
+**Exit criteria:** A group of players can finish an entire Showdown match and rematch.
+
+## Milestone 5 — Broomball
+
+**Goal:** Complete playable 3v3 hockey-inspired mode.
+
+Build:
+
+- Broomball Night map.
+- Team assignment.
+- Ball possession.
+- Passing and shooting.
+- Ball physics.
+- Goal collision and scoring.
+- Ball dropping.
+- Carrier attack restrictions.
+- Respawning.
+- Kickoff resets.
+- Match victory and overtime.
+
+**Exit criteria:** Six users can complete a full Broomball match on separate devices, including goals, respawns, and results.
+
+## Milestone 6 — Polish and Release Readiness
+
+**Goal:** Make the game enjoyable and reliable for actual group play.
+
+Build and refine:
+
+- UI animations.
+- Character art.
+- Sound effects.
+- Attack feedback.
+- Goal celebrations.
+- Match results presentation.
+- Responsive mobile layouts.
+- Control adjustments.
+- Gameplay balance.
+- Network reliability.
+- Error handling.
+- Production deployment configuration.
+
+**Exit criteria:** The game passes the acceptance tests below and can be shared with friends through a hosted URL.
+
+---
+
+# 18. Acceptance Criteria
+
+The pilot is complete only when all of the following are satisfied.
+
+## 18.1 Room and Lobby Acceptance
+
+- A player can create a room.
+- The room receives a unique code.
+- Other players can join with the code.
+- Players can join using an invitation link.
+- Nicknames appear correctly.
+- Players can select fighters.
+- Ready states synchronize between clients.
+- The host can choose either game mode.
+- Broomball teams can be configured.
+- Invalid lobby configurations cannot launch.
+- Leaving and reconnecting work as specified.
+
+## 18.2 Combat Acceptance
+
+- All seven fighters can move.
+- All seven fighters have distinct basic attacks.
+- All seven fighters have functional Supers.
+- Health and damage are synchronized.
+- Ammunition and reloading work.
+- Supers charge correctly.
+- Invalid Super activations are rejected.
+- Projectiles collide correctly.
+- Walls block movement and appropriate attacks.
+- Stuns, slows, healing, and knockback operate correctly.
+- Players can be eliminated.
+- Respawn works where permitted.
+- No client can directly modify authoritative game state.
+
+## 18.3 Showdown Acceptance
+
+- Showdown supports two to eight players.
+- Players begin at distinct valid spawn positions.
+- Eliminated players cannot respawn.
+- The safe zone shrinks according to host state.
+- Players outside the zone receive damage.
+- Eliminated players can spectate.
+- The game recognizes the final survivor.
+- Final placement is correct.
+- The results screen displays accurate statistics.
+- Players can rematch.
+
+## 18.4 Broomball Acceptance
+
+- Broomball supports exactly six players.
+- Each team contains three players.
+- The ball spawns at center.
+- Players can gain possession.
+- A carrier can aim and release the ball.
+- Pass power varies with input.
+- The ball can be intercepted.
+- The ball collides with rink boards.
+- Valid goals increment the correct team's score exactly once.
+- A carrier cannot use attacks or Supers.
+- A stunned, knocked-back, or eliminated carrier drops the ball.
+- Eliminated players respawn.
+- Scoring triggers a proper kickoff reset.
+- The game ends after two goals or time expiration.
+- Golden-goal overtime works.
+- Goals and assists are recorded correctly.
+- Players can rematch.
+
+## 18.5 Mobile Acceptance
+
+- The game is playable in landscape orientation on an iPhone.
+- The game is playable in landscape orientation on an Android phone.
+- Movement and attack controls work simultaneously.
+- Super controls work alongside movement.
+- Browser scrolling does not interfere with gameplay.
+- Important UI is not hidden behind device safe areas.
+- Mobile users can join matches without installing an application.
+- Mobile users can participate in both game modes from start to finish.
+
+## 18.6 Networking Acceptance
+
+- All players see the same authoritative scores.
+- Eliminations occur exactly once.
+- Ball possession cannot belong to two players simultaneously.
+- Goals are counted exactly once.
+- Disconnects do not crash the browser host.
+- Reconnecting users can reclaim their sessions within the grace period.
+- Invalid attack inputs are rejected.
+- Invalid ball inputs are rejected.
+- Multiple independent rooms can run concurrently.
+- A finished room can start another match without requiring everyone to rejoin.
+
+## 18.7 Presentation Acceptance
+
+- Every fighter has a recognizable original visual representation.
+- Both arenas have complete visual styling.
+- Basic attacks have visible effects.
+- Supers have distinctive effects.
+- Damage and healing are visible.
+- Elimination feedback is present.
+- Goals trigger visual and audio feedback.
+- Music and sound levels can be adjusted.
+- Screen shake can be disabled.
+- Results screens look complete and celebratory.
+
+---
+
+# 19. Testing Strategy
+
+## 19.1 Automated Tests
+
+Create tests for:
+
+- Character stat loading.
+- Ammo consumption.
+- Reload timing.
+- Super charge calculation.
+- Ability activation validation.
+- Health and healing bounds.
+- Projectile collision.
+- Knockback and status-effect durations.
+- Showdown circle damage.
+- Elimination ordering.
+- Respawn timing.
+- Ball possession transitions.
+- Ball collision and wall bounce.
+- Goal detection.
+- Match timer and victory conditions.
+- Lobby validation.
+
+## 19.2 Integration Tests
+
+Simulate multiple connected clients.
+
+Test:
+
+- Room creation.
+- Joining.
+- Ready-up.
+- Match launch.
+- Movement exchange.
+- Combat exchange.
+- Scoring.
+- Reconnection.
+- Rematch.
+
+Include automated multi-client match simulations where practical.
+
+## 19.3 Manual Playtesting
+
+Organize playtests with:
+
+- Two players for basic multiplayer.
+- Four players for Showdown.
+- Six players for Showdown.
+- Six players for Broomball.
+- Eight players for Showdown.
+
+Test combinations of:
+
+- Mobile devices.
+- Desktop browsers.
+- Different network connections.
+- Mixed character selections.
+
+## 19.4 Balance Testing
+
+Measure:
+
+- Fighter win rates.
+- Average damage per match.
+- Average healing per match.
+- Average Super activations.
+- Average time to elimination.
+- Showdown average placement.
+- Broomball scoring contribution.
+
+A fighter consistently dominating despite comparable player skill should be adjusted.
+
+Balance changes should initially modify configuration values before introducing entirely new mechanics.
+
+---
+
+# 20. Pilot Release Quality Bar
+
+Do not consider the project complete simply because all screens exist.
+
+The game must actually function as a coherent multiplayer product.
+
+The release should support this complete user journey:
+
+**Scenario A — Showdown**
+
+1. A player opens the hosted game.
+2. They create a room.
+3. Five friends join using their phones.
+4. Everyone selects a leader.
+5. Everyone marks ready.
+6. The host launches Showdown.
+7. Players move, attack, use Supers, and eliminate each other.
+8. The arena shrinks correctly.
+9. The last surviving player wins.
+10. Everyone sees the same results.
+11. The group starts another match.
+
+**Scenario B — Broomball**
+
+1. Six friends join a room.
+2. The host selects Broomball.
+3. The players form two teams.
+4. Everyone selects a fighter and readies up.
+5. The match begins on the ice rink.
+6. Players fight for ball possession.
+7. A player passes to a teammate.
+8. The teammate shoots toward goal.
+9. The ball crosses the goal line and the browser host awards a goal.
+10. Teams reset to kickoff positions.
+11. A player gets eliminated and respawns.
+12. The game reaches its win condition.
+13. Everyone sees accurate results.
+14. The group selects Rematch.
+
+Both scenarios must work on real separate devices—not just simulated players inside one browser.
+
+---
+
+# 21. Future Expansion Roadmap
+
+These additions are explicitly postponed until after the pilot.
+
+## Additional Fighters
+
+Introduce the remaining GOC leaders from:
+
+- Music Team.
+- Fishermen's Team.
+- Admin Team.
+- Homeless Outreach.
+- Welcome & Follow-Up.
+- Rides Team.
+- Media Team.
+- Care Team.
+- Prayer Team.
+- Sound Team.
+- Finance Team.
+- Web Team.
+
+Build new fighters through the existing ability framework.
+
+## Additional Gameplay
+
+Possible additions:
+
+- Character gadgets.
+- Passive abilities.
+- Team combo Supers.
+- Duo Showdown.
+- Additional arenas.
+- Rotating maps.
+- Special event modes.
+- Custom game modifiers.
+
+## Social Features
+
+Possible additions:
+
+- Player profiles.
+- Match history.
+- Friend lists.
+- Persistent statistics.
+- Custom voice lines.
+- Special event cosmetics.
+- Private tournaments.
+
+None of these should delay the initial release.
+
+---
+
+# 22. Instructions to the Development Agent
+
+Treat this document as the authoritative specification for the initial pilot.
+
+The development objective is to produce a **genuinely playable, multiplayer, mobile-first web game**, not a presentation, mockup, or frontend-only demonstration.
+
+Follow these execution requirements:
+
+1. Establish the shared gameplay data model and host-authoritative architecture before building advanced effects.
+2. Implement one complete gameplay vertical slice first.
+3. Maintain working local execution after each milestone.
+4. Keep rendering, game logic, and networking modular.
+5. Use original placeholder artwork where finalized character portraits are not yet available.
+6. Do not block gameplay implementation on custom illustration work.
+7. Implement real mobile controls, not merely desktop controls placed inside a mobile-sized viewport.
+8. Validate multiplayer using separate browser clients.
+9. Ensure Showdown and Broomball use the same core combat systems.
+10. Implement character-specific mechanics as specified.
+11. Make all statistics and ability values easily configurable.
+12. Keep all scoring and decisive gameplay events host-authoritative.
+13. Do not introduce out-of-scope systems without a specific gameplay need.
+14. Write tests for important gameplay state transitions.
+15. Verify each milestone's exit criteria before proceeding.
+16. Keep setup and deployment instructions accurate and reproducible.
+17. Document any deliberate deviations from this specification.
+18. Never describe a mocked multiplayer interaction as completed real-time multiplayer functionality.
+
+When choosing between adding more features and making existing gameplay responsive, reliable, and enjoyable, prioritize gameplay quality.
+
+## Final Deliverables
+
+The completed development project should include:
+
+- Working web client.
+- Working browser-hosted authoritative multiplayer simulation and WebRTC transport.
+- Seven playable fighters with their specified abilities.
+- Complete Showdown FFA.
+- Complete 3v3 Broomball.
+- Two styled arenas.
+- Character selection and private rooms.
+- Mobile and desktop controls.
+- Match results and rematches.
+- Original placeholder or approved character artwork.
+- Basic sound and visual effects.
+- Automated gameplay tests.
+- Local setup instructions.
+- Production build instructions.
+- Deployment configuration.
+- Clear documentation of known issues and remaining limitations.
+
+**Final Product Vision**
+
+GOC Royale should feel like a small but genuinely polished arcade game that friends are excited to play repeatedly, featuring recognizable GOC leaders, chaotic abilities, competitive Showdown battles, and a uniquely GOC-inspired Broomball mode.
+
+The defining experience should be simple:
+
+**Open a link. Join your friends. Pick a leader. Start fighting—or score the winning Broomball goal.**
+
+### Final build recommendations
+
+I'd preserve three boundaries when handing this to Work:
+
+- Do not accept a frontend-only prototype as completion. The biggest technical risk is multiplayer synchronization, particularly Broomball possession and goal detection.
+- Build Showdown before Broomball. Both modes need the same combat engine, but Showdown verifies movement, abilities, collisions, eliminations, and multiplayer without introducing ball physics.
+- Existing temporary avatars support gameplay development. Replace them with tested 3D fighters produced through the shared character pipeline, individual specifications and runtime acceptance gates; a generated illustration alone is not a rigged game asset.
+
+The specification is ready to use as the primary project brief.
+
+# Approved Pilot Updates — October 23, 2026
+
+The roster now has seven fighters. Ethan Ha is the Music team leader, as supplied by the user from the ministry-team directory. Brandon Kam remains the Welcome & Follow-Up controller with identical gameplay, now using a blue-and-gold palette. No contact details are included in the game.
+
+## Ethan Ha — Music
+
+HP 5,400; speed 5.2; ammo 3; reload 1.4 seconds.
+Basic: Rizz. Fires two musical-note projectiles at +/-0.055 radians; each deals 420 damage, range 8, speed 14. One volley spends one ammo. Notes stop at walls and their first enemy. Effective damage charges the Super.
+Super: Aura Pulse. Requires 5,000 charge and consumes it. Instantly knocks out all living opponents within 4 units and line of sight. Respects spawn invulnerability, does not harm the user or teammates, and cannot activate while stunned, dead, or carrying the ball. Super damage does not recharge it. A visible expanding ring shows the pulse. This intentionally powerful user-requested kit needs balance playtesting.
+
+## Camera and responsiveness
+
+A 1.65x arena-fit camera follows the local fighter or selected spectator target, clamped to map edges. Host simulation and snapshots run at 30 Hz. Movement changes and actions are sent at the next animation frame; steady-state inputs at 30 Hz. Remote interpolation uses a shorter 35 ms blend. This reduces application-side waiting, not physical network latency. Adverse-network measurements remain pending.

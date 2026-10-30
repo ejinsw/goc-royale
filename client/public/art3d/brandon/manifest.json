@@ -1,0 +1,79 @@
+{
+  "character": "Brandon Kam",
+  "version": "0.2 playable prototype",
+  "style": "low-poly cartoon",
+  "triangles": 2666,
+  "vertices": 1528,
+  "materials": 1,
+  "bones": 17,
+  "clips": {
+    "idle": {
+      "seconds": 3.0,
+      "loop": true
+    },
+    "run_forward": {
+      "seconds": 0.8,
+      "loop": true
+    },
+    "run_backward": {
+      "seconds": 0.8,
+      "loop": true
+    },
+    "strafe_left": {
+      "seconds": 0.8,
+      "loop": true
+    },
+    "strafe_right": {
+      "seconds": 0.8,
+      "loop": true
+    },
+    "basic_attack": {
+      "seconds": 0.4,
+      "loop": false
+    },
+    "super": {
+      "seconds": 0.8,
+      "loop": false
+    },
+    "hit": {
+      "seconds": 0.2,
+      "loop": false
+    },
+    "eliminated": {
+      "seconds": 0.6666666666666666,
+      "loop": false
+    },
+    "victory": {
+      "seconds": 2.0,
+      "loop": false
+    },
+    "carry_ball": {
+      "seconds": 0.8,
+      "loop": true
+    },
+    "ball_shot": {
+      "seconds": 0.4,
+      "loop": false
+    },
+    "stunned": {
+      "seconds": 1.6,
+      "loop": true
+    },
+    "respawn": {
+      "seconds": 0.6,
+      "loop": false
+    },
+    "defeat": {
+      "seconds": 1.5,
+      "loop": false
+    }
+  },
+  "textures": 0,
+  "source": "Procedurally authored original Blender geometry; likeness guided by user-supplied photos.",
+  "limitations": [
+    "Rigid weighted articulated toy limbs; not final smooth deformation.",
+    "No gameplay integration or collision changes.",
+    "Broomball and status clips are authored; multiplayer animation integration remains pending.",
+    "Single vertex-color material; facial geometry and silhouette still need user review."
+  ]
+}

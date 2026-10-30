@@ -1,0 +1,249 @@
+import { Engine } from "./engine";
+import { IDS, type Mode } from "./definitions";
+import type { Command, HostMessage, Lobby, Member, Input } from "./types";
+interface Session {
+  id: string;
+  token: string;
+  leftAt: number | null;
+  lastMessage: number;
+  count: number;
+}
+export class Room {
+  lobby: Lobby;
+  engine: Engine | null = null;
+  sessions = new Map<string, Session>();
+  now = 0;
+  constructor(
+    code: string,
+    public send: (id: string, message: HostMessage) => void,
+  ) {
+    this.lobby = {
+      code,
+      host: "",
+      mode: "showdown",
+      members: [],
+      phase: "lobby",
+    };
+  }
+  join(name: string, token?: string) {
+    const found = token
+      ? [...this.sessions.values()].find((s) => s.token === token)
+      : undefined;
+    if (found) {
+      const m = this.lobby.members.find((m) => m.id === found.id);
+      if (!m) throw Error("Session expired. Rejoin the room.");
+      if (
+        found.leftAt !== null &&
+        this.now - found.leftAt > (this.lobby.phase === "lobby" ? 30 : 20)
+      )
+        throw Error("Reconnect window expired.");
+      found.leftAt = null;
+      m.connected = true;
+      const p = this.engine?.state.players.find((x) => x.id === m.id);
+      if (p) p.connected = true;
+      this.send(m.id, {
+        type: "welcome",
+        id: m.id,
+        token: found.token,
+        lobby: this.lobby,
+      });
+      this.broadcastLobby();
+      return { id: m.id, token: found.token };
+    }
+    if (this.lobby.phase !== "lobby")
+      throw Error(
+        "This match has started. Join after the host returns to the lobby.",
+      );
+    if (this.lobby.members.length >= (this.lobby.mode === "broomball" ? 6 : 8))
+      throw Error("Room is full.");
+    const clean = String(name)
+      .trim()
+      .replace(/[\u0000-\u001f]/g, "")
+      .slice(0, 18);
+    if (!clean) throw Error("Enter a nickname.");
+    const id = crypto.randomUUID(),
+      secret = crypto.randomUUID() + crypto.randomUUID();
+    const i = this.lobby.members.length;
+    const member: Member = {
+      id,
+      name: clean,
+      fighter: IDS[i % 6],
+      team: i < 3 ? 0 : 1,
+      ready: false,
+      connected: true,
+    };
+    this.lobby.members.push(member);
+    if (!this.lobby.host) this.lobby.host = id;
+    this.sessions.set(id, {
+      id,
+      token: secret,
+      leftAt: null,
+      lastMessage: this.now,
+      count: 0,
+    });
+    this.send(id, { type: "welcome", id, token: secret, lobby: this.lobby });
+    this.broadcastLobby();
+    return { id, token: secret };
+  }
+  error(id: string, message: string) {
+    this.send(id, { type: "error", message });
+  }
+  broadcastLobby() {
+    for (const m of this.lobby.members)
+      if (m.connected)
+        this.send(m.id, { type: "lobby", lobby: structuredClone(this.lobby) });
+  }
+  validation() {
+    const l = this.lobby,
+      m = l.members;
+    if (m.some((p) => !p.connected))
+      return "Wait for disconnected players to reconnect or expire.";
+    if (m.some((p) => !p.ready)) return "Everyone needs to ready up.";
+    if (l.mode === "showdown" && (m.length < 2 || m.length > 8))
+      return "Showdown needs 2–8 players.";
+    if (l.mode === "broomball") {
+      if (m.length !== 6 || m.filter((p) => p.team === 0).length !== 3)
+        return "Broomball needs exactly 3 players on each team.";
+      for (const team of [0, 1]) {
+        const roster = m.filter((p) => p.team === team);
+        if (new Set(roster.map((p) => p.fighter)).size !== 3)
+          return "Each team needs three different fighters.";
+      }
+    }
+    return null;
+  }
+  command(id: string, c: Command) {
+    const member = this.lobby.members.find((m) => m.id === id),
+      session = this.sessions.get(id);
+    if (!member || !member.connected || !session || !c || typeof c !== "object")
+      return;
+    if (this.now - session.lastMessage >= 1) {
+      session.count = 0;
+      session.lastMessage = this.now;
+    }
+    if (++session.count > 90) return;
+    if (c.type === "input") {
+      if (this.lobby.phase === "match") this.engine?.setInput(id, c.input);
+      return;
+    }
+    const host = id === this.lobby.host;
+    if (c.type === "lobby") {
+      if (!host) {
+        this.error(id, "Only the host can return everyone to the lobby.");
+        return;
+      }
+      if (this.engine && this.engine.state.phase !== "finished") {
+        this.error(id, "Finish the current match first.");
+        return;
+      }
+      this.engine = null;
+      this.lobby.members = this.lobby.members.filter((p) =>
+        this.sessions.has(p.id),
+      );
+      this.lobby.phase = "lobby";
+      this.lobby.members.forEach((p) => (p.ready = false));
+      this.broadcastLobby();
+      return;
+    }
+    if (this.lobby.phase !== "lobby") {
+      this.error(id, "Lobby is locked during the match.");
+      return;
+    }
+    if (c.type === "select") {
+      if (!IDS.includes(c.fighter)) return;
+      if (
+        this.lobby.mode === "broomball" &&
+        this.lobby.members.some(
+          (p) =>
+            p.id !== id && p.team === member.team && p.fighter === c.fighter,
+        )
+      ) {
+        this.error(
+          id,
+          "That fighter is already on your team. Pick a different leader.",
+        );
+        return;
+      }
+      member.fighter = c.fighter;
+      member.ready = false;
+    } else if (c.type === "ready") member.ready = c.ready === true;
+    else if (
+      c.type === "mode" &&
+      host &&
+      ["showdown", "broomball"].includes(c.mode)
+    ) {
+      this.lobby.mode = c.mode as Mode;
+      this.lobby.members.forEach((p, i) => {
+        p.ready = false;
+        p.team = i < 3 ? 0 : 1;
+      });
+    } else if (c.type === "team" && host && (c.team === 0 || c.team === 1)) {
+      const target = this.lobby.members.find((p) => p.id === c.id);
+      if (target) target.team = c.team;
+      this.lobby.members.forEach((p) => (p.ready = false));
+    } else if (c.type === "shuffle" && host) {
+      const shuffled = [...this.lobby.members];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      shuffled.forEach((p, i) => {
+        p.team = i < 3 ? 0 : 1;
+        p.ready = false;
+      });
+    } else if (c.type === "start" && host) {
+      const problem = this.validation();
+      if (problem) {
+        this.error(id, problem);
+        return;
+      }
+      this.engine = new Engine(this.lobby.mode, this.lobby.members);
+      this.lobby.phase = "match";
+    }
+    this.broadcastLobby();
+  }
+  disconnect(id: string) {
+    const session = this.sessions.get(id),
+      m = this.lobby.members.find((p) => p.id === id);
+    if (!session || !m) return;
+    session.leftAt = this.now;
+    m.connected = false;
+    m.ready = false;
+    this.engine?.disconnect(id);
+    this.broadcastLobby();
+  }
+  tick() {
+    this.now += 1 / 30;
+    for (const [id, s] of this.sessions)
+      if (
+        s.leftAt !== null &&
+        this.now - s.leftAt > (this.lobby.phase === "lobby" ? 30 : 20)
+      ) {
+        const p = this.engine?.state.players.find((p) => p.id === id);
+        if (p?.alive && this.engine?.state.phase !== "finished")
+          this.engine?.eliminate(p);
+        if (p) p.respawn = Infinity;
+        this.sessions.delete(id);
+        if (this.lobby.phase === "lobby")
+          this.lobby.members = this.lobby.members.filter((p) => p.id !== id);
+        s.leftAt = null;
+        this.broadcastLobby();
+      }
+    if (this.engine && this.lobby.phase === "match") {
+      this.engine.step();
+      if (this.engine.state.phase === "finished") {
+        this.lobby.phase = "results";
+        this.broadcastLobby();
+      }
+    }
+  }
+  snapshots() {
+    if (!this.engine) return;
+    for (const m of this.lobby.members)
+      if (m.connected)
+        this.send(m.id, {
+          type: "snapshot",
+          match: this.engine.snapshot(m.id),
+        });
+  }
+}

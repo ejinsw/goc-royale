@@ -1,0 +1,27 @@
+{
+  "bytes": 1875980,
+  "extensions_used": [
+    "KHR_materials_clearcoat"
+  ],
+  "extensions_required": [],
+  "nodes": 54,
+  "meshes": 27,
+  "triangles": 64112,
+  "morph_targets": {},
+  "skins": [
+    26
+  ],
+  "animations": [
+    "idle",
+    "joint_demo"
+  ],
+  "materials": 11,
+  "images": [],
+  "name": "Brandon",
+  "stage": "rigged movement prototype",
+  "date": "2026-10-27",
+  "sha256": "f1338ef8b4090b8c1d0d4e8b2b23aa744f7c23bb2c7ba0764be8bbf28b36f051",
+  "authoring_source": "assets/3d/brandon-v4/brandon-rig.blend",
+  "viewer": "movement.html",
+  "production_ready": false
+}
