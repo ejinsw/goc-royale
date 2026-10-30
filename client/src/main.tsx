@@ -13,6 +13,7 @@ import { fighterArt } from "./art";
 import { Network } from "./network";
 import { GameStore, useGameSelector } from "./gameStore";
 import { installDevOverlay } from "./devOverlay";
+import { metrics } from "./metrics";
 import type { GameBridge } from "./game";
 import { preferences, setMusic, unlockAudio } from "./audio";
 import "@fontsource/barlow/latin-400.css";
@@ -537,6 +538,11 @@ function App() {
             {inGame && (
               <>
                 <p>The match keeps running while settings are open.</p>
+                {!host && (
+                  // Standard §8.1: reconnect lives in the pause panel; the HUD
+                  // only shows it when the connection is actually lost.
+                  <button onClick={reconnect}>Reconnect to host</button>
+                )}
                 <button
                   onClick={() => {
                     leave();
@@ -651,6 +657,54 @@ const hudEqual = (a: HudView | null, b: HudView | null): boolean => {
   );
 };
 
+/** Snapshot gap (ms) after which the HUD shows a degraded warning. */
+const STALE_WARNING_MS = 1000;
+
+/**
+ * Connection health for the HUD: "lost" from transport status, "unstable"
+ * when snapshots are overdue. Polled at 2 Hz and only re-renders on change
+ * (standard §5.1: low-frequency, change-driven HUD state).
+ */
+function useConnectionState(status: string): "ok" | "unstable" | "lost" {
+  // Only the guest's transport sets this; it clears on a successful reconnect.
+  const lost = /connection lost/i.test(status);
+  const [stale, setStale] = useState(false);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const last = metrics.lastSnapshotAt;
+      const next = !!last && performance.now() - last > STALE_WARNING_MS;
+      setStale((prev) => (prev === next ? prev : next));
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
+  return lost ? "lost" : stale ? "unstable" : "ok";
+}
+
+/** Matches for which the controls line is shown, and for how long. */
+const ONBOARDING_MATCHES = 3;
+const ONBOARDING_MS = 10000;
+
+/**
+ * Standard §8.1: tutorial copy disappears after onboarding. The controls
+ * line shows for the first 10 s of a player's first three matches.
+ */
+function useOnboardingControls() {
+  const [show, setShow] = useState(() => {
+    const seen = Number(localStorage.getItem("goc.controlsSeen") || 0);
+    return seen < ONBOARDING_MATCHES;
+  });
+  useEffect(() => {
+    if (!show) return;
+    const seen = Number(localStorage.getItem("goc.controlsSeen") || 0);
+    localStorage.setItem("goc.controlsSeen", String(seen + 1));
+    const id = setTimeout(() => setShow(false), ONBOARDING_MS);
+    return () => clearTimeout(id);
+    // Runs once per match mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return show;
+}
+
 function MatchHud({
   store,
   bridge,
@@ -675,6 +729,8 @@ function MatchHud({
     (m) => deriveHud(m, selfId, spectate),
     hudEqual,
   );
+  const connection = useConnectionState(status);
+  const showControls = useOnboardingControls();
   if (!hud) return <GameView bridge={bridge} />;
   return (
     <>
@@ -692,12 +748,17 @@ function MatchHud({
           <b>{hud.clock}</b>
           {hud.overtime && <em>GOLDEN GOAL</em>}
         </div>
-        <span className="net-status">
-          {status.includes("lost") ? "Connection lost" : "Browser host"}
-          <button onClick={onReconnect} className="quiet">
-            Reconnect
-          </button>
-        </span>
+        {/* Standard §8.1: no architecture label; warn only when degraded. */}
+        {connection !== "ok" && (
+          <span className="net-status" role="status">
+            ⚠ {connection === "lost" ? "Connection lost" : "Connection unstable"}
+            {connection === "lost" && (
+              <button onClick={onReconnect} className="quiet">
+                Reconnect
+              </button>
+            )}
+          </span>
+        )}
       </div>
       <div className="match-notice" key={hud.notice}>
         {hud.notice}
@@ -760,10 +821,12 @@ function MatchHud({
         <strong>Turn your phone sideways</strong>
         <span>The arena plays best in landscape.</span>
       </div>
-      <div className="desktop-help">
-        WASD move · Mouse aim · Click attack · Space / right click Super · Hold
-        click to charge a ball shot
-      </div>
+      {showControls && (
+        <div className="desktop-help">
+          WASD move · Mouse aim · Click attack · Space / right click Super ·
+          Hold click to charge a ball shot
+        </div>
+      )}
     </>
   );
 }

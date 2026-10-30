@@ -277,3 +277,14 @@ Standard §4.1 (input sampled → immediate local animation, audio and VFX cue, 
 Tests: `tests/actionPrediction.test.ts` adds seven tests. They cover immediate prediction; no prediction when paused, dead, stunned or in countdown; unconfirmed shots counting against ammo, plus the attack interval; confirmation and expiry; carrier release; Super charge, carrier lock and rate limiting; and a real-engine run where every predicted shot got exactly one authoritative attack effect (none lost, none doubled). `npm run typecheck`, `npm test` (85 pass), and `npm run build` pass.
 
 Not verified: how the cues look and sound in a live match, and the reduced-motion review. The cues have no camera motion; they are gameplay-readable tells, which §7.2 says reduced-motion should keep.
+
+### Step 10 — match HUD: degraded-only connection warning, onboarding-only controls line (done)
+
+Standard §8.1: network architecture labels do not belong in the normal HUD, a compact warning shows only when the connection is degraded, reconnect belongs in a pause or connection panel, tutorial copy disappears after onboarding, and critical state is not conveyed by color alone.
+
+- Removed the always-on "Browser host" label and Reconnect button from the match HUD.
+- The HUD now shows a compact "⚠ Connection unstable" when no snapshot has arrived for over 1 s. It shows "⚠ Connection lost" with a Reconnect button when the guest transport reports the host connection lost. Both use a symbol plus text, not color alone. The check polls at 2 Hz and re-renders only when the state changes (§5.1).
+- Guests can always reconnect from the Settings (pause) panel during a match. On narrow screens the HUD Reconnect button was already hidden by CSS, so this is now the reliable path there.
+- The desktop controls line ("WASD move · …") shows only for the first 10 s of a player's first three matches, counted in `localStorage` (`goc.controlsSeen`). The full controls text remains in Settings.
+
+Verified: `npm run typecheck`, `npm test` (85 pass), `npm run build`. Not verified: supported-viewport captures, keyboard focus, and the touch target/safe-area review in §11's Game UI row. There are no React component tests in this repo, so the warning states were checked by code review only.
