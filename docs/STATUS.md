@@ -206,3 +206,27 @@ Reading the results against the standard:
 Harness limits: the retransmit model is optimistic compared with real SCTP timers; frames run at an ideal 60 Hz; there is no browser, renderer, device, or real network in the loop. These numbers do not replace the physical-device and real-network checks in §4.4/§11.
 
 Verified: `npm run typecheck`, `npm test` (64 pass), `npm run build`, and `npm run netsim` all pass. Not verified: the overlay was not opened in a live browser match during this session. Its code paths compile and build, but their on-screen output has not been observed.
+
+### Step 7 — delta-encoded snapshots (done)
+
+**Why this came before the per-tick input queue:** host outbound bandwidth was past the standard's §4.2 *failure* threshold (> 5 Mbps sustained), while the 100 ms/1% correction result missed only the *target*. Measured with full snapshots before this change (scripted 40 s matches, 18 Hz, random movement/attacks/Supers): 8-player Showdown 6.99 Mbps host outbound, 10-player 10.33 Mbps, per-viewer ingress up to 140 KB/s.
+
+- `shared/delta.ts`: a lossless structural delta codec. Changed fields are sent as nested diffs. Entity arrays with ids (players, projectiles, areas, effects, events) are diffed per entity, with adds, removals, and order sent only when they differ. Other arrays are replaced whole. Removed keys and key order are carried so the decoded JSON is byte-identical to the full snapshot.
+- The host keeps one `SnapshotEncoder` per guest connection and sends `delta` messages against the previous snapshot on that connection. Every 180th snapshot (~10 s) is a full keyframe. A new connection or reconnect always starts with a keyframe. Deltas against the previous message are safe because the PeerJS channel is reliable and ordered. Moving to an unreliable channel would need acknowledgement-based baselines.
+- Each message is numbered (`n`, `base`). The guest's `SnapshotDecoder` detects a gap, sends a single `resync`, and drops deltas until the keyframe arrives. The host's own local view bypasses the codec.
+- The netsim harness now goes through the same codec. Its results are unchanged, as expected for a lossless codec.
+
+Measured after (same scripted matches):
+
+| Match | Per-viewer ingress, full → delta | Host outbound, full → delta |
+|---|---|---|
+| Showdown 2p | 44.2 → 9.8 KB/s | 0.36 → 0.08 Mbps |
+| Showdown 8p | 121.9 → 28.2 KB/s | 6.99 → 1.62 Mbps |
+| Showdown 10p | 140.2 → 32.5 KB/s | 10.33 → 2.39 Mbps |
+| Broomball 6p | 83.2 → 19.6 KB/s | 3.41 → 0.80 Mbps |
+
+All four now meet the <= 75 KB/s ingress and <= 3 Mbps host-outbound targets, including the 10-player Showdown budget exception recorded earlier. Keyframes are larger than deltas: the largest single message seen was ~9.7 KB, once per ~10 s. Host CPU cost: encoding plus serialization for one 10-player broadcast takes ~1.16 ms (vs ~0.22 ms for full serialization only), about 21 ms per second of host main thread at 18 Hz.
+
+`tests/delta.test.ts` adds eight tests: primitive, nested, and deleted-key diffs; keyed add/remove/change/reorder; whole-array replacement; 400 randomized structures round-tripping byte-identically; gap detection and keyframe recovery; keyframe cadence; and full 10-player Showdown and 6-player Broomball matches whose every per-viewer snapshot decodes byte-identically while sending under 40% of the full bytes.
+
+Verified: `npm run typecheck`, `npm test` (72 pass), `npm run build`, `npm run netsim`. Not verified: measured bytes on a real PeerJS connection. PeerJS JSON serialization adds its own framing, and the numbers above are JSON payload sizes.

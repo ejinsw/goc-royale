@@ -15,6 +15,7 @@ import { Room } from "../shared/room";
 import { FIGHTERS, type Vec } from "../shared/definitions";
 import type { HostMessage, Input, Match } from "../shared/types";
 import { LocalPredictor, stepMove } from "../client/src/prediction";
+import { SnapshotDecoder, SnapshotEncoder } from "../shared/delta";
 
 export interface Scenario {
   name: string;
@@ -113,8 +114,12 @@ export function runScenario(cfg: Scenario): Result {
   const up = new Link<Input>(cfg, random);
   let now = 0;
   let guestId = "";
+  // Same delta codec as client/src/network.ts.
+  const encoder = new SnapshotEncoder();
+  const decoder = new SnapshotDecoder();
   const room = new Room("NETSIM", (id, msg) => {
-    if (id === guestId) down.send(msg, now);
+    if (id !== guestId) return;
+    down.send(msg.type === "snapshot" ? encoder.encode(msg.match) : msg, now);
   });
   const host = room.join("Host");
   const guest = room.join("Guest");
@@ -155,10 +160,11 @@ export function runScenario(cfg: Scenario): Result {
 
   const frame = () => {
     for (const m of down.take(now)) {
-      if (m.type !== "snapshot") continue;
-      latest = m.match;
+      const match = decoder.accept(m);
+      if (!match) continue;
+      latest = match;
       lastSnapshotAt = now;
-      for (const e of m.match.events) {
+      for (const e of match.events) {
         // Present exactly once per id, as ArenaScene.playEvents does.
         if (seen.has(e.id)) {
           repeatDeliveries++;

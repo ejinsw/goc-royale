@@ -186,10 +186,15 @@ export type Command =
 export type ClientMessage =
   | { type: "hello"; name: string; token?: string }
   | { type: "command"; command: Command }
-  | { type: "ping"; at: number };
+  | { type: "ping"; at: number }
+  /** Guest lost its delta baseline; host sends a full keyframe next. */
+  | { type: "resync" };
 export type HostMessage =
   | { type: "welcome"; id: string; token: string; lobby: Lobby }
   | { type: "lobby"; lobby: Lobby }
-  | { type: "snapshot"; match: Match }
+  /** Full snapshot. `n` numbers the per-connection stream for deltas. */
+  | { type: "snapshot"; match: Match; n?: number }
+  /** Snapshot `n` encoded against snapshot `base` (see shared/delta.ts). */
+  | { type: "delta"; n: number; base: number; diff: unknown }
   | { type: "error"; message: string }
   | { type: "pong"; at: number };

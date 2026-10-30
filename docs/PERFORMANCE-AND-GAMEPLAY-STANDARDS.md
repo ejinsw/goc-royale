@@ -341,10 +341,10 @@ The HUD is a combat instrument panel, not an informational webpage.
 The following describe the current implementation and MUST NOT be copied as
 preferred conventions:
 
-- Snapshots are full-state JSON (quantized, ~18 Hz, independent of the 30 Hz
-  simulation). Delta encoding and omission of unchanged entities are not yet
-  implemented, and the 75 KB/s ingress budget is not met for busy 8+ player
-  scenes.
+- Snapshots are delta-encoded JSON (quantized, ~18 Hz, keyframe every 10 s)
+  over a reliable ordered channel. The schema still carries fields the client
+  does not read, and per-entity ids are long UUIDs; a compact binary or
+  index-keyed schema would cut the remaining bytes further.
 - The authority applies the latest received input each tick rather than a
   per-tick input queue, so retransmission-delayed inputs are stretched or
   skipped. Correction p95 exceeds the 0.25-unit target at 100 ms/1% and
@@ -359,7 +359,8 @@ Resolved on the `refactor/performance-gameplay-standards` branch (see
 `docs/STATUS.md`): snapshots no longer replace top-level React state; inputs
 carry sequences with per-viewer acknowledgement and client replay; static map
 art is no longer redrawn every frame; a development overlay and scripted
-latency/loss harness exist.
+latency/loss harness exist; snapshots are delta-encoded and measured within
+the ingress and host-outbound budgets up to 10 players.
 - Character presentation primarily uses portrait images, simple wobble, shapes,
   text, and modest effects.
 - The Three.js studies and GLB models are separate from the multiplayer renderer.

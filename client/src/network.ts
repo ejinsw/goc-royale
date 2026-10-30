@@ -7,6 +7,7 @@ import type {
   Input,
 } from "../../shared/types";
 import { metrics, payloadBytes } from "./metrics";
+import { SnapshotDecoder, SnapshotEncoder } from "../../shared/delta";
 export type Listener = (m: HostMessage) => void;
 const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const randomCode = () =>
@@ -37,6 +38,10 @@ export class Network {
   /** Guest RTT probe (standard §4.3): outstanding ping send times. */
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private outstandingPings = new Set<number>();
+  /** Host: one delta encoder per guest connection (standard §4.2). */
+  private encoders = new WeakMap<DataConnection, SnapshotEncoder>();
+  /** Guest: decoder for the host's snapshot/delta stream. */
+  private decoder = new SnapshotDecoder();
   constructor(
     public onMessage: Listener,
     public onStatus: (s: string) => void,
@@ -55,9 +60,15 @@ export class Network {
       } else {
         const c = this.peers.get(id);
         if (c?.open) {
-          c.send(msg);
+          let out: HostMessage = msg;
+          if (msg.type === "snapshot") {
+            let enc = this.encoders.get(c);
+            if (!enc) this.encoders.set(c, (enc = new SnapshotEncoder()));
+            out = enc.encode(msg.match);
+          }
+          c.send(out);
           if (metrics.enabled)
-            metrics.bytesOut.add(payloadBytes(msg), performance.now());
+            metrics.bytesOut.add(payloadBytes(out), performance.now());
         }
       }
     });
@@ -160,6 +171,7 @@ export class Network {
     });
   }
   private connect(name: string, token?: string) {
+    this.decoder.reset();
     return new Promise<void>((resolve, reject) => {
       const conn = this.peer!.connect(peerId(this.code), {
         reliable: true,
@@ -167,6 +179,7 @@ export class Network {
       });
       this.connection = conn;
       let welcomed = false;
+      let resyncRequested = false;
       const timeout = setTimeout(() => {
         reject(
           Error(
@@ -203,7 +216,22 @@ export class Network {
           conn.close();
           return;
         }
-        if (m.type === "snapshot") this.lastSnapshot = performance.now();
+        if (m.type === "snapshot" || m.type === "delta") {
+          const match = this.decoder.accept(m);
+          if (!match) {
+            // Baseline lost: ask once for a keyframe and drop deltas until it
+            // arrives, so the host does not answer with a burst of keyframes.
+            if (!resyncRequested) {
+              resyncRequested = true;
+              conn.send({ type: "resync" } satisfies ClientMessage);
+            }
+            return;
+          }
+          if (m.type === "snapshot") resyncRequested = false;
+          this.lastSnapshot = performance.now();
+          this.deliver({ type: "snapshot", match });
+          return;
+        }
         this.deliver(m);
       });
       conn.on("close", () => {
@@ -278,6 +306,7 @@ export class Network {
           Number.isFinite(m.at)
         )
           conn.send({ type: "pong", at: m.at } satisfies HostMessage);
+        else if (id && m.type === "resync") this.encoders.get(conn)?.reset();
       } catch (e) {
         conn.send({
           type: "error",
