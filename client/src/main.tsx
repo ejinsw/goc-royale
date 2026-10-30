@@ -43,7 +43,6 @@ function App() {
       new URLSearchParams(location.search).get("room") || "",
     ),
     [chosen, setChosen] = useState<FighterId>("brandon"),
-    [menuMode, setMenuMode] = useState<"showdown" | "broomball">("showdown"),
     [gallery, setGallery] = useState(false),
     [settings, setSettings] = useState(false),
     [spectate, setSpectate] = useState<string | null>(null);
@@ -153,7 +152,6 @@ function App() {
       if (create) {
         await network.create(name);
         network.command({ type: "select", fighter: chosen });
-        network.command({ type: "mode", mode: menuMode });
       } else {
         let token: string | undefined;
         try {
@@ -218,14 +216,14 @@ function App() {
   return (
     <div
       className={
-        inGame ? `app playing ${touchControls ? "touch-enabled" : ""}` : "app game-shell"
+        inGame ? `app playing ${touchControls ? "touch-enabled" : ""}` : "app"
       }
     >
       {!inGame && (
         <header className="header">
           <a className="brand" href="#" onClick={(e) => e.preventDefault()}>
             <span className="brand-mark">G</span> GOC <b>ROYALE</b>
-            <span className="pilot">PRIVATE PLAY</span>
+            <span className="pilot">PILOT 01</span>
           </a>
           <button
             className="quiet"
@@ -247,47 +245,126 @@ function App() {
         </div>
       )}
       {!lobby && (
-        <main className="game-menu">
-          <section className="fighter-showcase" style={{ "--fighter": FIGHTERS[chosen].color } as React.CSSProperties} aria-label="Selected fighter">
-            <div className="arena-lines" aria-hidden="true" />
-            <div className="showcase-heading">
-              <span className="menu-kicker">{FIGHTERS[chosen].team}</span>
-              <h1>{FIGHTERS[chosen].name}</h1>
-              <span className="role-badge">{FIGHTERS[chosen].role} · {FIGHTERS[chosen].hp.toLocaleString()} HP</span>
+        <main className="home">
+          <section className="home-copy">
+            <div className="eyebrow">
+              <span className="live-dot" /> PRIVATE ROOMS. FRIENDLY RIVALRIES.
             </div>
-            <div className="character-platform" aria-hidden="true" />
-            <img key={chosen} className="showcase-character" src={fighterArt(chosen)} alt={`${FIGHTERS[chosen].name}, cartoon fighter`} />
-            <button className="fighter-details-button" onClick={() => setGallery(true)}>Fighter details</button>
-            <div className="fighter-dock" aria-label="Choose your fighter">
-              {IDS.map(id => <button key={id} className={chosen === id ? "dock-fighter active" : "dock-fighter"} style={{ "--fighter": FIGHTERS[id].color } as React.CSSProperties} aria-label={`Select ${FIGHTERS[id].name}`} aria-pressed={chosen === id} onClick={() => setChosen(id)}><img src={fighterArt(id)} alt="" /><span>{FIGHTERS[id].name}</span></button>)}
+            <h1>
+              Meet you
+              <br />
+              in the <span>arena.</span>
+            </h1>
+            <p className="intro">
+              Seven familiar faces. A little friendly chaos.
+              <br />
+              One very good reason to run it back.
+            </p>
+            <div className="mode-tags">
+              <span>01 / SHOWDOWN</span>
+              <span>02 / BROOMBALL</span>
+            </div>
+            <div className="entry">
+              <label htmlFor="nickname">YOUR NICKNAME</label>
+              <input
+                id="nickname"
+                maxLength={18}
+                value={name}
+                placeholder="What should we call you?"
+                onChange={(e) => setName(e.target.value)}
+              />
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => enter(true)}
+              >
+                {busy ? "Connecting…" : "Create a room"}
+                <span>↗</span>
+              </button>
+              <div className="join-row">
+                <input
+                  aria-label="Room code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="ROOM CODE"
+                  maxLength={6}
+                />
+                <button
+                  disabled={busy || code.length !== 6}
+                  onClick={() => enter(false)}
+                >
+                  Join friends →
+                </button>
+              </div>
+              <small>
+                No account. No download. The creator hosts the match.
+              </small>
             </div>
           </section>
-          <section className="play-panel" aria-label="Play with friends">
-            <div className="panel-heading"><span className="menu-kicker">YOUR NEXT MATCH</span><h2>LET’S PLAY.</h2></div>
-            <label className="player-name" htmlFor="nickname"><span>PLAYER NAME</span><input id="nickname" maxLength={18} value={name} placeholder="Enter your nickname" onChange={e => setName(e.target.value)} autoComplete="nickname" /></label>
-            <div className="menu-mode-picker" aria-label="Game mode">
-              {(["showdown", "broomball"] as const).map(mode => <button key={mode} className={`menu-mode ${menuMode === mode ? "active" : ""}`} aria-pressed={menuMode === mode} onClick={() => setMenuMode(mode)}><span className={`mode-emblem ${mode}`} aria-hidden="true">{mode === "showdown" ? "FFA" : "3v3"}</span><span><strong>{mode === "showdown" ? "SHOWDOWN" : "BROOMBALL"}</strong><small>{mode === "showdown" ? "Last fighter standing · up to 10" : "First to 2 goals · up to 6"}</small></span><span className="mode-selected" aria-hidden="true">{menuMode === mode ? "✓" : ""}</span></button>)}
+          <section className="roster-stage">
+            <div className="stage-label">
+              CHOOSE YOUR KIND OF CHAOS{" "}
+              <span>{String(IDS.length).padStart(2, "0")} FIGHTERS</span>
             </div>
-            <button className="launch-button" disabled={busy} onClick={() => enter(true)}>{busy ? "CONNECTING…" : "CREATE PARTY"}<span aria-hidden="true">→</span></button>
-            <p className="play-help">Invite your friends, ready up, and jump in.</p>
-            <form className="party-join" onSubmit={e => { e.preventDefault(); if (!busy && code.length === 6) void enter(false); }}>
-              <label htmlFor="party-code">GOT AN INVITE?</label>
-              <div><input id="party-code" aria-label="Room code" value={code} onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z2-9]/g, ""))} placeholder="ROOM CODE" maxLength={6} autoComplete="off" spellCheck={false} /><button disabled={busy || code.length !== 6} type="submit">JOIN</button></div>
-            </form>
-            <div className="selected-kit"><span>YOUR LOADOUT</span><strong>{FIGHTERS[chosen].attack}</strong><small>SUPER · {FIGHTERS[chosen].super}</small></div>
+            <div
+              className="hero-fighter"
+              style={
+                { "--fighter": FIGHTERS[chosen].color } as React.CSSProperties
+              }
+            >
+              <span className="orbit orbit-one" />
+              <span className="orbit orbit-two" />
+              <div className="hero-number">0{IDS.indexOf(chosen) + 1}</div>
+              <img
+                src={fighterArt(chosen)}
+                alt={`${FIGHTERS[chosen].name}, cartoon fighter`}
+              />
+              <span className="fighter-sticker">{FIGHTERS[chosen].role}</span>
+              <div className="hero-caption">
+                <span>{FIGHTERS[chosen].team}</span>
+                <h2>{FIGHTERS[chosen].name}</h2>
+                <p>
+                  {FIGHTERS[chosen].attack} / {FIGHTERS[chosen].super}
+                </p>
+              </div>
+            </div>
+            <div className="portrait-row">
+              {IDS.map((id) => (
+                <button
+                  key={id}
+                  className={chosen === id ? "portrait active" : "portrait"}
+                  style={
+                    { "--fighter": FIGHTERS[id].color } as React.CSSProperties
+                  }
+                  onClick={() => setChosen(id)}
+                  aria-label={`Select ${FIGHTERS[id].name}`}
+                  aria-pressed={chosen === id}
+                >
+                  <img src={fighterArt(id)} alt="" />
+                  <span>{FIGHTERS[id].name}</span>
+                </button>
+              ))}
+            </div>
+            <button className="gallery-link" onClick={() => setGallery(true)}>
+              Meet the whole roster <span>→</span>
+            </button>
           </section>
+          <footer className="home-footer">
+            <span>MADE FOR THE GROUP CHAT.</span>
+            <span>Up to 10 players · Mobile + desktop · Browser hosted</span>
+          </footer>
         </main>
       )}
       {lobby && (matchPhase === null || lobby.phase === "lobby") && (
         <main className="lobby">
           <section className="lobby-top">
             <div>
-              <div className="eyebrow">PARTY LOBBY</div>
+              <div className="eyebrow">YOUR PRIVATE ROOM</div>
               <h1 className="room-code">{lobby.code}</h1>
               <p>{status}</p>
             </div>
             <div className="room-actions">
-              <button onClick={copyInvite}>Invite friends</button>
+              <button onClick={copyInvite}>Copy invite link ↗</button>
               <button className="quiet" onClick={leave}>
                 Leave room
               </button>
@@ -295,7 +372,7 @@ function App() {
           </section>
           <div className="lobby-columns">
             <section>
-              <div className="section-label">GAME MODE</div>
+              <div className="section-label">01 / THE PLAN</div>
               <div className="mode-picker">
                 {(["showdown", "broomball"] as const).map((mode) => (
                   <button
@@ -316,7 +393,7 @@ function App() {
                 ))}
               </div>
               <div className="section-label roster-label">
-                YOUR PARTY{" "}
+                02 / THE CREW{" "}
                 <span>
                   {lobby.members.length}/{lobby.mode === "showdown" ? 10 : 6}
                 </span>
@@ -384,7 +461,7 @@ function App() {
                     className="primary"
                     onClick={() => command({ type: "start" })}
                   >
-                    PLAY →
+                    Start match →
                   </button>
                 )}
               </div>
@@ -395,7 +472,7 @@ function App() {
               </p>
             </section>
             <section>
-              <div className="section-label">CHOOSE YOUR FIGHTER</div>
+              <div className="section-label">03 / PICK YOUR FIGHTER</div>
               <div className="fighter-grid">
                 {IDS.map((id) => (
                   <FighterCard
@@ -442,7 +519,7 @@ function App() {
       )}
       {gallery && (
         <div className="modal-backdrop">
-          <section className="modal gallery" role="dialog" aria-modal="true" aria-label="Fighter select">
+          <section className="modal gallery">
             <button
               className="close"
               onClick={() => setGallery(false)}
@@ -450,8 +527,8 @@ function App() {
             >
               ×
             </button>
-            <div className="eyebrow">FIGHTER SELECT</div>
-            <h2>CHOOSE YOUR FIGHTER</h2>
+            <div className="eyebrow">THE FULL ROSTER</div>
+            <h2>Pick your people.</h2>
             <div className="fighter-grid">
               {IDS.map((id) => (
                 <FighterCard

@@ -1,3 +1,27 @@
+# Git deployment configuration — October 29, 2026
+
+The main menu is restored to the verified earlier JSX with the existing CSS.
+The unfinished redesign is preserved in history at d569d61 and the separate
+refactor branch. This release adds repository-owned vercel.json and
+.vercelignore. The existing Vercel project goc-royale is configured for Node 22,
+npm ci, build command `npm test && npm run build`, and output `dist`.
+
+Vercel CLI confirmed the GitHub connection to private repository
+ejinsw/goc-royale on October 29, 2026. The production branch is main.
+Pushes to main build and deploy production;
+feature branches receive previews. A failing unit test or production build
+blocks publication. Keep the existing goc-royale.vercel.app domain. Never
+create another Vercel project just to connect this repository. No paid service,
+backend, database, or secrets are added. Tests/build are release checks, not
+proof of latency, physical mobile quality or all performance standards.
+
+See docs/STATUS.md for restoration evidence and remaining limitations. The
+historical CLI deployment record and exact October 25 static rollback ZIP below
+remain available; use the ZIP to restore that historical baseline if needed.
+Do not use the old isolated static-publish instructions for routine Git releases.
+
+---
+
 # Repository migration — October 29, 2026
 
 The project is now tracked in the private GitHub repository
