@@ -21,7 +21,7 @@ play action without thousands of pixels of scrolling.
 
 Vercel configuration now specifies npm ci, tests before production build, dist
 output, immutable hashed assets, revalidating HTML/unversioned assets, and SPA
-fallback. The existing Vercel project is the intended Git integration target.
+fallback. The existing Vercel project is connected to ejinsw/goc-royale.
 
 ---
 

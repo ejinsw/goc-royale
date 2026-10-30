@@ -6,8 +6,9 @@ refactor branch. This release adds repository-owned vercel.json and
 .vercelignore. The existing Vercel project goc-royale is configured for Node 22,
 npm ci, build command `npm test && npm run build`, and output `dist`.
 
-GitHub integration targets private repository ejinsw/goc-royale and production
-branch main. Once connected, pushes to main build and deploy production;
+Vercel CLI confirmed the GitHub connection to private repository
+ejinsw/goc-royale on October 29, 2026. The production branch is main.
+Pushes to main build and deploy production;
 feature branches receive previews. A failing unit test or production build
 blocks publication. Keep the existing goc-royale.vercel.app domain. Never
 create another Vercel project just to connect this repository. No paid service,
