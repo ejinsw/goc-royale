@@ -1,3 +1,30 @@
+## Main menu restoration — October 29, 2026
+
+The unfinished home-menu JSX on main was restored to the previously verified
+menu implementation, matching the existing stylesheet and leaving simulation,
+network transport, renderer, audio, fighter balance and assets unchanged. The
+interrupted redesign remains in Git history at d569d61 and on the independent
+refactor branch. Broomball mode selection remains available inside the lobby.
+
+Verification: clean npm ci, all 48 tests and production build passed. Two real
+browser tabs on one computer created/joined an invite, selected Daniel/Ethan,
+readied, launched Showdown, and observed movement in both directions; no browser
+warning/error logs. At 1280x720 the play button is within y=580..635; at 390x844
+it is within y=507..561, height 54.5px, with no horizontal overflow. Input height
+is 51px. Existing native keyboard buttons/inputs retained. No runtime rate,
+asset budget or authoritative rule changed. Physical touch/safe-area devices,
+controlled latency/loss, reduced-motion/audio campaigns and p95 performance
+remain unverified by this restoration; this is not certification of prototype
+performance debt. The standard's section 13 runtime/latency questions retain
+their existing limitations; the player-facing improvement here is access to the
+play action without thousands of pixels of scrolling.
+
+Vercel configuration now specifies npm ci, tests before production build, dist
+output, immutable hashed assets, revalidating HTML/unversioned assets, and SPA
+fallback. The existing Vercel project is the intended Git integration target.
+
+---
+
 # GOC Royale — implementation status
 
 Updated October 23, 2026. This is a playable multiplayer alpha, with a production static build. The complete device, network, balance, and presentation acceptance bar in the design document has not yet been signed off.

@@ -1,0 +1,8 @@
+work/
+outputs/
+graphify-out/
+assets/
+docs/
+.env*
+!.env.example
+*.blend*
