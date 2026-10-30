@@ -10,9 +10,19 @@ import {
   mul,
   type Vec,
 } from "../../shared/definitions";
-import type { Match, Input, GameEvent } from "../../shared/types";
+import type { Match, Input, GameEvent, Player } from "../../shared/types";
 import { preferences, sound } from "./audio";
 import { LocalPredictor } from "./prediction";
+import { ActionPredictor, type PredictedAttack } from "./actionPrediction";
+/** A short-lived, locally predicted release cue (presentation only). */
+interface LocalFx {
+  kind: PredictedAttack | "cone" | "super";
+  pos: Vec;
+  dir: Vec;
+  color: number;
+  start: number;
+  dur: number;
+}
 import { metrics } from "./metrics";
 export interface GameBridge {
   match: Match | null;
@@ -50,6 +60,11 @@ export class ArenaScene extends Phaser.Scene {
   localSeq = 0;
   /** Local prediction + reconciliation, shared with the netsim harness. */
   predictor = new LocalPredictor();
+  /** Predicted attack/Super cues (standard §4.1); never awards damage. */
+  actions = new ActionPredictor();
+  localFx: LocalFx[] = [];
+  /** Authoritative effects whose cue already played as a prediction. */
+  predictedEffectIds = new Set<number>();
   /** Cached camera-layout inputs; fit() recomputes only when these change. */
   private lastFitKey = "";
   offset = { x: 0, y: 0 };
@@ -377,8 +392,10 @@ export class ArenaScene extends Phaser.Scene {
       }
     }
     const visible = new Set<string>();
-    if (!s.players.some((p) => p.id === this.bridge.id && p.alive))
+    if (!s.players.some((p) => p.id === this.bridge.id && p.alive)) {
       this.predictor.reset();
+      this.actions.reset();
+    }
     for (const p of s.players) {
       if (!p.alive) continue;
       visible.add(p.id);
@@ -499,20 +516,30 @@ export class ArenaScene extends Phaser.Scene {
       this.circle(s.ball.pos, 0.36, 0x173e38);
       this.circle(add(s.ball.pos, { x: -0.04, y: -0.06 }), 0.24, 0xffe6a5);
     }
+    this.drawLocalFx();
     for (const e of s.effects) {
       const p = this.point(e.pos),
         progress = clamp((e.end - s.time) / 0.5, 0, 1);
       if (!this.consumedEffects.has(e.id)) {
         this.consumedEffects.add(e.id);
-        sound(
-          e.kind,
-          IDS.indexOf(
-            s.players.find((p) => p.id === e.owner)?.fighter || "brandon",
-          ),
-        );
+        // A confirmed local attack already played its cue on the input frame.
+        if (
+          e.kind === "attack" &&
+          e.owner === this.bridge.id &&
+          this.actions.confirmAttack(performance.now() / 1000)
+        )
+          this.predictedEffectIds.add(e.id);
+        else
+          sound(
+            e.kind,
+            IDS.indexOf(
+              s.players.find((p) => p.id === e.owner)?.fighter || "brandon",
+            ),
+          );
         // Camera impulses are now driven by the typed presentation event
         // stream (see playEvents), scaled by importance and distance.
       }
+      if (this.predictedEffectIds.has(e.id)) continue;
       const owner = s.players.find((x) => x.id === e.owner);
       const color = owner ? col(FIGHTERS[owner.fighter].color) : 0xffe3b0;
       if (e.kind === "cone" || e.kind === "sound" || e.kind === "photo") {
@@ -580,6 +607,10 @@ export class ArenaScene extends Phaser.Scene {
       }
     if (this.consumedEffects.size > 3000)
       this.consumedEffects = new Set(s.effects.map((e) => e.id));
+    // Attack effects live 0.2 s; keep only ids still present.
+    if (this.predictedEffectIds.size > 64)
+      for (const id of this.predictedEffectIds)
+        if (!s.effects.some((e) => e.id === id)) this.predictedEffectIds.delete(id);
     this.playEvents(s);
   }
   /**
@@ -610,8 +641,77 @@ export class ArenaScene extends Phaser.Scene {
     this.bridge.send(payload);
     const me = s.players.find((pl) => pl.id === this.bridge.id);
     this.predictor.record(seq, move, me?.slow ?? 0, t);
+    // Immediate local release cues on the input frame (standard §4.1, §6).
+    if (me && payload.attack) {
+      const kind = this.actions.tryAttack(me, s, t, this.bridge.paused);
+      if (kind) this.playPredictedAttack(kind, me, t);
+    }
+    if (me && payload.super && this.actions.trySuper(me, s, t, this.bridge.paused)) {
+      sound("super_cue");
+      this.pushFx("super", me, t, 0xf4c95d, 0.25);
+    }
     this.bridge.input.attack = false;
     this.bridge.input.super = false;
+  }
+  private pushFx(kind: LocalFx["kind"], me: Player, t: number, color: number, dur: number) {
+    this.localFx.push({
+      kind,
+      pos: { ...(this.renderPos.get(me.id) ?? me.pos) },
+      dir: { ...this.bridge.input.aim },
+      color,
+      start: t,
+      dur,
+    });
+    if (this.localFx.length > 24) this.localFx.shift();
+  }
+  private playPredictedAttack(kind: PredictedAttack, me: Player, t: number) {
+    if (kind === "release") {
+      sound("release");
+      this.pushFx("release", me, t, 0xffe6a5, 0.18);
+      return;
+    }
+    sound("attack", IDS.indexOf(me.fighter));
+    const color = col(FIGHTERS[me.fighter].color);
+    // Josh's basic attack is an instant cone; others fire projectiles.
+    this.pushFx(me.fighter === "josh" ? "cone" : "attack", me, t, color, me.fighter === "josh" ? 0.25 : 0.15);
+  }
+  /** Draw and expire predicted cues. Readable tells; no camera motion. */
+  private drawLocalFx() {
+    const now = performance.now() / 1000;
+    const g = this.g,
+      z = this.zoomFactor;
+    this.localFx = this.localFx.filter((fx) => now - fx.start < fx.dur);
+    for (const fx of this.localFx) {
+      const k = clamp((now - fx.start) / fx.dur, 0, 1),
+        a = 1 - k;
+      if (fx.kind === "super") {
+        const c = this.point(fx.pos);
+        g.lineStyle(4, fx.color, a);
+        g.strokeCircle(c.x, c.y, (0.7 + 0.6 * k) * z);
+        continue;
+      }
+      if (fx.kind === "cone") {
+        const end = add(fx.pos, mul(fx.dir, 6.5));
+        const perp = { x: -fx.dir.y * 2, y: fx.dir.x * 2 };
+        const pts = [fx.pos, add(end, perp), add(end, mul(perp, -1))].map((v) => this.point(v));
+        g.fillStyle(fx.color, 0.18 * a);
+        g.fillPoints(pts, true);
+        g.lineStyle(2, fx.color, a);
+        g.strokePoints(pts, true);
+        continue;
+      }
+      // Muzzle flash ring plus a short release streak along the aim.
+      const muzzle = this.point(add(fx.pos, mul(fx.dir, 0.55)));
+      g.lineStyle(3, fx.color, a);
+      g.strokeCircle(muzzle.x, muzzle.y, (0.2 + 0.35 * k) * z);
+      this.line(
+        add(fx.pos, mul(fx.dir, 0.6)),
+        add(fx.pos, mul(fx.dir, 0.6 + (fx.kind === "release" ? 2 : 1.4) * k)),
+        fx.color,
+        4,
+        a,
+      );
+    }
   }
   /**
    * Consume the authoritative presentation event stream (standard §6.2) once

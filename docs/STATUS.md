@@ -261,3 +261,19 @@ Trade-off for other viewers: a guest whose uplink stalls now visibly holds still
 Tests: six new engine tests (held-duration ordering, stall hold plus <= 2x catch-up recovering the full path, forged-timestamp speed bound, no countdown burst, stun consumes time without moving, clock-reset restart). The netsim tests now assert the 0.25 p95 target and <= 0.25 per-frame jump in all five cases, and p50 < 0.05. `npm run typecheck`, `npm test` (78 pass), `npm run build`, `npm run netsim` all pass.
 
 Not verified: a live two-browser match with this change, and any real-network or physical-device measurement. The harness limits from step 6 still apply.
+
+### Step 9 — predicted attack and Super release cues (done)
+
+Standard §4.1 (input sampled → immediate local animation, audio and VFX cue, then reconcile without restarting presentation) and §6 (predicted anticipation/release; damage, possession, score and cooldown truth stay authoritative). Before this, every local attack and Super cue waited a full round trip for the host's effect.
+
+- `client/src/actionPrediction.ts` (no Phaser/DOM): on the frame the attack input is sent, it predicts whether the authority will accept it. It requires: alive, playing, not stunned, not paused, ammo left after subtracting this client's own unconfirmed shots, and the 0.32 s attack interval elapsed. A ball carrier's attack predicts a release cue instead. Super anticipation requires full charge and no ball, and is rate limited against mashing.
+- Predicted attack: the attack sound plays immediately, plus a muzzle-flash ring and release streak in the fighter's color along the aim. Josh, whose basic attack is an instant cone, gets a predicted cone outline instead.
+- Predicted Super: a rising anticipation sound and a gold ring. The authoritative Super effects and sounds still play when the host confirms, so this cue is anticipation, not a duplicate release.
+- Ball release: an immediate whoosh and streak. The host emits no attack effect for a carrier release, so there is nothing to dedupe.
+- When the host's `attack` effect for the local fighter arrives, it confirms one pending prediction. Its sound and ring are then skipped so the cue never plays twice. An authoritative attack with no matching prediction plays normally. A prediction unconfirmed after 1 s is treated as a misprediction and dropped. Nothing is undone, because only a ~0.15 s flash and sound were played.
+- Presentation only: no damage, ammo, cooldown, charge or projectile is created locally. The projectile itself still appears with the authoritative snapshot, about one RTT after the predicted flash.
+- `client/src/audio.ts` gained two cue kinds (`super_cue` rising, `release` falling). Audio nodes are still created per sound, as before (existing §9 debt).
+
+Tests: `tests/actionPrediction.test.ts` adds seven tests. They cover immediate prediction; no prediction when paused, dead, stunned or in countdown; unconfirmed shots counting against ammo, plus the attack interval; confirmation and expiry; carrier release; Super charge, carrier lock and rate limiting; and a real-engine run where every predicted shot got exactly one authoritative attack effect (none lost, none doubled). `npm run typecheck`, `npm test` (85 pass), and `npm run build` pass.
+
+Not verified: how the cues look and sound in a live match, and the reduced-motion review. The cues have no camera motion; they are gameplay-readable tells, which §7.2 says reduced-motion should keep.

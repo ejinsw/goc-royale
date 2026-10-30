@@ -349,9 +349,10 @@ preferred conventions:
   bounded extrapolation and catch-up. A stall longer than the 0.25 s bank is
   skipped rather than replayed, and a stalled fighter visibly holds and then
   catches up at up to 2x for other viewers.
-- Movement is predicted and reconciled with sequence/ack/replay, but there is
-  no predicted action presentation path (attack/Super cues wait for the
-  authoritative event).
+- Local attack and Super release cues are predicted (sound, muzzle flash,
+  Josh cone, Super anticipation ring), but projectiles themselves are not:
+  the projectile appears when the authoritative snapshot arrives, about one
+  RTT after the predicted flash. Predicted cues are not yet animation clips.
 - The Phaser Canvas arena caches static map art, but dynamic scenery (zone,
   walls, areas, actors, effects) is still procedurally redrawn each frame.
 

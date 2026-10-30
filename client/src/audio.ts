@@ -9,7 +9,7 @@ export function sound(kind: string, fighterIndex = 0) {
   const c = context,
     o = c.createOscillator(),
     g = c.createGain();
-  o.type = kind === "goal" ? "sine" : "triangle";
+  o.type = kind === "goal" || kind === "release" ? "sine" : "triangle";
   o.frequency.setValueAtTime(
     kind === "heal"
       ? 620
@@ -17,11 +17,16 @@ export function sound(kind: string, fighterIndex = 0) {
         ? 440
         : kind === "attack"
           ? 240 + fighterIndex * 75
-          : 130,
+          : kind === "release"
+            ? 520
+            : kind === "super_cue"
+              ? 330
+              : 130,
     c.currentTime,
   );
+  // super_cue rises (anticipation); release falls (a soft whoosh).
   o.frequency.exponentialRampToValueAtTime(
-    kind === "goal" ? 880 : 80,
+    kind === "goal" ? 880 : kind === "super_cue" ? 990 : kind === "release" ? 220 : 80,
     c.currentTime + 0.12,
   );
   g.gain.setValueAtTime(preferences.sound * 0.065, c.currentTime);
