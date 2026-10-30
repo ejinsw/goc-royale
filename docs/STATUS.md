@@ -157,3 +157,16 @@ Standard §5.2 and the named prototype debt in §10: the Phaser Canvas arena cle
 Verified: `npm run typecheck`, `npm test` (57 pass, unchanged — this is presentation-only, no authority touched), and `npm run build` all pass. The static layer is a scene-owned Graphics torn down with the scene; resize calls `fit(true)` and only re-transforms the cached layer.
 
 Not yet verified (needs a live capture): before/after frame-time profile, the resize/teardown stress test, and the complete-match memory trend required by standard §5.2/§11. The per-frame draw-call reduction is structural and clear from the code (static shapes went from every-frame to once-per-mode), but the measured FPS/frame-time improvement on a target device has not been captured here.
+
+### Step 5 — snapshot compaction: quantization and rounding (done, partial)
+
+Standard §4.2: prefer deltas, compact schemas, quantization, and omission of unchanged data over full-precision full-state JSON at frequency.
+
+- Added a `compact()` pass in `Engine.snapshot()` that quantizes the per-viewer wire copy: positions/aim/velocity/directions to 0.01 world units (well inside the <= 0.25-unit correction tolerance and imperceptible), sampleTime to 3 decimals, HP to integer (ceil), and charge to integer.
+- It operates only on the transmitted clone, never on authoritative state, so simulation precision is preserved. A new test asserts both the quantized wire values and that the authoritative player position/HP are untouched.
+
+Measured effect (scripted 8-player Showdown, 120 ticks of random movement with periodic attacks): a busy snapshot shrank from ~8,672 to ~7,564 serialized bytes, about **12.8%**. At 18 Hz that busy case is still roughly ~136 KB/s per client — **above** the standard's <= 75 KB/s ingress target.
+
+Honest conclusion: quantization is a real but modest win. The dominant cost is the schema itself (full state every snapshot). Closing the gap to the 75 KB/s budget needs **delta-against-baseline encoding and omission of unchanged entities**, which is deliberately deferred as the next bandwidth step because it requires per-client baseline tracking that interacts with the per-viewer bush-concealment filter. Tracked as future work; the budget is not yet met for the worst-case 8-player scene, and 10-player Showdown (the new cap) is further over.
+
+Verified: `npm run typecheck`, `npm test` (58 pass, 1 new), and `npm run build` all pass.

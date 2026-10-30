@@ -941,6 +941,47 @@ export class Engine {
     });
     snap.sampleTime = s.time;
     snap.ackSeq = this.lastSeq.get(viewerId) ?? 0;
+    this.compact(snap);
     return snap;
+  }
+  /**
+   * Wire-size reduction for the transmitted snapshot (standard §4.2: prefer
+   * quantization and omission over full-precision full-state JSON). Operates
+   * only on the per-viewer clone, never on authoritative state, so it cannot
+   * affect the simulation. Positions are quantized to 0.01 world units — far
+   * below the <= 0.25-unit correction tolerance and imperceptible — and
+   * HUD-only scalars are rounded. This is quantization/rounding; a full
+   * delta-against-baseline encoding remains future work.
+   */
+  private compact(snap: Match) {
+    const q2 = (v: Vec) => {
+      v.x = Math.round(v.x * 100) / 100;
+      v.y = Math.round(v.y * 100) / 100;
+    };
+    snap.sampleTime = Math.round(snap.sampleTime * 1000) / 1000;
+    for (const p of snap.players) {
+      q2(p.pos);
+      q2(p.aim);
+      // ceil so a living fighter with fractional HP never displays as 0.
+      p.hp = Math.ceil(p.hp);
+      p.charge = Math.round(p.charge);
+    }
+    for (const q of snap.projectiles) {
+      q2(q.pos);
+      q2(q.dir);
+    }
+    for (const a of snap.areas) q2(a.pos);
+    for (const b of [snap.ball]) {
+      q2(b.pos);
+      q2(b.velocity);
+    }
+    for (const e of snap.effects) {
+      q2(e.pos);
+      q2(e.dir);
+    }
+    for (const ev of snap.events) {
+      q2(ev.pos);
+      if (ev.dir) q2(ev.dir);
+    }
   }
 }

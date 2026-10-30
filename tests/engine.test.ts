@@ -669,7 +669,8 @@ test("snapshot carries sampleTime and acknowledges the highest processed input s
   e.step();
   const snap = e.snapshot("p0");
   assert.equal(snap.ackSeq, 9, "ack reflects the highest seq, not the latest");
-  assert.equal(snap.sampleTime, e.state.time);
+  // sampleTime is quantized for the wire; it should match within rounding.
+  assert.ok(Math.abs(snap.sampleTime - e.state.time) < 0.001);
   // A different viewer with no inputs gets ack 0.
   assert.equal(e.snapshot("p1").ackSeq, 0);
 });
@@ -682,4 +683,22 @@ test("inputs without a seq are still accepted and leave ack at zero", () => {
   );
   e.step();
   assert.equal(e.snapshot("p0").ackSeq, 0);
+});
+
+test("snapshot compaction quantizes the wire copy without mutating authority", () => {
+  const e = engine("brandon");
+  const p = e.playerList[0];
+  // Give the authoritative player a high-precision position.
+  p.pos = { x: 12.3456789, y: 7.9876543 };
+  p.hp = 4211.7;
+  const authoritativeBefore = { ...p.pos };
+  const snap = e.snapshot("p0");
+  const sp = snap.players.find((x) => x.id === p.id)!;
+  // Wire copy is quantized to 0.01 units; HP is integer (ceil).
+  assert.equal(sp.pos.x, 12.35);
+  assert.equal(sp.pos.y, 7.99);
+  assert.equal(sp.hp, 4212);
+  // Authoritative state is untouched — simulation precision is preserved.
+  assert.deepEqual(p.pos, authoritativeBefore);
+  assert.equal(p.hp, 4211.7);
 });
