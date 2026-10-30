@@ -99,6 +99,37 @@ export interface Ball {
   passAt: number;
   scorer: string | null;
 }
+/**
+ * Discrete presentation events (performance standard §6.2).
+ *
+ * The renderer plays each event's cue (audio, impact flash, camera impulse)
+ * exactly once, keyed by the stable `id`, instead of inferring presentation
+ * from state diffs. Events are authoritative output: the engine emits them from
+ * the same actions that drive the simulation, but they never change the
+ * simulation themselves. `tick` is the authoritative tick the event resolved
+ * on; `owner` is the acting fighter where one applies.
+ */
+export type GameEventType =
+  | "attack_started"
+  | "projectile_spawned"
+  | "attack_hit"
+  | "heal_applied"
+  | "super_started"
+  | "super_resolved"
+  | "ball_picked_up"
+  | "ball_released"
+  | "goal_scored"
+  | "fighter_eliminated"
+  | "fighter_respawned";
+export interface GameEvent {
+  id: number;
+  tick: number;
+  type: GameEventType;
+  owner: string;
+  pos: Vec;
+  dir?: Vec;
+  value?: number;
+}
 export interface Match {
   mode: Mode;
   time: number;
@@ -108,6 +139,7 @@ export interface Match {
   projectiles: Projectile[];
   areas: Area[];
   effects: Effect[];
+  events: GameEvent[];
   walls: Wall[];
   zone: number;
   score: [number, number];

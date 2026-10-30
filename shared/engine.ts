@@ -14,7 +14,16 @@ import {
   type Vec,
   type Mode,
 } from "./definitions";
-import type { Member, Player, Input, Match, Projectile, Effect } from "./types";
+import type {
+  Member,
+  Player,
+  Input,
+  Match,
+  Projectile,
+  Effect,
+  GameEvent,
+  GameEventType,
+} from "./types";
 const emptyStats = () => ({
   kills: 0,
   deaths: 0,
@@ -88,6 +97,7 @@ export class Engine {
       projectiles: [],
       areas: [],
       effects: [],
+      events: [],
       walls: structuredClone(map.walls),
       zone: 22,
       score: [0, 0],
@@ -190,6 +200,29 @@ export class Engine {
       end: this.state.time + duration,
     });
   }
+  /**
+   * Emit a discrete presentation event (standard §6.2). Pure presentation
+   * output: it records something the simulation already decided so the client
+   * can play a cue exactly once, keyed by the stable id. It must not read back
+   * into or alter authoritative state.
+   */
+  emit(
+    type: GameEventType,
+    pos: Vec,
+    owner = "",
+    dir?: Vec,
+    value?: number,
+  ) {
+    this.state.events.push({
+      id: ++this.serial,
+      tick: this.state.tick,
+      type,
+      owner,
+      pos: { ...pos },
+      ...(dir ? { dir: { ...dir } } : {}),
+      ...(value !== undefined ? { value } : {}),
+    });
+  }
   heal(target: Player, amount: number, source?: Player, charge = true) {
     if (!target.alive) return;
     const actual = Math.min(
@@ -226,6 +259,13 @@ export class Engine {
         target.aim,
         Math.round(actual),
       );
+    this.emit(
+      "attack_hit",
+      target.pos,
+      source?.id ?? "",
+      target.aim,
+      Math.round(actual),
+    );
     if (target.hp <= 0) this.eliminate(target, source);
     return true;
   }
@@ -240,6 +280,7 @@ export class Engine {
     if (source && source.id !== p.id) source.stats.kills++;
     this.dropBall(p);
     this.effect("eliminated", p.pos, p.id);
+    this.emit("fighter_eliminated", p.pos, p.id, undefined, source?.id ? 1 : 0);
     this.state.notice = `${p.name} eliminated`;
   }
   disconnect(id: string) {
@@ -263,6 +304,7 @@ export class Engine {
     b.state = "free";
     b.last = p.id;
     b.lockUntil = this.state.time + 0.4;
+    this.emit("ball_released", p.pos, p.id, p.aim);
   }
   private attack(p: Player) {
     const s = this.state,
@@ -277,6 +319,7 @@ export class Engine {
     p.quietSince = s.time;
     p.protectedUntil = 0;
     this.effect("attack", p.pos, p.id, p.aim, undefined, 0.2);
+    this.emit("attack_started", p.pos, p.id, p.aim);
     if (p.fighter === "josh") {
       this.effect("cone", p.pos, p.id, p.aim);
       for (const t of s.players) {
@@ -326,6 +369,7 @@ export class Engine {
         traveled: 0,
         bounces: p.fighter === "elijah" ? 1 : 0,
       });
+      this.emit("projectile_spawned", p.pos, p.id, dir);
     }
   }
   activateSuper(p: Player) {
@@ -401,6 +445,11 @@ export class Engine {
       this.effect("sound", p.pos, p.id, p.aim, undefined, 0.6);
       this.rectangle(p, p.pos, p.aim, 10, 4, 1400, 0, 3);
     }
+    this.emit("super_started", p.pos, p.id, p.aim);
+    // Instant supers resolve on the same tick they start; rich/daniel resolve
+    // later from the pending queue and emit super_resolved there.
+    if (p.fighter !== "rich" && p.fighter !== "daniel")
+      this.emit("super_resolved", p.pos, p.id, p.aim);
     p.charge = 0;
     p.protectedUntil = 0;
     return true;
@@ -497,6 +546,7 @@ export class Engine {
             if (q.fighter === "samuel" && t.hp < FIGHTERS[t.fighter].hp) {
               this.heal(t, 850, owner);
               this.effect("heal", t.pos, owner.id, t.aim, 850);
+              this.emit("heal_applied", t.pos, owner.id, t.aim, 850);
               dead = true;
               break;
             }
@@ -580,6 +630,7 @@ export class Engine {
           b.carrier = p.id;
           b.velocity = { x: 0, y: 0 };
           b.state = "carried";
+          this.emit("ball_picked_up", p.pos, p.id);
           return;
         }
       }
@@ -606,6 +657,7 @@ export class Engine {
     s.ball.state = "resetting";
     s.notice = `${team === 0 ? "Blue" : "Red"} team scores!`;
     this.effect("goal", s.ball.pos, scorer?.id, undefined, undefined, 3);
+    this.emit("goal_scored", s.ball.pos, scorer?.id ?? "", undefined, team);
     if (s.score[team] >= 2 || s.overtime) {
       this.finish(team === 0 ? "blue" : "red");
       return;
@@ -671,6 +723,10 @@ export class Engine {
     s.tick++;
     s.aliveCount = s.players.filter((p) => p.alive).length;
     s.effects = s.effects.filter((e) => e.end > s.time);
+    // Keep a short rolling window of discrete events (standard §6.2) so a
+    // dropped snapshot does not lose a one-shot cue; the client dedupes by the
+    // stable event id. ~0.5s at 30 Hz is a handful of ticks of coverage.
+    s.events = s.events.filter((e) => e.tick > s.tick - 15);
     if (s.phase === "countdown") {
       if (s.time >= s.phaseUntil) {
         s.phase = "playing";
@@ -741,13 +797,16 @@ export class Engine {
       if (item.kind === "photo") {
         this.rectangle(p, item.pos, item.dir, 8, 5, 900, 0.75, 0);
         this.effect("photo", item.pos, p.id, item.dir, 1, 0.4);
-      } else
+        this.emit("super_resolved", item.pos, p.id, item.dir);
+      } else {
         this.dashes.push({
           id: p.id,
           remaining: 10,
           dir: item.dir,
           hit: new Set(),
         });
+        this.emit("super_resolved", p.pos, p.id, item.dir);
+      }
     }
     this.pending = this.pending.filter((x) => x.at > s.time);
     for (const dash of this.dashes) {

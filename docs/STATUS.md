@@ -103,3 +103,15 @@ Standard §5.1 requires that per-snapshot world state not live in top-level Reac
 - The Phaser renderer is unchanged and still reads `bridge.match` every frame, so arena visuals keep updating at the full snapshot rate. No gameplay rule, collision, damage, timing, or scoring path was touched.
 
 Verified: `npm run typecheck`, `npm test` (48 pass), and `npm run build` all pass. Not yet verified: measured React commit profile and frame-time before/after on a real device (standard §11 React HUD row). The structural change (snapshot no longer sets top-level state) is confirmed by code; the numeric main-thread improvement still needs a profiler capture in a live match.
+
+### Step 2 — presentation event stream (done)
+
+Standard §6.2 calls for a dedicated, typed presentation event stream with stable IDs so the client plays each cue once across retransmission, reconnect, and reconciliation, rather than inferring presentation from state diffs.
+
+- Added `GameEvent` / `GameEventType` to `shared/types.ts` and an `events: GameEvent[]` field to the match snapshot. Each event carries a stable id, the authoritative tick, type, owner, position, optional direction and value.
+- The engine now emits the standard's named events from the same authoritative actions that drive the simulation: `attack_started`, `projectile_spawned`, `attack_hit`, `heal_applied`, `super_started`, `super_resolved`, `ball_picked_up`, `ball_released`, `goal_scored`, `fighter_eliminated`. Emission is pure output; it does not read back into or alter simulation state.
+- Events are kept in a short rolling window (~15 ticks) in the snapshot so a dropped snapshot does not lose a one-shot cue; the client dedupes by stable id.
+- The renderer consumes the event stream (`playEvents`) for impact layering: camera impulses scaled by event importance and distance from the viewed fighter, honoring the reduced-motion/shake setting (standard §6.1). Camera shake was moved off the visual effect stream onto these events; audio continues to play from the visual effect stream, so no cue is duplicated.
+- Added four deterministic engine tests covering event ids/ticks/payloads, hit and elimination emission, broomball pickup/release, and the rolling-window prune.
+
+Verified: `npm run typecheck`, `npm test` (52 pass, 4 new), and `npm run build` all pass. Authoritative gameplay (collision, damage, timing, scoring) unchanged — the pre-existing 48 tests still pass without modification. Not yet verified: in-game readability capture of the impact layering and reduced-motion behavior on a real device (standard §11 VFX/camera row).

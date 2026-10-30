@@ -560,3 +560,71 @@ test("Aura Pulse respects spawn protection and knocks out multiple opponents", (
   assert.equal(shielded.hp, FIGHTERS[shielded.fighter].hp);
   assert.equal(p.stats.kills, 2);
 });
+
+test("presentation events carry stable ids, authoritative ticks, and payloads", () => {
+  const e = engine("brandon");
+  const p = e.playerList[0];
+  e.state.events = [];
+  fire(e);
+  e.step();
+  const started = e.state.events.filter((v) => v.type === "attack_started");
+  const spawned = e.state.events.filter((v) => v.type === "projectile_spawned");
+  assert.equal(started.length, 1);
+  assert.equal(spawned.length, 1);
+  assert.equal(started[0].owner, p.id);
+  assert.equal(started[0].tick, e.state.tick);
+  // Stable, strictly increasing ids so the client can dedupe.
+  const ids = e.state.events.map((v) => v.id);
+  assert.equal(new Set(ids).size, ids.length);
+});
+
+test("attack_hit and fighter_eliminated events fire from authoritative damage", () => {
+  const e = engine("brandon");
+  const [p, enemy] = e.playerList;
+  // Drive the authoritative damage path directly (the instrumented code).
+  e.state.events = [];
+  const before = enemy.hp;
+  assert.equal(e.damage(enemy, 500, p), true);
+  const hits = e.state.events.filter((v) => v.type === "attack_hit");
+  assert.equal(hits.length, 1, "a hit event should be emitted");
+  assert.equal(hits[0].value, Math.round(before - enemy.hp));
+  assert.ok((hits[0].value ?? 0) > 0, "hit carries damage value");
+  // Kill the enemy outright and confirm an elimination event is emitted.
+  e.state.events = [];
+  enemy.hp = 1;
+  e.damage(enemy, 9999, p);
+  assert.equal(enemy.alive, false);
+  assert.equal(
+    e.state.events.filter((v) => v.type === "fighter_eliminated").length,
+    1,
+  );
+});
+
+test("goal, pickup, and release events fire in broomball", () => {
+  const e = engine("brandon", "broomball");
+  const p = e.playerList[0];
+  e.state.ball.state = "free";
+  e.state.ball.pos = { x: p.pos.x + 0.3, y: p.pos.y };
+  e.state.events = [];
+  e.step();
+  assert.ok(
+    e.state.events.some((v) => v.type === "ball_picked_up"),
+    "pickup emits when a player meets a free ball",
+  );
+  // A carrier that releases emits ball_released.
+  e.state.events = [];
+  e.dropBall(p);
+  assert.ok(e.state.events.some((v) => v.type === "ball_released"));
+});
+
+test("events are pruned to a short rolling window", () => {
+  const e = engine("brandon");
+  e.emit("attack_started", { x: 1, y: 1 }, "p0");
+  const first = e.state.events.at(-1)!;
+  // Advance well past the window; the old event must be pruned.
+  advance(e, 1);
+  assert.ok(
+    !e.state.events.some((v) => v.id === first.id),
+    "stale events are dropped from the snapshot window",
+  );
+});

@@ -10,7 +10,7 @@ import {
   mul,
   type Vec,
 } from "../../shared/definitions";
-import type { Match, Input } from "../../shared/types";
+import type { Match, Input, GameEvent } from "../../shared/types";
 import { preferences, sound } from "./audio";
 export interface GameBridge {
   match: Match | null;
@@ -32,6 +32,7 @@ export class ArenaScene extends Phaser.Scene {
   lastSend = 0;
   mouseDown = 0;
   consumedEffects = new Set<number>();
+  consumedEvents = new Set<number>();
   zoomFactor = 24;
   lastInputKey = "";
   offset = { x: 0, y: 0 };
@@ -447,8 +448,8 @@ export class ArenaScene extends Phaser.Scene {
             s.players.find((p) => p.id === e.owner)?.fighter || "brandon",
           ),
         );
-        if (preferences.shake && ["sound", "goal"].includes(e.kind))
-          this.cameras.main.shake(120, 0.002);
+        // Camera impulses are now driven by the typed presentation event
+        // stream (see playEvents), scaled by importance and distance.
       }
       const owner = s.players.find((x) => x.id === e.owner);
       const color = owner ? col(FIGHTERS[owner.fighter].color) : 0xffe3b0;
@@ -517,6 +518,7 @@ export class ArenaScene extends Phaser.Scene {
       }
     if (this.consumedEffects.size > 3000)
       this.consumedEffects = new Set(s.effects.map((e) => e.id));
+    this.playEvents(s);
     const inputKey = `${this.bridge.input.move.x},${this.bridge.input.move.y},${this.bridge.paused}`;
     if (
       inputKey !== this.lastInputKey ||
@@ -533,6 +535,51 @@ export class ArenaScene extends Phaser.Scene {
       );
       this.bridge.input.attack = false;
       this.bridge.input.super = false;
+    }
+  }
+  /**
+   * Consume the authoritative presentation event stream (standard §6.2) once
+   * per stable id, driving impact feedback that scales by importance and
+   * distance (standard §6.1). Camera impulses respect the accessibility shake
+   * setting. Audio continues to be driven by the visual effect stream; this
+   * pass adds readable impact layering without duplicating those cues.
+   */
+  playEvents(s: Match) {
+    if (!s.events?.length) return;
+    const self = s.players.find((p) => p.id === this.bridge.id);
+    const focus =
+      (this.bridge.spectate
+        ? s.players.find((p) => p.id === this.bridge.spectate)
+        : self) || null;
+    for (const e of s.events) {
+      if (this.consumedEvents.has(e.id)) continue;
+      this.consumedEvents.add(e.id);
+      if (!preferences.shake) continue;
+      // Distance attenuation from the viewed fighter keeps far-off impacts
+      // from shaking the whole screen (standard §6.1: scale by distance).
+      const near = focus ? clamp(1 - distance(focus.pos, e.pos) / 14, 0, 1) : 1;
+      if (near <= 0) continue;
+      const impulse = this.eventImpulse(e);
+      if (impulse > 0)
+        this.cameras.main.shake(impulse * 90 + 60, impulse * 0.004 * near);
+    }
+    if (this.consumedEvents.size > 4000)
+      this.consumedEvents = new Set(s.events.map((e) => e.id));
+  }
+  /** Importance weight (0..1) for an event's camera impulse. */
+  eventImpulse(e: GameEvent): number {
+    switch (e.type) {
+      case "goal_scored":
+        return 1;
+      case "fighter_eliminated":
+        return 0.85;
+      case "super_resolved":
+        return 0.7;
+      case "attack_hit":
+        // Scale with damage dealt, capped; small hits barely register.
+        return clamp((e.value ?? 0) / 1600, 0, 0.5);
+      default:
+        return 0;
     }
   }
 }
