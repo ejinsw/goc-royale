@@ -1,6 +1,6 @@
 # GOC Royale
 
-A browser-hosted arena brawler for private groups. React menus, Phaser gameplay, TypeScript simulation, and PeerJS/WebRTC data channels. **No application server, Socket.IO, accounts, or database.** The seven fighters are Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, and Ethan Ha (Music). Two modes: Showdown FFA (2–8 players) and 3v3 Broomball (exactly six).
+A browser-hosted arena brawler for private groups. React menus, Phaser gameplay, TypeScript simulation, and PeerJS/WebRTC data channels. **No application server, Socket.IO, accounts, or database.** The seven fighters are Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, and Ethan Ha (Music). Two modes: Showdown FFA (up to 10 players) and Broomball (up to 6). Neither mode enforces a minimum player count.
 
 ## Run it
 
@@ -38,7 +38,7 @@ The default network uses the public PeerJS Cloud signaling service and a Google 
 
 ### Room rules
 
-Only the host changes modes, assigns/shuffles teams, and starts matches. Everyone must be connected and ready. Broomball requires exactly three players per team with no duplicate fighter on the same team. Showdown permits duplicates. Ready states reset on mode/team changes and after returning from results. Run It Back returns everyone to character selection for a rematch.
+Only the host changes modes, assigns/shuffles teams, and starts matches. Everyone must be connected and ready. Showdown holds up to 10 players and Broomball up to 6; there is no minimum, so a host can start with as few as one readied player. Broomball teams may be any split and may repeat fighters (the exactly-3-per-team and no-duplicate rules were removed). Ready states reset on mode/team changes and after returning from results. Run It Back returns everyone to character selection for a rematch.
 
 Guest reconnect identity uses a private random token in sessionStorage, separate from the shareable six-character code. Press Reconnect after a brief lost connection. Guest refresh can rejoin using the code in the current tab, nickname, and saved token. Lobby grace: 30 seconds; match grace: 20 seconds. After grace expires, the fighter is removed from play without a replacement bot. Host departure ends the room; there is no host migration.
 

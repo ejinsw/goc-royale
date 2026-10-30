@@ -54,7 +54,7 @@ export class Room {
       throw Error(
         "This match has started. Join after the host returns to the lobby.",
       );
-    if (this.lobby.members.length >= (this.lobby.mode === "broomball" ? 6 : 8))
+    if (this.lobby.members.length >= (this.lobby.mode === "broomball" ? 6 : 10))
       throw Error("Room is full.");
     const clean = String(name)
       .trim()
@@ -96,20 +96,16 @@ export class Room {
   validation() {
     const l = this.lobby,
       m = l.members;
+    if (m.length === 0) return "Add at least one player.";
     if (m.some((p) => !p.connected))
       return "Wait for disconnected players to reconnect or expire.";
     if (m.some((p) => !p.ready)) return "Everyone needs to ready up.";
-    if (l.mode === "showdown" && (m.length < 2 || m.length > 8))
-      return "Showdown needs 2–8 players.";
-    if (l.mode === "broomball") {
-      if (m.length !== 6 || m.filter((p) => p.team === 0).length !== 3)
-        return "Broomball needs exactly 3 players on each team.";
-      for (const team of [0, 1]) {
-        const roster = m.filter((p) => p.team === team);
-        if (new Set(roster.map((p) => p.fighter)).size !== 3)
-          return "Each team needs three different fighters.";
-      }
-    }
+    // No minimum player count by product decision. Caps only: Showdown 10,
+    // Broomball 6. Broomball teams may be any split and may share fighters.
+    if (l.mode === "showdown" && m.length > 10)
+      return "Showdown is capped at 10 players.";
+    if (l.mode === "broomball" && m.length > 6)
+      return "Broomball is capped at 6 players.";
     return null;
   }
   command(id: string, c: Command) {
@@ -151,19 +147,7 @@ export class Room {
     }
     if (c.type === "select") {
       if (!IDS.includes(c.fighter)) return;
-      if (
-        this.lobby.mode === "broomball" &&
-        this.lobby.members.some(
-          (p) =>
-            p.id !== id && p.team === member.team && p.fighter === c.fighter,
-        )
-      ) {
-        this.error(
-          id,
-          "That fighter is already on your team. Pick a different leader.",
-        );
-        return;
-      }
+      // Duplicate fighters are allowed on a team (no-duplicate rule removed).
       member.fighter = c.fighter;
       member.ready = false;
     } else if (c.type === "ready") member.ready = c.ready === true;

@@ -66,8 +66,12 @@ export class Engine {
       red = 3;
     const players = members.map((m, i): Player => {
       const f = FIGHTERS[m.fighter];
+      const spawnIndex =
+        mode === "showdown" ? i : m.team === 0 ? blue++ : red++;
+      // Fall back to a valid spawn if a roster ever exceeds the authored
+      // spawn points (e.g. uneven broomball teams with no minimum).
       const spawn =
-        map.spawns[mode === "showdown" ? i : m.team === 0 ? blue++ : red++];
+        map.spawns[spawnIndex] ?? map.spawns[spawnIndex % map.spawns.length];
       return {
         ...m,
         pos: { ...spawn },

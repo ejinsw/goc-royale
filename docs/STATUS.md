@@ -115,3 +115,16 @@ Standard §6.2 calls for a dedicated, typed presentation event stream with stabl
 - Added four deterministic engine tests covering event ids/ticks/payloads, hit and elimination emission, broomball pickup/release, and the rolling-window prune.
 
 Verified: `npm run typecheck`, `npm test` (52 pass, 4 new), and `npm run build` all pass. Authoritative gameplay (collision, damage, timing, scoring) unchanged — the pre-existing 48 tests still pass without modification. Not yet verified: in-game readability capture of the impact layering and reduced-motion behavior on a real device (standard §11 VFX/camera row).
+
+### October 29 — player-count rules change (deliberate gameplay-rules edit)
+
+User-requested change to lobby capacity and start validation. This is a rules change, explicitly requested, separate from the performance refactor steps above.
+
+- Showdown FFA now holds **up to 10 players** (was 2–8). Added two spawn points to the Central Lawn map (8 → 10) and a modulo spawn fallback in the engine so no roster can index an undefined spawn.
+- Broomball now holds **up to 6 players** (unchanged cap) but no longer requires exactly three per team or distinct fighters per team. Teams may be any split and may repeat fighters. The same-team duplicate-fighter block was removed from the `select` command.
+- **No minimum player count** in either mode. A single readied host passes validation and can start. A degenerate match (e.g. a 1-player Showdown) resolves immediately via the existing last-survivor logic; this is the expected consequence of removing the minimum, not a bug.
+- UI capacity readouts and mode copy updated (`10` / `6`, "no minimum"). README room rules updated. `docs/PILOT-SPEC.txt` retains its original 2–8 / exactly-6 design text as a historical supplied document; this entry records the deviation.
+
+**Budget exception (AGENTS.md rule 6, standard §4.2/§10):** Showdown at 10 players exceeds the standard's documented 8-player outbound/scene budget by two fighters. This was an explicit user decision. The standard's 8-player budgets (<= 3 Mbps outbound, whole-scene triangle/draw-call targets) have **not** been re-measured for 10 players; snapshot bandwidth and host CPU at 10 players remain unverified and should be profiled before a real pilot at that size. Broomball stays within the existing cap.
+
+Verified: `npm run typecheck`, `npm test` (54 pass; old exactly-6 test replaced with duplicate/uneven-team, broomball-cap, and showdown-no-minimum/10-cap tests, including an engine spawn check for 10 players), and `npm run build` all pass.

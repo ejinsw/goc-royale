@@ -415,7 +415,7 @@ test("host-only start, ready validation, reconnect identity, rematch", () => {
   );
   assert.equal(r.engine, null);
 });
-test("Broomball start enforces exactly six and no same-team duplicate fighters", () => {
+test("Broomball allows duplicate fighters and uneven teams up to six", () => {
   const r = new Room("ABCDEF", () => {});
   const host = r.join("Host");
   for (let i = 0; i < 5; i++) r.join("Guest " + i);
@@ -423,8 +423,39 @@ test("Broomball start enforces exactly six and no same-team duplicate fighters",
   for (const m of r.lobby.members)
     r.command(m.id, { type: "ready", ready: true });
   assert.equal(r.validation(), null);
+  // Duplicate fighter on the same team is now permitted.
   r.lobby.members[1].fighter = r.lobby.members[0].fighter;
-  assert.match(r.validation()!, /different fighters/);
+  r.lobby.members[1].team = r.lobby.members[0].team;
+  assert.equal(r.validation(), null);
+  // Uneven split is permitted.
+  for (const m of r.lobby.members) m.team = 0;
+  assert.equal(r.validation(), null);
+});
+test("Broomball is capped at six players", () => {
+  const r = new Room("ABCDEF", () => {});
+  for (let i = 0; i < 6; i++) r.join("P" + i);
+  r.command(r.lobby.host, { type: "mode", mode: "broomball" });
+  assert.throws(() => r.join("Overflow"), /full/);
+});
+test("Showdown has no minimum and is capped at ten players", () => {
+  const r = new Room("ABCDEF", () => {});
+  const host = r.join("Host");
+  // A single readied host can start (no minimum).
+  r.command(host.id, { type: "ready", ready: true });
+  assert.equal(r.validation(), null);
+  // Fill to ten total and confirm the engine spawns everyone without error.
+  for (let i = 0; i < 9; i++) r.join("Guest " + i);
+  assert.equal(r.lobby.members.length, 10);
+  assert.throws(() => r.join("Overflow"), /full/);
+  for (const m of r.lobby.members)
+    r.command(m.id, { type: "ready", ready: true });
+  assert.equal(r.validation(), null);
+  const e = new Engine("showdown", r.lobby.members);
+  assert.equal(e.playerList.length, 10);
+  assert.equal(
+    e.playerList.every((p) => Number.isFinite(p.pos.x) && Number.isFinite(p.pos.y)),
+    true,
+  );
 });
 test("malformed inputs cannot mutate HP, cooldowns or score", () => {
   const e = engine();

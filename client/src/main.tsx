@@ -264,7 +264,7 @@ function App() {
             <div className="panel-heading"><span className="menu-kicker">YOUR NEXT MATCH</span><h2>LET’S PLAY.</h2></div>
             <label className="player-name" htmlFor="nickname"><span>PLAYER NAME</span><input id="nickname" maxLength={18} value={name} placeholder="Enter your nickname" onChange={e => setName(e.target.value)} autoComplete="nickname" /></label>
             <div className="menu-mode-picker" aria-label="Game mode">
-              {(["showdown", "broomball"] as const).map(mode => <button key={mode} className={`menu-mode ${menuMode === mode ? "active" : ""}`} aria-pressed={menuMode === mode} onClick={() => setMenuMode(mode)}><span className={`mode-emblem ${mode}`} aria-hidden="true">{mode === "showdown" ? "FFA" : "3v3"}</span><span><strong>{mode === "showdown" ? "SHOWDOWN" : "BROOMBALL"}</strong><small>{mode === "showdown" ? "Last fighter standing · 2–8 players" : "First to 2 goals · 6 players"}</small></span><span className="mode-selected" aria-hidden="true">{menuMode === mode ? "✓" : ""}</span></button>)}
+              {(["showdown", "broomball"] as const).map(mode => <button key={mode} className={`menu-mode ${menuMode === mode ? "active" : ""}`} aria-pressed={menuMode === mode} onClick={() => setMenuMode(mode)}><span className={`mode-emblem ${mode}`} aria-hidden="true">{mode === "showdown" ? "FFA" : "3v3"}</span><span><strong>{mode === "showdown" ? "SHOWDOWN" : "BROOMBALL"}</strong><small>{mode === "showdown" ? "Last fighter standing · up to 10" : "First to 2 goals · up to 6"}</small></span><span className="mode-selected" aria-hidden="true">{menuMode === mode ? "✓" : ""}</span></button>)}
             </div>
             <button className="launch-button" disabled={busy} onClick={() => enter(true)}>{busy ? "CONNECTING…" : "CREATE PARTY"}<span aria-hidden="true">→</span></button>
             <p className="play-help">Invite your friends, ready up, and jump in.</p>
@@ -307,8 +307,8 @@ function App() {
                     </strong>
                     <span>
                       {mode === "showdown"
-                        ? "Central Lawn · Last leader standing · 2–8 players"
-                        : "Broomball Night · First to 2 goals · Exactly 6"}
+                        ? "Central Lawn · Last leader standing · up to 10"
+                        : "Broomball Night · First to 2 goals · up to 6"}
                     </span>
                   </button>
                 ))}
@@ -316,7 +316,7 @@ function App() {
               <div className="section-label roster-label">
                 YOUR PARTY{" "}
                 <span>
-                  {lobby.members.length}/{lobby.mode === "showdown" ? 8 : 6}
+                  {lobby.members.length}/{lobby.mode === "showdown" ? 10 : 6}
                 </span>
               </div>
               <div className="members">
@@ -388,7 +388,7 @@ function App() {
               </div>
               <p className="hint">
                 {host
-                  ? "Everyone must be connected and ready. Broomball requires three different fighters per team."
+                  ? "Everyone must be connected and ready. Showdown holds up to 10, Broomball up to 6."
                   : "The host starts when everyone is ready."}
               </p>
             </section>

@@ -219,6 +219,8 @@ export const MAPS: Record<Mode, Arena> = {
       { x: 18, y: 21 },
       { x: 3, y: 12 },
       { x: 33, y: 12 },
+      { x: 10, y: 12 },
+      { x: 26, y: 12 },
     ],
   },
   broomball: {

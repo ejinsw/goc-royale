@@ -119,8 +119,8 @@ test("expired disconnects cannot respawn and are removed from rematch roster", (
   assert.equal(r.lobby.members.length, 5);
 });
 test("new guests cannot enter running matches or full rooms", () => {
-  const { room: r, clients: c } = group(8);
-  assert.throws(() => r.join("Ninth"), /full/);
+  const { room: r, clients: c } = group(10);
+  assert.throws(() => r.join("Eleventh"), /full/);
   c.forEach((p) => p.send({ type: "ready", ready: true }));
   c[0].send({ type: "start" });
   assert.throws(() => r.join("Late"), /started/);
