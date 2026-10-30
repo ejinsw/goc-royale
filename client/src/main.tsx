@@ -11,6 +11,7 @@ import {
 import type { Lobby, Match, HostMessage } from "../../shared/types";
 import { fighterArt } from "./art";
 import { Network } from "./network";
+import { GameStore, useGameSelector } from "./gameStore";
 import type { GameBridge } from "./game";
 import { preferences, setMusic, unlockAudio } from "./audio";
 import "@fontsource/barlow/latin-400.css";
@@ -31,7 +32,7 @@ const initialInput = () => ({
 });
 function App() {
   const [lobby, setLobby] = useState<Lobby | null>(null),
-    [match, setMatch] = useState<Match | null>(null),
+    [matchPhase, setMatchPhase] = useState<Match["phase"] | null>(null),
     [status, setStatus] = useState("Ready when you are"),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -45,6 +46,7 @@ function App() {
     [settings, setSettings] = useState(false),
     [spectate, setSpectate] = useState<string | null>(null);
   const net = useRef<Network | null>(null),
+    store = useRef<GameStore>(new GameStore()),
     bridge = useRef<GameBridge>({
       match: null,
       id: "",
@@ -104,9 +106,10 @@ function App() {
     if (m.type === "lobby") {
       setLobby(m.lobby);
       if (m.lobby.phase === "lobby") {
-        setMatch(null);
+        store.current.clear();
         bridge.current.match = null;
         bridge.current.input = initialInput();
+        setMatchPhase(null);
       }
     }
     if (m.type === "welcome") {
@@ -118,8 +121,12 @@ function App() {
       );
     }
     if (m.type === "snapshot") {
-      setMatch(m.match);
+      // Per standard §5.1: the snapshot goes to the mutable store and the
+      // renderer bridge, never into top-level React state. Only the phase (a
+      // low-frequency value) is mirrored into React to flip screen branches.
       bridge.current.match = m.match;
+      store.current.setMatch(m.match);
+      setMatchPhase((prev) => (prev === m.match.phase ? prev : m.match.phase));
     }
     if (m.type === "error") setError(m.message);
   };
@@ -172,10 +179,11 @@ function App() {
     net.current?.command(c);
   };
   const me = lobby?.members.find((p) => p.id === net.current?.id),
-    self = match?.players.find((p) => p.id === net.current?.id),
     host = lobby?.host === net.current?.id;
   const inGame =
-    !!match && lobby?.phase !== "lobby" && match.phase !== "finished";
+    matchPhase !== null &&
+    lobby?.phase !== "lobby" &&
+    matchPhase !== "finished";
   const copyInvite = async () => {
     try {
       await navigator.clipboard.writeText(
@@ -190,7 +198,8 @@ function App() {
     net.current?.close();
     net.current = null;
     setLobby(null);
-    setMatch(null);
+    setMatchPhase(null);
+    store.current.clear();
     bridge.current.match = null;
     bridge.current.input = initialInput();
     history.replaceState(null, "", location.pathname);
@@ -267,7 +276,7 @@ function App() {
           </section>
         </main>
       )}
-      {lobby && (!match || lobby.phase === "lobby") && (
+      {lobby && (matchPhase === null || lobby.phase === "lobby") && (
         <main className="lobby">
           <section className="lobby-top">
             <div>
@@ -408,205 +417,26 @@ function App() {
           </div>
         </main>
       )}
-      {inGame && match && (
-        <>
-          <GameView bridge={bridge.current} />
-          <div className="match-hud">
-            <button className="quiet" onClick={() => setSettings(true)}>
-              Ⅱ Settings
-            </button>
-            <div className="score">
-              <span>
-                {match.mode === "showdown"
-                  ? `${match.aliveCount} alive`
-                  : `▲ ${match.score[0]} — ${match.score[1]} ◆`}
-              </span>
-              <b>
-                {match.phase === "countdown"
-                  ? Math.max(1, Math.ceil(match.phaseUntil - match.time))
-                  : formatTime(
-                      Math.max(
-                        0,
-                        (match.overtime
-                          ? 180
-                          : match.mode === "showdown"
-                            ? 210
-                            : 150) -
-                          (match.time - 3),
-                      ),
-                    )}
-              </b>
-              {match.overtime && <em>GOLDEN GOAL</em>}
-            </div>
-            <span className="net-status">
-              {status.includes("lost") ? "Connection lost" : "Browser host"}
-              <button onClick={reconnect} className="quiet">
-                Reconnect
-              </button>
-            </span>
-          </div>
-          <div className="match-notice" key={match.notice}>
-            {match.phase === "countdown" ? "GET READY" : match.notice}
-          </div>
-          {self?.alive ? (
-            <>
-              <div className="personal-hud">
-                <strong>{FIGHTERS[self.fighter].name}</strong>
-                <span>{Math.ceil(self.hp)} HP</span>
-                <span>
-                  {"●".repeat(self.ammo)}
-                  {"○".repeat(
-                    Math.max(0, FIGHTERS[self.fighter].ammo - self.ammo),
-                  )}
-                </span>
-                <span>
-                  {match.ball.carrier === self.id
-                    ? "CARRYING • RELEASE TO PASS"
-                    : `${Math.floor(self.charge / 50)}% SUPER`}
-                </span>
-              </div>
-              <TouchControls
-                bridge={bridge.current}
-                carrying={match.ball.carrier === self.id}
-                charge={self.charge}
-              />
-            </>
-          ) : (
-            <div className="spectator">
-              {match.mode === "showdown" ? (
-                <>
-                  <strong>You placed #{self?.placement}</strong>
-                  <span>
-                    Watching{" "}
-                    {match.players.find((p) => p.id === spectate)?.name ||
-                      "the arena"}
-                  </span>
-                  <button
-                    onClick={() => {
-                      const alive = match.players.filter((p) => p.alive);
-                      const next =
-                        alive[
-                          (alive.findIndex((p) => p.id === spectate) + 1) %
-                            alive.length
-                        ];
-                      setSpectate(next?.id || null);
-                      bridge.current.spectate = next?.id || null;
-                    }}
-                  >
-                    Next survivor →
-                  </button>
-                </>
-              ) : (
-                <strong>
-                  Back on the ice in{" "}
-                  {Math.max(0, Math.ceil((self?.respawn || 0) - match.time))}…
-                </strong>
-              )}
-            </div>
-          )}
-          {match.phase === "goal" && (
-            <div className="countdown-overlay">
-              GOAL!
-              <small>
-                Kickoff in {Math.ceil(match.phaseUntil - match.time)}
-              </small>
-            </div>
-          )}
-          <div className="rotate">
-            <strong>Turn your phone sideways</strong>
-            <span>The arena plays best in landscape.</span>
-          </div>
-          <div className="desktop-help">
-            WASD move · Mouse aim · Click attack · Space / right click Super ·
-            Hold click to charge a ball shot
-          </div>
-        </>
+      {inGame && (
+        <MatchHud
+          store={store.current}
+          bridge={bridge.current}
+          selfId={net.current?.id ?? ""}
+          status={status}
+          spectate={spectate}
+          setSpectate={setSpectate}
+          onReconnect={reconnect}
+          onSettings={() => setSettings(true)}
+        />
       )}
-      {match?.phase === "finished" && (
-        <main className="results">
-          <div className="eyebrow">THAT’S A ROUND</div>
-          <h1>
-            {match.mode === "showdown"
-              ? (match.players.find((p) => p.id === match.winner)?.name ||
-                  "Nobody") + " wins!"
-              : match.winner
-                ? (match.winner === "blue" ? "Blue" : "Red") + " takes the ice!"
-                : "It’s a draw!"}
-          </h1>
-          <p>
-            {match.mode === "showdown"
-              ? "Same friends. Fresh rivalries."
-              : `Final score · Blue ${match.score[0]} — ${match.score[1]} Red`}
-          </p>
-          <div className="results-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>PLAYER</th>
-                  <th>{match.mode === "showdown" ? "PLACE" : "G / A"}</th>
-                  <th>K / D</th>
-                  <th>DAMAGE</th>
-                  <th>HEALING</th>
-                  {match.mode === "showdown" && <th>RECEIVED</th>}
-                  <th>{match.mode === "showdown" ? "SURVIVED" : "MVP"}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...match.players]
-                  .sort((a, b) =>
-                    match.mode === "showdown"
-                      ? a.placement - b.placement
-                      : mvp(b) - mvp(a),
-                  )
-                  .map((p, i) => (
-                    <tr key={p.id}>
-                      <td>
-                        <img src={fighterArt(p.fighter)} alt="" />
-                        {p.name}
-                      </td>
-                      <td>
-                        {match.mode === "showdown"
-                          ? `#${p.placement}`
-                          : `${p.stats.goals} / ${p.stats.assists}`}
-                      </td>
-                      <td>
-                        {p.stats.kills} / {p.stats.deaths}
-                      </td>
-                      <td>{Math.round(p.stats.damage).toLocaleString()}</td>
-                      <td>{Math.round(p.stats.healing).toLocaleString()}</td>
-                      {match.mode === "showdown" && (
-                        <td>{Math.round(p.stats.received).toLocaleString()}</td>
-                      )}
-                      <td>
-                        {match.mode === "showdown"
-                          ? formatTime(p.stats.survived)
-                          : i === 0
-                            ? "★"
-                            : ""}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="result-actions">
-            {host ? (
-              <button
-                className="primary"
-                onClick={() => command({ type: "lobby" })}
-              >
-                Run it back →
-              </button>
-            ) : (
-              <span>Waiting for the host to return to the lobby…</span>
-            )}
-            <button onClick={leave}>Leave room</button>
-          </div>
-          <small>
-            Rematch returns everyone to the lobby to choose fighters and ready
-            up.
-          </small>
-        </main>
+      {matchPhase === "finished" && (
+        <ResultsScreen
+          store={store.current}
+          winnerId={net.current?.id ?? ""}
+          host={!!host}
+          onRematch={() => command({ type: "lobby" })}
+          onLeave={leave}
+        />
       )}
       {gallery && (
         <div className="modal-backdrop">
@@ -725,6 +555,320 @@ function App() {
     </div>
   );
 }
+const matchDuration = (mode: Match["mode"], overtime: boolean) =>
+  overtime ? 180 : mode === "showdown" ? 210 : 150;
+
+interface HudView {
+  mode: Match["mode"];
+  phase: Match["phase"];
+  aliveCount: number;
+  score0: number;
+  score1: number;
+  overtime: boolean;
+  clock: string;
+  notice: string;
+  carrying: boolean;
+  goalKickoff: number | null;
+  // Self-derived (only the scalars the HUD paints).
+  alive: boolean;
+  fighter: FighterId | null;
+  hp: number;
+  ammo: number;
+  ammoMax: number;
+  charge: number;
+  placement: number;
+  respawnIn: number;
+  spectateName: string;
+}
+
+const deriveHud = (
+  match: Match | null,
+  selfId: string,
+  spectate: string | null,
+): HudView | null => {
+  if (!match) return null;
+  const self = match.players.find((p) => p.id === selfId);
+  const clock =
+    match.phase === "countdown"
+      ? String(Math.max(1, Math.ceil(match.phaseUntil - match.time)))
+      : formatTime(
+          Math.max(
+            0,
+            matchDuration(match.mode, match.overtime) - (match.time - 3),
+          ),
+        );
+  return {
+    mode: match.mode,
+    phase: match.phase,
+    aliveCount: match.aliveCount,
+    score0: match.score[0],
+    score1: match.score[1],
+    overtime: match.overtime,
+    clock,
+    notice: match.phase === "countdown" ? "GET READY" : match.notice,
+    carrying: match.ball.carrier === selfId,
+    goalKickoff:
+      match.phase === "goal"
+        ? Math.ceil(match.phaseUntil - match.time)
+        : null,
+    alive: !!self?.alive,
+    fighter: self?.fighter ?? null,
+    hp: Math.ceil(self?.hp ?? 0),
+    ammo: self?.ammo ?? 0,
+    ammoMax: self ? FIGHTERS[self.fighter].ammo : 0,
+    charge: self?.charge ?? 0,
+    placement: self?.placement ?? 0,
+    respawnIn: Math.max(0, Math.ceil((self?.respawn || 0) - match.time)),
+    spectateName:
+      match.players.find((p) => p.id === spectate)?.name || "the arena",
+  };
+};
+
+const hudEqual = (a: HudView | null, b: HudView | null): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.mode === b.mode &&
+    a.phase === b.phase &&
+    a.aliveCount === b.aliveCount &&
+    a.score0 === b.score0 &&
+    a.score1 === b.score1 &&
+    a.overtime === b.overtime &&
+    a.clock === b.clock &&
+    a.notice === b.notice &&
+    a.carrying === b.carrying &&
+    a.goalKickoff === b.goalKickoff &&
+    a.alive === b.alive &&
+    a.fighter === b.fighter &&
+    a.hp === b.hp &&
+    a.ammo === b.ammo &&
+    a.ammoMax === b.ammoMax &&
+    a.charge === b.charge &&
+    a.placement === b.placement &&
+    a.respawnIn === b.respawnIn &&
+    a.spectateName === b.spectateName
+  );
+};
+
+function MatchHud({
+  store,
+  bridge,
+  selfId,
+  status,
+  spectate,
+  setSpectate,
+  onReconnect,
+  onSettings,
+}: {
+  store: GameStore;
+  bridge: GameBridge;
+  selfId: string;
+  status: string;
+  spectate: string | null;
+  setSpectate: (id: string | null) => void;
+  onReconnect: () => void;
+  onSettings: () => void;
+}) {
+  const hud = useGameSelector(
+    store,
+    (m) => deriveHud(m, selfId, spectate),
+    hudEqual,
+  );
+  if (!hud) return <GameView bridge={bridge} />;
+  return (
+    <>
+      <GameView bridge={bridge} />
+      <div className="match-hud">
+        <button className="quiet" onClick={onSettings}>
+          Ⅱ Settings
+        </button>
+        <div className="score">
+          <span>
+            {hud.mode === "showdown"
+              ? `${hud.aliveCount} alive`
+              : `▲ ${hud.score0} — ${hud.score1} ◆`}
+          </span>
+          <b>{hud.clock}</b>
+          {hud.overtime && <em>GOLDEN GOAL</em>}
+        </div>
+        <span className="net-status">
+          {status.includes("lost") ? "Connection lost" : "Browser host"}
+          <button onClick={onReconnect} className="quiet">
+            Reconnect
+          </button>
+        </span>
+      </div>
+      <div className="match-notice" key={hud.notice}>
+        {hud.notice}
+      </div>
+      {hud.alive && hud.fighter ? (
+        <>
+          <div className="personal-hud">
+            <strong>{FIGHTERS[hud.fighter].name}</strong>
+            <span>{hud.hp} HP</span>
+            <span>
+              {"●".repeat(hud.ammo)}
+              {"○".repeat(Math.max(0, hud.ammoMax - hud.ammo))}
+            </span>
+            <span>
+              {hud.carrying
+                ? "CARRYING • RELEASE TO PASS"
+                : `${Math.floor(hud.charge / 50)}% SUPER`}
+            </span>
+          </div>
+          <TouchControls
+            bridge={bridge}
+            carrying={hud.carrying}
+            charge={hud.charge}
+          />
+        </>
+      ) : (
+        <div className="spectator">
+          {hud.mode === "showdown" ? (
+            <>
+              <strong>You placed #{hud.placement}</strong>
+              <span>Watching {hud.spectateName}</span>
+              <button
+                onClick={() => {
+                  const alive =
+                    store.match?.players.filter((p) => p.alive) ?? [];
+                  const next =
+                    alive[
+                      (alive.findIndex((p) => p.id === spectate) + 1) %
+                        Math.max(1, alive.length)
+                    ];
+                  setSpectate(next?.id || null);
+                  bridge.spectate = next?.id || null;
+                }}
+              >
+                Next survivor →
+              </button>
+            </>
+          ) : (
+            <strong>Back on the ice in {hud.respawnIn}…</strong>
+          )}
+        </div>
+      )}
+      {hud.goalKickoff !== null && (
+        <div className="countdown-overlay">
+          GOAL!
+          <small>Kickoff in {hud.goalKickoff}</small>
+        </div>
+      )}
+      <div className="rotate">
+        <strong>Turn your phone sideways</strong>
+        <span>The arena plays best in landscape.</span>
+      </div>
+      <div className="desktop-help">
+        WASD move · Mouse aim · Click attack · Space / right click Super · Hold
+        click to charge a ball shot
+      </div>
+    </>
+  );
+}
+
+function ResultsScreen({
+  store,
+  winnerId,
+  host,
+  onRematch,
+  onLeave,
+}: {
+  store: GameStore;
+  winnerId: string;
+  host: boolean;
+  onRematch: () => void;
+  onLeave: () => void;
+}) {
+  // Results are a finalized, static snapshot: select once, no rate limiting
+  // needed since finished-state fields no longer change.
+  const match = useGameSelector(store, (m) => m);
+  if (!match) return null;
+  void winnerId;
+  return (
+    <main className="results">
+      <div className="eyebrow">THAT’S A ROUND</div>
+      <h1>
+        {match.mode === "showdown"
+          ? (match.players.find((p) => p.id === match.winner)?.name ||
+              "Nobody") + " wins!"
+          : match.winner
+            ? (match.winner === "blue" ? "Blue" : "Red") + " takes the ice!"
+            : "It’s a draw!"}
+      </h1>
+      <p>
+        {match.mode === "showdown"
+          ? "Same friends. Fresh rivalries."
+          : `Final score · Blue ${match.score[0]} — ${match.score[1]} Red`}
+      </p>
+      <div className="results-table">
+        <table>
+          <thead>
+            <tr>
+              <th>PLAYER</th>
+              <th>{match.mode === "showdown" ? "PLACE" : "G / A"}</th>
+              <th>K / D</th>
+              <th>DAMAGE</th>
+              <th>HEALING</th>
+              {match.mode === "showdown" && <th>RECEIVED</th>}
+              <th>{match.mode === "showdown" ? "SURVIVED" : "MVP"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...match.players]
+              .sort((a, b) =>
+                match.mode === "showdown"
+                  ? a.placement - b.placement
+                  : mvp(b) - mvp(a),
+              )
+              .map((p, i) => (
+                <tr key={p.id}>
+                  <td>
+                    <img src={fighterArt(p.fighter)} alt="" />
+                    {p.name}
+                  </td>
+                  <td>
+                    {match.mode === "showdown"
+                      ? `#${p.placement}`
+                      : `${p.stats.goals} / ${p.stats.assists}`}
+                  </td>
+                  <td>
+                    {p.stats.kills} / {p.stats.deaths}
+                  </td>
+                  <td>{Math.round(p.stats.damage).toLocaleString()}</td>
+                  <td>{Math.round(p.stats.healing).toLocaleString()}</td>
+                  {match.mode === "showdown" && (
+                    <td>{Math.round(p.stats.received).toLocaleString()}</td>
+                  )}
+                  <td>
+                    {match.mode === "showdown"
+                      ? formatTime(p.stats.survived)
+                      : i === 0
+                        ? "★"
+                        : ""}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="result-actions">
+        {host ? (
+          <button className="primary" onClick={onRematch}>
+            Run it back →
+          </button>
+        ) : (
+          <span>Waiting for the host to return to the lobby…</span>
+        )}
+        <button onClick={onLeave}>Leave room</button>
+      </div>
+      <small>
+        Rematch returns everyone to the lobby to choose fighters and ready up.
+      </small>
+    </main>
+  );
+}
+
 function FighterCard({
   id,
   selected,

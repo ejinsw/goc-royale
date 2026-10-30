@@ -88,3 +88,18 @@ The performance standard remains authoritative. Detailed source rigs may be rich
 This change updates documentation only. Brandon v4 remains a movement prototype; no new character model, facial/finger rig, production animation or mobile-performance result is claimed. Runtime gameplay, networking and renderer code were not changed by this documentation work.
 
 Documentation-update validation: all 37 local links across the eight touched documents resolve; `npm test` passes 48/48 and `npm run build` passes, with a large-chunk warning for the current gameplay bundle. These checks do not certify model quality, mobile performance or latency; those require the per-asset and runtime evidence above.
+
+## October 29 — Performance-standards refactor (branch `refactor/performance-gameplay-standards`)
+
+Tracking the migration toward `docs/PERFORMANCE-AND-GAMEPLAY-STANDARDS.md`. Each step is landed only when `npm test` (48 tests) and `npm run build` pass. Steps are sequenced from highest game-feel payoff and lowest risk. Authoritative gameplay rules (collision, damage, timing, visibility, scoring) are held frozen; this is presentation/architecture work only.
+
+### Step 1 — React decoupled from the snapshot firehose (done)
+
+Standard §5.1 requires that per-snapshot world state not live in top-level React state and that the HUD be change-driven or capped to a low frequency. Previously `setMatch(snapshot)` ran on every 30 Hz snapshot and rerendered the entire `App` tree (menus, lobby, gallery, settings, HUD).
+
+- Added `client/src/gameStore.ts`: a mutable, ref-based `GameStore` plus a `useGameSelector` hook that samples derived values at <= ~10 Hz and only rerenders when the derived value changes.
+- The network snapshot path now writes to the store and the renderer bridge only. Top-level React holds just `matchPhase`, which changes on phase transitions (countdown/playing/goal/finished), not per tick.
+- Extracted `MatchHud` and `ResultsScreen` into isolated subtrees that subscribe through `useGameSelector`. A snapshot can no longer rerender the menu, lobby, gallery, or settings code paths.
+- The Phaser renderer is unchanged and still reads `bridge.match` every frame, so arena visuals keep updating at the full snapshot rate. No gameplay rule, collision, damage, timing, or scoring path was touched.
+
+Verified: `npm run typecheck`, `npm test` (48 pass), and `npm run build` all pass. Not yet verified: measured React commit profile and frame-time before/after on a real device (standard §11 React HUD row). The structural change (snapshot no longer sets top-level state) is confirmed by code; the numeric main-thread improvement still needs a profiler capture in a live match.
