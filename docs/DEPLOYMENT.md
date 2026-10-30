@@ -1,3 +1,24 @@
+# Repository migration — October 29, 2026
+
+The project is now tracked in the private GitHub repository
+https://github.com/ejinsw/goc-royale with `main` as its default branch and the
+local `origin` pointing to that repository. The first commit preserved current
+source and assets; it is distinct from the October 25 deployed baseline below.
+
+Local deployment scratch copies (`work/`), generated graph analysis
+(`graphify-out/`), and numbered Blender backup files are excluded from future
+tracking while preserved on disk. They remain in the initial Git history;
+no history was rewritten. Environment files are ignored except `.env.example`.
+
+Repository setup does not itself connect GitHub to Vercel or deploy current
+source. The October 25 hosting and verification record below is historical.
+Before enabling automatic production deployments, review the current source,
+run required checks, configure the existing Vercel project's build command
+`npm run build` and output `dist`, and carry over the static caching rules.
+Do not import a second Vercel project or replace the existing public domain.
+
+---
+
 # GOC Royale deployment
 
 Verified October 25, 2026 (America/Los_Angeles).

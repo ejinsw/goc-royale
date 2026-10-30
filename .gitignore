@@ -6,3 +6,16 @@ dist/
 
 outputs/
 .vercel
+
+# Local credentials and generated environment files
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local scratch work, analysis caches, and asset backups
+/work/
+/graphify-out/
+*.blend[0-9]*
+__pycache__/
+*.pyc
