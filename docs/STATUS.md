@@ -128,3 +128,19 @@ User-requested change to lobby capacity and start validation. This is a rules ch
 **Budget exception (AGENTS.md rule 6, standard §4.2/§10):** Showdown at 10 players exceeds the standard's documented 8-player outbound/scene budget by two fighters. This was an explicit user decision. The standard's 8-player budgets (<= 3 Mbps outbound, whole-scene triangle/draw-call targets) have **not** been re-measured for 10 players; snapshot bandwidth and host CPU at 10 players remain unverified and should be profiled before a real pilot at that size. Broomball stays within the existing cap.
 
 Verified: `npm run typecheck`, `npm test` (54 pass; old exactly-6 test replaced with duplicate/uneven-team, broomball-cap, and showdown-no-minimum/10-cap tests, including an engine spawn check for 10 players), and `npm run build` all pass.
+
+### Step 3 — input sequencing, acknowledgement, replay, and decoupled snapshot rate (done)
+
+Standard §4.2–4.3: inputs must carry a monotonic sequence; snapshots must acknowledge the last processed sequence and carry an authoritative tick and sample time; the client must retain and replay unacknowledged inputs after a correction; remote entities render from an interpolation buffer; simulation and snapshot rates must be independent.
+
+- `Input` gained an optional monotonic `seq`. The engine records the highest processed seq per player (`lastSeq`), tolerating absent, stale, or out-of-order values.
+- `Match` gained `sampleTime` (the authoritative sim clock the snapshot represents) and a per-viewer `ackSeq` (highest processed local seq), stamped in `snapshot(viewerId)`.
+- The client stamps a monotonic seq on every sent input (renderer-owned counter so it can tag its reconciliation buffer with the same value; the network layer assigns one if absent).
+- The renderer retains unacknowledged local move inputs and, on each fresh snapshot, reconciles the local fighter: it drops acknowledged inputs, resets to the authoritative position, and replays the remainder through `predictStep`, which mirrors the engine's substepped movement and wall/bounds validity. Large divergences (teleport/knockback/death) accept authority directly rather than rubber-banding. Between snapshots the client leads with live input for immediate response, or eases toward authority when movement is server-forced.
+- Remote fighters interpolate toward the latest authoritative sample, which absorbs the lowered snapshot rate.
+- The host loop now runs the fixed 30 Hz simulation but broadcasts snapshots at ~18 Hz via an accumulator independent of the tick (standard §3, §4.2 — snapshot cadence 15–20 Hz by default). Immediate action/movement-change sends are unchanged.
+- Added five tests: engine ack/sampleTime (including out-of-order and no-seq cases) and an end-to-end room test proving ackSeq/sampleTime round-trip to each client's snapshot per viewer.
+
+Verified: `npm run typecheck`, `npm test` (57 pass, 5 new), and `npm run build` all pass. Authoritative gameplay unchanged — every pre-existing simulation/room test passes without modification.
+
+Not yet verified (requires a running match and instrumentation, which arrive in the later steps): the controlled 50/100/200 ms RTT and loss campaign (standard §4.4), measured local-input-to-response latency, correction magnitude, and that no action double-plays or disappears under loss. The reconciliation and rate decoupling are implemented and unit-covered; their feel and latency numbers still need the dev overlay (step 6) and a live/controlled-network capture before they can be called certified.

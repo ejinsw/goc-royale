@@ -57,6 +57,8 @@ export class Engine {
   state: Match;
   inputs = new Map<string, Input>();
   histories = new Map<string, History[]>();
+  /** Highest input sequence processed per player, echoed back as ackSeq. */
+  lastSeq = new Map<string, number>();
   pending: Pending[] = [];
   dashes: Dash[] = [];
   private serial = 0;
@@ -121,6 +123,8 @@ export class Engine {
       notice: "Get ready",
       tick: 0,
       aliveCount: players.length,
+      sampleTime: 0,
+      ackSeq: 0,
     };
   }
   get playerList() {
@@ -135,6 +139,11 @@ export class Engine {
     if (!input || !finiteVec(input.move) || !finiteVec(input.aim)) return false;
     const m = length(input.move) > 1 ? unit(input.move) : input.move;
     const previous = this.inputs.get(id);
+    // Record the highest processed sequence (monotonic) for acknowledgement.
+    if (typeof input.seq === "number" && Number.isFinite(input.seq)) {
+      const prevSeq = this.lastSeq.get(id) ?? 0;
+      if (input.seq > prevSeq) this.lastSeq.set(id, input.seq);
+    }
     this.inputs.set(id, {
       move: m,
       aim: unit(input.aim),
@@ -930,6 +939,8 @@ export class Engine {
     snap.areas.forEach((a) => {
       if (!Number.isFinite(a.hp)) a.hp = 999999;
     });
+    snap.sampleTime = s.time;
+    snap.ackSeq = this.lastSeq.get(viewerId) ?? 0;
     return snap;
   }
 }

@@ -48,6 +48,13 @@ export interface Input {
   attack?: boolean;
   super?: boolean;
   power?: number;
+  /**
+   * Monotonically increasing per-client input sequence (standard §4.3).
+   * Optional for backward compatibility; the authority records the highest
+   * value it has processed and echoes it back as `Match.ackSeq` so the client
+   * can discard acknowledged inputs and replay the rest after a correction.
+   */
+  seq?: number;
 }
 export interface Projectile {
   id: number;
@@ -149,6 +156,17 @@ export interface Match {
   notice: string;
   tick: number;
   aliveCount: number;
+  /**
+   * Authoritative sample time (seconds) this snapshot represents — the sim
+   * clock. Remote entities interpolate from a short buffer keyed on this value
+   * rather than packet arrival time (standard §4.3).
+   */
+  sampleTime: number;
+  /**
+   * The highest local input sequence the authority had processed for the
+   * recipient when this snapshot was produced (standard §4.3). Per-viewer.
+   */
+  ackSeq: number;
 }
 export type Command =
   | { type: "select"; fighter: FighterId }

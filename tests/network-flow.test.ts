@@ -158,3 +158,28 @@ test("disconnect grace expiry cannot change finalized results", () => {
   assert.deepEqual(r.engine!.playerList[1].stats, before);
   assert.equal(r.engine!.state.winner, c[1].id);
 });
+
+test("input sequence acknowledgements round-trip to the client snapshot", () => {
+  const { room: r, clients: c } = group(2);
+  c.forEach((p) => p.send({ type: "ready", ready: true }));
+  c[0].send({ type: "start" });
+  tick(r, 5);
+  // Client 0 sends sequenced inputs through the normal command path.
+  c[0].send({
+    type: "input",
+    input: { move: { x: 1, y: 0 }, aim: { x: 1, y: 0 }, seq: 1 },
+  });
+  c[0].send({
+    type: "input",
+    input: { move: { x: 1, y: 0 }, aim: { x: 1, y: 0 }, seq: 2 },
+  });
+  tick(r, 4);
+  const snap = c[0].messages.filter((m) => m.type === "snapshot").at(-1);
+  assert.ok(snap?.type === "snapshot");
+  assert.equal(snap.match.ackSeq, 2);
+  assert.ok(snap.match.sampleTime > 0);
+  // The other client's snapshot acknowledges its own (absent) inputs as 0.
+  const other = c[1].messages.filter((m) => m.type === "snapshot").at(-1);
+  assert.ok(other?.type === "snapshot");
+  assert.equal(other.match.ackSeq, 0);
+});

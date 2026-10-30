@@ -27,6 +27,12 @@ export class Network {
   stopped = false;
   lastSnapshot = 0;
   lastTick = 0;
+  /** Local monotonic input sequence (standard §4.3). */
+  inputSeq = 0;
+  /** Snapshot broadcast accumulator (ms), decoupled from the sim tick. */
+  private snapshotAccrued = 0;
+  /** Snapshot send interval: ~18 Hz, independent of the 30 Hz simulation. */
+  static readonly snapshotIntervalMs = 1000 / 18;
   constructor(
     public onMessage: Listener,
     public onStatus: (s: string) => void,
@@ -52,7 +58,7 @@ export class Network {
     this.token = local.token;
     this.peer!.on("connection", (c) => this.accept(c));
     this.lastTick = performance.now();
-    let ticks = 0;
+    this.snapshotAccrued = 0;
     this.timer = setInterval(() => {
       const now = performance.now();
       const elapsed = now - this.lastTick;
@@ -61,17 +67,27 @@ export class Network {
           "Host was paused. The match clock resumes now. Keep this tab active.",
         );
         this.lastTick = now;
+        this.snapshotAccrued = 0;
         return;
       }
+      let ticked = 0;
       let steps = 0;
       while (now - this.lastTick >= 1000 / 30 && steps++ < 6) {
         this.room?.tick();
         this.lastTick += 1000 / 30;
-        ticks++;
+        ticked++;
       }
-      if (ticks >= 1) {
-        this.room?.snapshots();
-        ticks = 0;
+      // Snapshot cadence is independent of the simulation rate (standard §3,
+      // §4.2): the sim runs at a fixed 30 Hz but authoritative snapshots are
+      // broadcast at ~18 Hz. Immediate action/change feedback is local; remote
+      // clients interpolate from a short buffer keyed on sampleTime.
+      if (ticked > 0) {
+        this.snapshotAccrued += ticked * (1000 / 30);
+        if (this.snapshotAccrued >= Network.snapshotIntervalMs) {
+          this.room?.snapshots();
+          // Keep the remainder so cadence does not drift against the sim.
+          this.snapshotAccrued %= Network.snapshotIntervalMs;
+        }
       }
     }, 8);
     this.onStatus("Hosting • keep this tab open");
@@ -261,7 +277,13 @@ export class Network {
       } satisfies ClientMessage);
   }
   input(input: Input) {
-    this.command({ type: "input", input });
+    // Stamp a monotonic sequence so the authority can acknowledge it and the
+    // local client can replay unacknowledged inputs after a correction. The
+    // renderer may supply its own seq (so it can tag its reconciliation
+    // buffer with the same value); otherwise assign one here.
+    const seq =
+      typeof input.seq === "number" ? input.seq : ++this.inputSeq;
+    this.command({ type: "input", input: { ...input, seq } });
   }
   async reconnect(name: string) {
     if (this.isHost)

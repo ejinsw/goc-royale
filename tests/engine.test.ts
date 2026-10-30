@@ -659,3 +659,27 @@ test("events are pruned to a short rolling window", () => {
     "stale events are dropped from the snapshot window",
   );
 });
+
+test("snapshot carries sampleTime and acknowledges the highest processed input seq", () => {
+  const e = engine("brandon");
+  // Out-of-order and stale sequences must not lower the ack.
+  e.setInput("p0", { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, seq: 5 });
+  e.setInput("p0", { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, seq: 3 });
+  e.setInput("p0", { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, seq: 9 });
+  e.step();
+  const snap = e.snapshot("p0");
+  assert.equal(snap.ackSeq, 9, "ack reflects the highest seq, not the latest");
+  assert.equal(snap.sampleTime, e.state.time);
+  // A different viewer with no inputs gets ack 0.
+  assert.equal(e.snapshot("p1").ackSeq, 0);
+});
+
+test("inputs without a seq are still accepted and leave ack at zero", () => {
+  const e = engine("brandon");
+  assert.equal(
+    e.setInput("p0", { move: { x: 1, y: 0 }, aim: { x: 1, y: 0 } }),
+    true,
+  );
+  e.step();
+  assert.equal(e.snapshot("p0").ackSeq, 0);
+});
