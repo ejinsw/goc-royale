@@ -305,6 +305,16 @@ Tests: `tests/actionPrediction.test.ts` adds seven tests. They cover immediate p
 
 Not verified: how the cues look and sound in a live match, and the reduced-motion review. The cues have no camera motion; they are gameplay-readable tells, which §7.2 says reduced-motion should keep.
 
+
+## Brandon v5 source-art study — October 29, 2026
+
+Asset-pipeline/modeling/rigging work only. Saved a separate [v5 primary-form study and left-hand rig experiment](../assets/3d/brandon-v5/README.md), preserving v4, the user's open Blender scene, and all live gameplay/rendering behavior. The live Blender session now contains both new review scenes; `brandon-review-session.blend` is a separate saved review copy.
+
+- Primary study: shaped head/eyes/lip margins, fitted hair volumes, five-digit hands, jacket opening and inset shirt. **199,284 triangles / 42 parts**, explicitly authoring-only. Basic render-geometry checks pass, but lower-face form diagnostics still flag excessive roundness. Face appeal/topology, hair flow and garment folds remain in progress.
+- Isolated left hand: **11 deform bones**, standard linear skinning, thumb IK authoring control and clipboard stand-in. **27,073 vertices / 54,142 triangles**; weights normalized with no unweighted vertices and no more than four influences. Three static evaluated poses (open/curl/grip) report zero detected self-intersections. Grip inspection reports zero vertices in the tested unbeveled board interior and approximately 0.50–1.30 mm minimum sampled board proximity. Separate evaluated surface-overlap checks report zero hand/board, hand/paper and hand/clip pairs in the saved grip. Contact area and animated stability are not certified by these static tests.
+- Evidence and reproduction commands are recorded in the asset README. Reports/renders are under `outputs/brandon-v5/`; generated outputs remain ignored by Git. No full-body v5 rig, expressions, animation clips, runtime GLB, phone benchmark or integration acceptance is claimed. The <=40-bone, 1–2-material, <=1 MB compressed runtime constraints remain unchanged; this study is not a budget exception.
+- Verification for this source-art change: `npm test` **78 passed**; `npm run build` passed with the existing large gameplay-chunk warning. These checks do not establish animation quality or device performance. Next work is face/hair/garment refinement and deformation-ready topology before whole-character expression/grip/bend proof.
+
 ### Step 10 — match HUD: degraded-only connection warning, onboarding-only controls line (done)
 
 Standard §8.1: network architecture labels do not belong in the normal HUD, a compact warning shows only when the connection is degraded, reconnect belongs in a pause or connection panel, tutorial copy disappears after onboarding, and critical state is not conveyed by color alone.

@@ -1,0 +1,81 @@
+{
+  "date": "2026-10-29",
+  "blender": "5.2.3 LTS",
+  "status": "source studies only; production art and runtime acceptance incomplete",
+  "primary": {
+    "triangles": 199284,
+    "parts": 42,
+    "render_geometry_gate": true,
+    "lower_face_ball_flag": true
+  },
+  "hand": {
+    "bones": 11,
+    "weights": {
+      "verts": 27073,
+      "groups": 11,
+      "unweighted": 0,
+      "sum_dev": 0,
+      "max_influences": 4,
+      "over4": 0,
+      "non_deform_groups": [],
+      "empty_inside": [],
+      "empty_major": [],
+      "mirror_pairs_sampled": 625,
+      "mirror_err": 0.0,
+      "ok": true
+    },
+    "static_pose_self_intersections": {
+      "open": 0,
+      "curl": 0,
+      "clipboard": 0
+    },
+    "contact": {
+      "units": "meters, isolated study scale",
+      "distal_contact_samples": {
+        "index": {
+          "sample_vertices": 1270,
+          "nearest_board_distance": 0.0009567987290211022
+        },
+        "middle": {
+          "sample_vertices": 1528,
+          "nearest_board_distance": 0.001299530267715454
+        },
+        "ring": {
+          "sample_vertices": 1371,
+          "nearest_board_distance": 0.0012070760130882263
+        },
+        "little": {
+          "sample_vertices": 949,
+          "nearest_board_distance": 0.0005975983222015202
+        },
+        "thumb": {
+          "sample_vertices": 1815,
+          "nearest_board_distance": 0.0004964016261510551
+        }
+      },
+      "vertices_inside_unbeveled_board_interior": 0,
+      "hand_prop_surface_overlap_pairs": {
+        "B5H clipboard": 0,
+        "B5H paper": 0,
+        "B5H clip": 0
+      },
+      "note": "A minimum surface distance is not a pressure/contact-area or motion-stability test. Interior test excludes 5 mm edge bands; visual review still required."
+    }
+  },
+  "project_checks": {
+    "tests_passed": 78,
+    "build": "passed, existing large chunk warning"
+  },
+  "runtime_export": null,
+  "limitations": [
+    "No full-body rig or right-hand rig",
+    "No face expression topology or mouth interior",
+    "No animation clips or moving contact/release proof",
+    "Dense sculpt meshes need deformation retopology and optimization",
+    "No browser export or physical device acceptance"
+  ],
+  "source_sha256": {
+    "brandon-primary.blend": "8b64ae251c4da879e22b421f4db6fabf1af1e14d66d949487ec5c2fd9d37d03a",
+    "brandon-hand-rig.blend": "fb84df6b6360f47b6cabb7b30a410896819b61ab48feab420c38059d1fdeeb79"
+  }
+}

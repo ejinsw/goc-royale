@@ -1,6 +1,6 @@
 # Brandon — 3D asset production specification
 
-Version 0.2 · October 29, 2026 · **Production plan; target asset not yet built**
+Version 0.3 · October 29, 2026 · **Production plan; target asset not yet built**
 
 ## Purpose and authority
 
@@ -45,7 +45,7 @@ The [v4 movement study](../assets/3d/brandon-v4/README.md) is useful evidence of
 
 Measured v4 export: 64,112 triangles, 26 bones, 11 materials and 1,875,980 bytes. These are historical measurements, not targets for the new asset. No phone performance claim follows from them.
 
-Preserve `assets/3d/brandon-v4/` and its browser asset. Develop the new asset in `assets/3d/brandon-v5/`, with renders/reports in `outputs/brandon-v5/` and candidate browser exports in `client/public/art3d/brandon-v5/`. These v5 paths are planned; this document does not imply they already exist. Replace a game asset only after the integration checks below.
+Preserve `assets/3d/brandon-v4/` and its browser asset. Develop the new asset in `assets/3d/brandon-v5/`, with renders/reports in `outputs/brandon-v5/` and candidate browser exports in `client/public/art3d/brandon-v5/`. The v5 source and review folders now contain a primary-form study; the candidate browser-export folder remains planned. Replace a game asset only after the integration checks below.
 
 ## 3. Production passes
 
@@ -169,8 +169,8 @@ Paid asset generation, new services and automatic publishing are not part of thi
 
 ## 12. Current stage and next concrete deliverable
 
-**Current stage: pass 0.** The generated concept and this production specification exist. The v5 turnaround, sculpt, garment construction, finger/face rig and performance proof are not built.
+**Current stage: passes 0–1 in progress.** A separate [v5 primary-form study](../assets/3d/brandon-v5/README.md) now exists, with consistent model-derived views, a shaped head, five-digit hand geometry, hair volumes and an initial jacket opening. These are draft forms, not approved final art. A separate 11-bone left-hand rig experiment now demonstrates open, curl and static clipboard poses with normalized weights and zero detected self-intersections in those poses. It is a dense source study, not the full-character rig. Facial rigging, mouth interior, finished garments, animated grip/release proof, full-body rigging and runtime export are still unbuilt. The primary study remains over runtime budgets and its lower-face form diagnostic still flags excessive roundness.
 
-Next deliverable: consistent Brandon front/profile/three-quarter guides and a neutral primary-form study focused on face proportions, jacket cut and a real five-finger hand. Then produce the close-up grip + arm bend + blink/smile proof before expanding the animation library. Exact grip choreography, final proportions, material implementation and representative test devices remain review decisions, not blockers to reference and primary-form work.
+Next deliverable: refine face/hair appeal and the garment silhouette in the saved v5 study, then build deformation-ready face/hand topology and fit the real props. Then produce the close-up grip + arm bend + blink/smile proof before expanding the animation library. Exact grip choreography, final proportions, material implementation and representative test devices remain review decisions, not blockers to reference and primary-form work.
 
 Technical reference: [Blender glTF export documentation](https://docs.blender.org/manual/en/latest/addons/scene_gltf2.html). The supported bone/shape-key animation path informs this plan; the actual browser result still needs verification.
