@@ -2,6 +2,19 @@
 
 These instructions apply to the entire repository.
 
+## Mandatory branch and workspace standard
+
+Before creating a branch, starting work on a branch, committing, merging, or
+pushing, read all of:
+
+- `docs/BRANCHING-AND-WORKTREES.md`
+
+Multiple agents may work on this repository at once. Every branch MUST have its
+own `git worktree` folder; never switch branches in a folder another agent may be
+using. Stage only your own files by explicit path. Merging into or pushing `main`
+deploys production and requires explicit user approval. In the first progress
+update, state the branch and absolute worktree path you are using.
+
 ## Mandatory performance and gameplay standard
 
 Before planning, reviewing, or changing anything related to gameplay, networking,
