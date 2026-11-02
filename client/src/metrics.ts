@@ -75,6 +75,14 @@ export const metrics = {
   bytesOut: new Rate(),
   simTicks: new Rate(),
   snapshotsOut: new Rate(),
+  /** Arena renderer counters for the last frame (copied, never computed here). */
+  gpu: { calls: 0, triangles: 0, geometries: 0, textures: 0 },
+  /**
+   * Local fighter one-shots (standard §7.2): started on the input frame,
+   * authoritative cues skipped because the prediction already played, and
+   * authoritative cues that did start a local one-shot (mispredictions).
+   */
+  anim: { predicted: 0, skipped: 0, authoritative: 0 },
   private: { lastRtt: NaN },
 
   recordFrame(deltaMs: number) {
@@ -105,6 +113,7 @@ export const metrics = {
     this.pongs = 0;
     this.late = 0;
     this.lastSnapshotAt = 0;
+    this.anim.predicted = this.anim.skipped = this.anim.authoritative = 0;
     this.private.lastRtt = NaN;
   },
 };

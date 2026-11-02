@@ -1,6 +1,6 @@
 # GOC Royale
 
-A browser-hosted arena brawler for private groups. React menus, Phaser gameplay, TypeScript simulation, and PeerJS/WebRTC data channels. **No application server, Socket.IO, accounts, or database.** The seven fighters are Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, and Ethan Ha (Music). Two modes: Showdown FFA (up to 10 players) and Broomball (up to 6). Neither mode enforces a minimum player count.
+A browser-hosted arena brawler for private groups. React menus, a Three.js 3D arena, TypeScript simulation, and PeerJS/WebRTC data channels. **No application server, Socket.IO, accounts, or database.** The seven fighters are Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, and Ethan Ha (Music). Two modes: Showdown FFA (up to 10 players) and Broomball (up to 6). Neither mode enforces a minimum player count.
 
 ## Run it
 
@@ -49,9 +49,10 @@ Guest reconnect identity uses a private random token in sessionStorage, separate
 - `shared/engine.ts`: authority over movement, collision, damage, abilities, hazards, ball physics, scoring, results.
 - `shared/room.ts`: lobby validation, membership, reconnect sessions, match lifecycle.
 - `client/src/network.ts`: PeerJS transport, host fixed-timestep loop, message routing, limits, snapshots.
-- `client/src/game.ts`: Phaser renderer, client movement smoothing, desktop input, effects.
+- `client/src/game.ts`: match controller: desktop input, send cadence, local prediction, predicted cues, event dedupe.
+- `client/src/arena/`: the 3D arena renderer (camera, map art, fighter rigs and animation graph, pooled effects and labels).
 - `client/src/main.tsx`: React menus, HUD, results, settings, multi-pointer touch sticks.
-- `client/public/art/`: original placeholders and custom Brandon/Ethan portrait art for the current 2D presentation.
+- `client/public/art/`: original placeholders and custom Brandon/Ethan portrait art for the fighter picker and results.
 - `tests/engine.test.ts`: gameplay and room transition regression tests.
 - `docs/PILOT-SPEC.txt`: supplied design document, renamed GOC Royale and amended for the chosen hosting model.
 - `docs/STATUS.md`: verified behavior and remaining release work.
@@ -67,7 +68,7 @@ Development overlay: press the backtick key during play (or open the app with `?
 - [Brandon asset specification](docs/BRANDON_3D_ASSET.md): first individual production brief; other fighters need their own before modeling.
 - [Performance and gameplay standards](docs/PERFORMANCE-AND-GAMEPLAY-STANDARDS.md): mandatory runtime limits and acceptance gates.
 
-The next 3D assets are planned production work. Existing studies and portraits do not establish completion of the new standard or a live 3D multiplayer renderer.
+Matches render in 3D (see [the integration brief](docs/ARENA-3D-INTEGRATION-BRIEF.md)). Brandon uses the low-poly prototype GLB; the other six use procedural placeholder models. The next 3D assets are planned production work, and the arena has not been profiled on physical phones.
 
 ## Trust and scope
 

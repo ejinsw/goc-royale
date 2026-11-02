@@ -38,7 +38,7 @@ export class GameStore {
  * The selector runs on every snapshot, but React is only told to rerender when
  * the derived value actually changes AND the minimum interval has elapsed. This
  * keeps the HUD change-driven and bounded to <= ~10 Hz per the standard, while
- * the Phaser renderer continues to read the raw store every frame.
+ * the arena renderer continues to read the raw snapshot every frame.
  */
 export function useGameSelector<T>(
   store: GameStore,

@@ -142,8 +142,17 @@ const PROPS: Record<PropName, () => BufferGeometry[]> = {
 };
 
 export interface FighterParts {
-  /** Legs, torso, collar; and the guitar for Ethan. Origin at the feet. */
+  /**
+   * Torso, collar, and the guitar for Ethan; the legs too unless they were
+   * built separately. Origin at the feet.
+   */
   body: BufferGeometry;
+  /**
+   * Only with `separateLegs`: each leg and shoe, in body space (origin at the
+   * feet), so a rig can hinge them at HIP_Y. `legL` is the -x leg.
+   */
+  legL?: BufferGeometry;
+  legR?: BufferGeometry;
   /** Head and hair; origin at the neck pivot. */
   head: BufferGeometry;
   /** Eyes, smile, glasses in head space; no outline. */
@@ -157,6 +166,10 @@ export interface FighterParts {
 
 export const NECK_Y = 0.98;
 export const SHOULDER: V3 = [0.29, 0.86, 0];
+/** Hip hinge height for separately built legs (top of the leg capsules). */
+export const HIP_Y = 0.34;
+/** Leg offset from the center line. */
+export const HIP_X = 0.12;
 
 function arm(look: FighterLook, withProp: boolean): BufferGeometry {
   const parts = [
@@ -218,12 +231,17 @@ function face(look: FighterLook): BufferGeometry {
   return merge(parts);
 }
 
-function body(look: FighterLook): BufferGeometry {
+/** One leg and shoe in body space; side -1 is the -x leg. */
+function leg(side: -1 | 1): BufferGeometry[] {
+  return [
+    part(capsule(0.085, 0.14), PANTS, [side * HIP_X, 0.2, 0]),
+    part(box(0.19, 0.11, 0.28, 0.05), SHOE, [side * HIP_X, 0.055, 0.04]),
+  ];
+}
+
+function body(look: FighterLook, withLegs: boolean): BufferGeometry {
   const parts = [
-    part(capsule(0.085, 0.14), PANTS, [-0.12, 0.2, 0]),
-    part(capsule(0.085, 0.14), PANTS, [0.12, 0.2, 0]),
-    part(box(0.19, 0.11, 0.28, 0.05), SHOE, [-0.12, 0.055, 0.04]),
-    part(box(0.19, 0.11, 0.28, 0.05), SHOE, [0.12, 0.055, 0.04]),
+    ...(withLegs ? [...leg(-1), ...leg(1)] : []),
     part(capsule(0.27, 0.16), look.shirt, [0, 0.62, 0], [0, 0, 0], [1.05, 1, 0.82]),
     part(box(0.14, 0.026, 0.02, 0.01), look.collar, [-0.05, 0.86, 0.215], [-0.3, 0, -0.6]),
     part(box(0.14, 0.026, 0.02, 0.01), look.collar, [0.05, 0.86, 0.215], [-0.3, 0, 0.6]),
@@ -240,10 +258,18 @@ function note(hex: string): BufferGeometry {
   ]);
 }
 
-export function buildFighter(id: FighterId): FighterParts {
+/**
+ * Build one fighter's parts. The menu stage uses the default (legs merged
+ * into the body); the arena asks for `separateLegs` so its rig can swing
+ * them. Both read the same look table.
+ */
+export function buildFighter(id: FighterId, opts: { separateLegs?: boolean } = {}): FighterParts {
   const look = LOOKS[id];
+  const separate = !!opts.separateLegs;
   return {
-    body: body(look),
+    body: body(look, !separate),
+    legL: separate ? merge(leg(-1)) : undefined,
+    legR: separate ? merge(leg(1)) : undefined,
     head: head(look),
     face: face(look),
     armL: arm(look, false),
@@ -254,6 +280,8 @@ export function buildFighter(id: FighterId): FighterParts {
 
 export function disposeFighter(p: FighterParts) {
   p.body.dispose();
+  p.legL?.dispose();
+  p.legR?.dispose();
   p.head.dispose();
   p.face.dispose();
   p.armL.dispose();

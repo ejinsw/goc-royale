@@ -353,8 +353,13 @@ preferred conventions:
   Josh cone, Super anticipation ring), but projectiles themselves are not:
   the projectile appears when the authoritative snapshot arrives, about one
   RTT after the predicted flash. Predicted cues are not yet animation clips.
-- The Phaser Canvas arena caches static map art, but dynamic scenery (zone,
-  walls, areas, actors, effects) is still procedurally redrawn each frame.
+- The arena is a single Three.js renderer (`client/src/arena/`, branch
+  `feature/arena-3d`). Six fighters use procedural placeholder models whose
+  clip set is authored as code, not as validated animation assets with
+  manifests. Only Brandon's low-poly GLB passes import validation. Release
+  timing is still taken from the authoritative event, not from clip markers.
+- Respawn presentation is inferred from the alive flag because the engine
+  does not emit `fighter_respawned`.
 
 Resolved on the `refactor/performance-gameplay-standards` branch (see
 `docs/STATUS.md`): snapshots no longer replace top-level React state; inputs
@@ -364,11 +369,9 @@ latency/loss harness exist; snapshots are delta-encoded and measured within
 the ingress and host-outbound budgets up to 10 players; the authority applies
 each movement input for the time it was held, and correction p95 meets the
 0.25-unit target in every scripted §4.4 case.
-- Character presentation primarily uses portrait images, simple wobble, shapes,
-  text, and modest effects.
-- The Three.js studies and GLB models are separate from the multiplayer renderer.
 - Brandon v4 is a high-detail rigged study with an incomplete gameplay clip set,
-  not a production runtime asset.
+  not a production runtime asset. Arena import validation would reject it
+  (64k triangles exceeds the 25k budget, and its clip set is incomplete).
 - Physical-device performance and controlled latency or loss campaigns remain
   incomplete.
 
