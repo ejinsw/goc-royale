@@ -1,0 +1,75 @@
+import { menuKit } from "../menu/menuKit";
+
+const { Control, Display } = menuKit;
+
+export interface SettingsValues {
+  sound: number;
+  music: number;
+  shake: boolean;
+  reducedMotion: boolean;
+  haptics: boolean;
+}
+
+const percent = (v: number) => `${Math.round(v * 100)}%`;
+
+/** Settings and pause sheet. The match keeps running while it is open. */
+export function SettingsSheet({
+  values,
+  onChange,
+  inMatch,
+  host,
+  onReconnect,
+  onLeave,
+  onClose,
+}: {
+  values: SettingsValues;
+  onChange: (next: Partial<SettingsValues>) => void;
+  inMatch: boolean;
+  host: boolean;
+  onReconnect: () => Promise<unknown>;
+  onLeave: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Display kind="sheet" title={inMatch ? "Paused" : "Settings"} icon={inMatch ? "pause" : "gear"} onClose={onClose}>
+      <div className="settings-group">
+        <Control kind="slider" label="Sound" min={0} max={1} step={0.05} value={values.sound} format={percent} onChange={(sound) => onChange({ sound })} />
+        <Control kind="slider" label="Music" min={0} max={1} step={0.05} value={values.music} format={percent} onChange={(music) => onChange({ music })} />
+        <Control kind="toggle" label="Screen shake" value={values.shake} onChange={(shake) => onChange({ shake })} />
+        <Control kind="toggle" label="Reduce motion" value={values.reducedMotion} onChange={(reducedMotion) => onChange({ reducedMotion })} />
+        <Control kind="toggle" label="Vibration" value={values.haptics} onChange={(haptics) => onChange({ haptics })} />
+      </div>
+      <Display
+        kind="table"
+        className="controls-legend"
+        caption="Controls"
+        columns={["", "Keyboard + mouse", "Touch"]}
+        rows={[
+          { key: "move", cells: ["Move", "WASD / arrows", "Left thumb, anywhere"] },
+          { key: "aim", cells: ["Attack", "Aim with mouse, click", "Right thumb: drag to aim, tap to auto-aim"] },
+          { key: "super", cells: ["Super", "Space / right click", "Super button"] },
+          { key: "ball", cells: ["Ball shot", "Hold click, release", "Drag farther for power"] },
+        ]}
+      />
+      {inMatch && (
+        <div className="settings-group">
+          <Display kind="label" level="caption" text="The match keeps running while this is open." />
+          {!host && (
+            <Control kind="button" variant="dark" icon="refresh" label="Reconnect to host" onPress={onReconnect} />
+          )}
+          <Control
+            kind="button"
+            variant="danger"
+            icon="leave"
+            label={host ? "End room and leave" : "Leave match"}
+            onPress={() => {
+              onLeave();
+              onClose();
+            }}
+          />
+        </div>
+      )}
+      <Control kind="button" variant="primary" size="lg" icon="play" label={inMatch ? "Back to it" : "Done"} onPress={onClose} />
+    </Display>
+  );
+}

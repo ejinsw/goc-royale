@@ -135,7 +135,7 @@ Keep gameplay event IDs separate from presentation: confirm damage and eliminati
 
 A game lobby, not a marketing website. Large animated fighter on a small stage; compact player identity; obvious mode choice; one dominant Play/Create Party action; nearby invite/join controls. No fake currencies, ranks or progression systems.
 
-Use beveled rectangular panels, thick restrained outlines, navy/cream text surfaces and gold action buttons. Barlow Condensed remains the display face and Barlow the readable body face unless tests reveal a need to replace them.
+Interface chrome is plain but punchy and uses blue plus greys and black only (user decision, October 31, 2026; supersedes the earlier navy/cream/gold direction). Fighters keep their own palettes on their models and portraits. Barlow Condensed remains the display face and Barlow the readable body face unless tests reveal a need to replace them. Component rules live in `docs/CODE-PRACTICES.md`.
 
 Fighter selection should emphasize silhouette, role, basic attack and Super with clear selected/ready states. Party lobby groups teammates, invites, mode and readiness. Keep skill explanations available without crowding the launch flow.
 

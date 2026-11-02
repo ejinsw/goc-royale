@@ -315,3 +315,72 @@ Standard §8.1: network architecture labels do not belong in the normal HUD, a c
 - The desktop controls line ("WASD move · …") shows only for the first 10 s of a player's first three matches, counted in `localStorage` (`goc.controlsSeen`). The full controls text remains in Settings.
 
 Verified: `npm run typecheck`, `npm test` (85 pass), `npm run build`. Not verified: supported-viewport captures, keyboard focus, and the touch target/safe-area review in §11's Game UI row. There are no React component tests in this repo, so the warning states were checked by code review only.
+
+## November 1, 2026 — game-style UI pass (branch `feature/ui-pass`)
+
+Worktree: `~/Documents/GitHub/goc-royale-wt/feature-ui-pass`. The whole
+player-facing interface was rebuilt as a game UI over a live 3D backdrop,
+replacing the previous page-style menus and text HUD. Gameplay rules,
+networking, the authority and the Phaser arena renderer were not changed.
+
+**New mandatory standard.** `docs/CODE-PRACTICES.md` defines the component
+architecture and is referenced from `AGENTS.md` as required reading: two kits
+(`menuKit`, and `gameKit` which extends it) built by one factory, a single
+`Control` / `Display` interface with kinds and variants as data, an
+extend-before-adding rule, the tactile feedback contract, the game-signal
+rule that continuous values never reach React state, and the one-way rule
+(no device tiers or dev-only vs production paths for the same feature). The
+performance standard still takes precedence.
+
+**Interface.** `client/src/ui/core/` holds the design tokens, the feedback
+engine, and the base control and display renderers; `menu/` and `game/`
+configure the two kits; `screens/` only composes and lays out. Every
+pressable element depresses on the same frame as the input, springs back,
+and then plays a confirm pulse or a deny shake with a reason; disabled
+controls deny rather than going silent. Palette is blue plus greys and black
+(user decision), recorded in the art direction doc.
+
+**Fixed a standard violation.** The old touch `Stick` called a React state
+setter on every pointer move (performance standard §5.1). All three sticks
+are now one kind driven by a single touch router that writes transforms
+directly to the DOM. Sticks float to where the thumb lands inside their half
+of the screen, clamped to the safe area, and size with the viewport's short
+side.
+
+**3D menu backdrop.** Added `three` 0.187.0. `scene/plaza.ts` builds a
+stylized low-poly courtyard in the spirit of the Broad Art Center plaza
+(arcade and tilted canopy with a tall staircase on the left, brick path in
+the middle, lawn with rusted steel vessels on the right) as one merged mesh
+plus a swaying tree crown and drifting clouds. `scene/fighterModels.ts`
+builds all seven fighters procedurally from one per-fighter look table that
+mirrors their 2D portraits. Everything shares one toon material. All of it
+is original geometry from primitives: no photo texture, traced geometry or
+scanned asset.
+
+**Bug found and fixed.** `dispose()` calls `renderer.forceContextLoss()`, and
+a canvas whose context was lost that way can never get another one. The
+canvas was owned by React, so the second `createMenuScene` on the same
+element failed with "THREE.WebGLRenderer: Cannot read properties of null
+(reading 'precision')" on module reload or remount. The scene now creates and
+owns its own canvas and removes it on dispose, and it checks for a null
+context instead of letting Three.js throw later.
+
+Verified: `npm run typecheck`, `npm test` (85 pass), `npm run build`. The
+menu scene is a lazy chunk (144.7 kB gzipped) loaded only for menus. Real
+WebRTC runs in headless Chromium exercised a 10-player Showdown lobby and a
+6-player Broomball lobby through to the live HUD and the results screen,
+plus a 4-player match reaching real results and a rematch, at 1280x720,
+390x844 and 844x390, with no console errors. Touch sticks were driven with
+real multi-touch events. A menu → match → menu cycle confirms the scene is
+disposed and recreated with one healthy WebGL context. HUD DOM writes during
+play stayed in the single digits over a 3-second sample, consistent with the
+continuous values bypassing React.
+
+Not verified: physical iOS/Android devices, measured frame time and p95 on
+any real device, the complete-match memory trend with the new scene, a
+reduced-motion visual review, and the audio cue mix. The 3D scene's cold
+load and frame cost have not been profiled against the standard's §5.3
+requirements, so the menu backdrop is not certified against §7.3 asset
+budgets; it is procedural geometry rather than a loaded asset, but that is
+not a measurement. Screens were reviewed from captures, not by a human
+playing on a phone.

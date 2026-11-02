@@ -31,6 +31,21 @@ Do not copy an existing implementation pattern merely because it is already in
 the codebase. The standards document identifies known prototype shortcuts that
 must be treated as migration debt rather than conventions.
 
+## Mandatory code practices standard
+
+Before planning, reviewing, or changing any client code, and always before
+adding a component, class, hook, module, screen, control, HUD element, or 3D
+menu scene content, read all of:
+
+- `docs/CODE-PRACTICES.md`
+
+All player-facing UI MUST be built from the two kits it defines (`menuKit` and
+`gameKit`, both from one factory) and the single `Control` / `Display`
+interface. Extend an existing kind, variant, or profile before adding anything
+new. Do not create a new component or class per request. In the first progress
+update, confirm the standard was read and name the kit kinds the task uses or
+extends. The performance standard takes precedence where the two conflict.
+
 ## Required working behavior
 
 1. Classify the work before editing: simulation, networking, rendering,

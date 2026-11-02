@@ -21,12 +21,14 @@
     "peerjs": "^1.5.5",
     "phaser": "^3.90.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/three": "^0.187.0",
     "@vitejs/plugin-react": "^4.4.1",
     "esbuild": "^0.25.3",
     "prettier": "^3.6.2",
