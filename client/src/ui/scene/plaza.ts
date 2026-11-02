@@ -85,11 +85,16 @@ const STAIR_L = STAIR.cx - STAIR.width / 2;
 const STAIR_R = STAIR.cx + STAIR.width / 2;
 
 /** The arcade building: its colonnade plane, depth, and extent along z. */
-// zFront stops short of the camera so the nearest column does not loom.
-const LEFT = { faceX: -11, backX: -34, zFront: 2, zBack: -38 };
+/**
+ * zFront stops short of the camera so the nearest column does not loom, and
+ * faceX is set far enough left that the colonnade, the canopy and the
+ * canopy's supports all finish before the staircase begins. Nothing
+ * belonging to the building may reach past STAIR_L.
+ */
+const LEFT = { faceX: -13.4, backX: -36, zFront: 2, zBack: -38 };
 
 /** The open platform at the top of the stairs. */
-const DECK = { x0: STAIR_L - 0.9, x1: -1.8, zFront: STAIR_TOP_Z, zBack: -26 };
+const DECK = { x0: STAIR_L - 0.5, x1: -1.8, zFront: STAIR_TOP_Z, zBack: -26 };
 
 /** The brick path the fighters stand on, and the lawn to its right. */
 const PATH = { x0: -2, x1: 3.4 };
@@ -168,30 +173,28 @@ function staircase(): BufferGeometry[] {
 
 /**
  * The arcade building along the left of the stairs: a brick wall behind a
- * white colonnade, a balcony above it, and the signature tilted glass canopy
- * projecting over the walkway. Its mass keeps rising past the top of the
- * frame, so no upper floor is ever resolved.
+ * white colonnade under the signature tilted glass canopy. Its mass keeps
+ * rising past the top of the frame, so no upper floor is ever resolved.
+ *
+ * Everything here is kept left of the staircase. `reach` is the furthest x
+ * any part may occupy, half a meter clear of the stair's cheek wall, which
+ * is what stops the canopy and its supports from standing in the steps.
  */
 function leftBuilding(): BufferGeometry[] {
   const { faceX, backX, zFront, zBack } = LEFT;
   const len = zFront - zBack,
     midZ = (zFront + zBack) / 2;
+  const reach = STAIR_L - 0.85;
   const parts: BufferGeometry[] = [
-    // Ground-floor brick wall facing the plaza, and the floor band above it.
+    // Ground-floor brick wall facing the plaza, with a slim eave over it.
     slab(C.brick, [0.5, 4.6, len], [faceX, 2.3, midZ]),
-    slab(C.white, [3.6, 0.4, len], [faceX + 1.4, 4.65, midZ]),
+    slab(C.white, [reach - 0.4 - faceX, 0.36, len], [(faceX + reach - 0.4) / 2, 4.68, midZ]),
     // The mass behind, set back from the colonnade and tall enough to leave
     // the frame, so the floors above are never in view.
     slab(C.brickDark, [0.5, 14, len], [faceX - 0.6, 11.9, midZ]),
     slab("#d9dbdd", [faceX - 0.9 - backX, 14, len], [(backX + faceX - 0.9) / 2, 11.9, midZ]),
-    // Balcony rails along the walkway above the colonnade.
-    slab(C.rail, [0.09, 0.09, len], [faceX + 3.1, 5.5, midZ]),
-    slab(C.rail, [0.05, 0.05, len], [faceX + 3.1, 5.15, midZ]),
-    slab(C.rail, [0.05, 0.05, len], [faceX + 3.1, 4.85, midZ]),
   ];
-  for (let z = zBack; z <= zFront; z += 2)
-    parts.push(slab(C.rail, [0.06, 1, 0.06], [faceX + 3.1, 5.05, z]));
-  // White columns carrying the walkway, standing out from the brick.
+  // White columns carrying the eave, standing out from the brick.
   for (let z = zBack + 1.4; z <= zFront - 1; z += 3.2)
     parts.push(slab(C.white, [0.55, 4.6, 0.55], [faceX + 1.3, 2.3, z]));
   // Glazed bays at ground level and windows on the floor above.
@@ -199,22 +202,23 @@ function leftBuilding(): BufferGeometry[] {
     parts.push(slab(C.glassDark, [0.08, 3, 2.4], [faceX + 0.28, 1.5, z]));
   for (let z = zBack + 3; z <= zFront - 3; z += 5)
     parts.push(slab(C.glass, [0.08, 2.1, 2.6], [faceX - 0.88, 7.2, z]));
-  // Tilted glass canopy projecting over the walkway on raking columns. It
-  // rises away from the building, as the reference canopy does.
-  for (let i = 0; i < 9; i++) {
+  // Tilted glass canopy over the walkway, rising away from the building as
+  // the reference canopy does. Its width and supports stop short of `reach`.
+  const span = reach - faceX;
+  for (let i = 0; i < 10; i++) {
     const z = zBack + 3 + i * 4.6;
     if (z > zFront - 1) break;
     const panel = [
-      slab(C.canopy, [5.4, 0.12, 4.3], [0, 0, 0]),
-      slab(C.white, [0.26, 0.26, 4.4], [2.7, 0, 0]),
-      slab(C.white, [5.4, 0.22, 0.26], [0, 0, -2.15]),
-      ...[-1.8, -0.6, 0.6, 1.8].map((dx) => slab(C.canopyLine, [0.06, 0.14, 4.1], [dx, 0.03, 0])),
-      ...[-1.1, 1.1].map((dz) => slab(C.canopyLine, [5.2, 0.14, 0.06], [0, 0.03, dz])),
+      slab(C.canopy, [span, 0.12, 4.3], [0, 0, 0]),
+      slab(C.white, [0.26, 0.26, 4.4], [span / 2, 0, 0]),
+      slab(C.white, [span, 0.22, 0.26], [0, 0, -2.15]),
+      ...[-0.3, 0.3].map((f) => slab(C.canopyLine, [0.06, 0.14, 4.1], [span * f, 0.03, 0])),
+      ...[-1.1, 1.1].map((dz) => slab(C.canopyLine, [span - 0.2, 0.14, 0.06], [0, 0.03, dz])),
     ];
-    parts.push(...place(panel, [faceX + 3.4, 7.4, z], [0, 0, 0.26]));
+    parts.push(...place(panel, [faceX + span / 2, 7.4, z], [0, 0, 0.26]));
     parts.push(
-      slab(C.white, [0.3, 8.4, 0.3], [faceX + 5.9, 4.2, z], [0, 0, -0.06]),
-      slab(C.white, [2.4, 0.18, 0.18], [faceX + 4.8, 7.3, z], [0, 0, 0.55]),
+      slab(C.white, [0.3, 8.6, 0.3], [reach - 0.3, 4.3, z], [0, 0, -0.06]),
+      slab(C.white, [1.8, 0.18, 0.18], [reach - 1.1, 7.4, z], [0, 0, 0.55]),
     );
   }
   return parts;
