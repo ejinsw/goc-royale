@@ -93,7 +93,10 @@ interface Rig {
   head: Group;
   armL: Group;
   armR: Group;
-  extra?: Group;
+  /** Companion beside the fighter (Ethan's note, Rosalie's red panda). */
+  companion?: { group: Group; anchor: [number, number, number]; float: boolean };
+  /** Model height at rest; name plates sit above it. */
+  top: number;
   ring: Mesh;
   block?: Mesh;
   blockHeight: number;
@@ -292,12 +295,13 @@ export function createMenuScene(
     armR.position.set(SHOULDER[0], SHOULDER[1], SHOULDER[2]);
     addMesh(armR, parts.armR);
     body.add(head, armL, armR);
-    let extra: Group | undefined;
-    if (parts.extra) {
-      extra = new Group();
-      addMesh(extra, parts.extra);
-      extra.position.set(0.5, 1.6, 0.05);
-      root.add(extra);
+    let companion: Rig["companion"];
+    if (parts.companion) {
+      const group = new Group();
+      addMesh(group, parts.companion.geometry);
+      group.position.set(...parts.companion.anchor);
+      root.add(group);
+      companion = { group, anchor: parts.companion.anchor, float: parts.companion.float };
     }
     const shadow = new Mesh(shadowGeo, shadowMat);
     shadow.rotation.x = -Math.PI / 2;
@@ -318,7 +322,8 @@ export function createMenuScene(
       head,
       armL,
       armR,
-      extra,
+      companion,
+      top: Math.max(FIGHTER_HEIGHT, parts.top),
       ring,
       blockHeight: 0,
       slot,
@@ -544,15 +549,24 @@ export function createMenuScene(
       rig.body.scale.set(1 + squash * 0.5 - breathe * 0.5, (rig.pose === "sad" ? 0.97 : 1) - squash + breathe, 1 + squash * 0.5);
       rig.head.rotation.z = reduced ? 0 : Math.sin(t * 1.3 + rig.phase) * 0.06;
       applyArms(rig, 1 - Math.exp(-dt * 10));
-      if (rig.extra) {
-        rig.extra.position.y = 1.62 + (reduced ? 0 : Math.sin(t * 2 + rig.phase) * 0.07) + rig.body.position.y;
-        rig.extra.rotation.z = reduced ? 0 : Math.sin(t * 1.5 + rig.phase) * 0.25;
+      if (rig.companion) {
+        const c = rig.companion;
+        if (c.float) {
+          // Floating companions bob and sway above the shoulder.
+          c.group.position.y = c.anchor[1] + 0.02 + (reduced ? 0 : Math.sin(t * 2 + rig.phase) * 0.07) + rig.body.position.y;
+          c.group.rotation.z = reduced ? 0 : Math.sin(t * 1.5 + rig.phase) * 0.25;
+        } else {
+          // Grounded companions hop along with their fighter and breathe.
+          c.group.position.y = c.anchor[1] + Math.max(0, rig.body.position.y);
+          c.group.scale.y = 1 + (reduced ? 0 : Math.sin(t * 3.1 + rig.phase) * 0.03);
+          c.group.rotation.y = reduced ? 0 : Math.sin(t * 0.9 + rig.phase) * 0.18;
+        }
       }
       // Name plates: transform-only writes, skipped when the plate did not move.
       if (rig.label) {
         head.set(
           rig.root.position.x,
-          rig.root.position.y + (rig.body.position.y + FIGHTER_HEIGHT + 0.12) * rig.root.scale.x,
+          rig.root.position.y + (rig.body.position.y + rig.top + 0.12) * rig.root.scale.x,
           rig.root.position.z,
         );
         head.project(camera);

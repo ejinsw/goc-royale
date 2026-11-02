@@ -28,7 +28,7 @@ const engine = (
 };
 const fire = (e: Engine, id = "p0", aim = { x: 1, y: 0 }) =>
   e.setInput(id, { move: { x: 0, y: 0 }, aim, attack: true });
-test("roster contains the seven fighters with canonical HP", () => {
+test("roster: the seven pilot fighters keep their HP, then the other ministry leaders", () => {
   assert.deepEqual(IDS, [
     "brandon",
     "daniel",
@@ -37,11 +37,45 @@ test("roster contains the seven fighters with canonical HP", () => {
     "josh",
     "elijah",
     "ethan",
+    "dylan",
+    "isaac",
+    "tovya",
+    "rosalie",
+    "joelle",
+    "susannah",
+    "joyce",
+    "miriam",
+    "jemuel",
+    "russell",
   ]);
   assert.deepEqual(
-    IDS.map((i) => FIGHTERS[i].hp),
+    IDS.slice(0, 7).map((i) => FIGHTERS[i].hp),
     [5700, 8200, 4600, 5900, 5600, 5100, 5400],
   );
+  // Every ministry team with a named leader is represented.
+  assert.deepEqual(
+    [...new Set(IDS.map((i) => FIGHTERS[i].team))].sort(),
+    [
+      "Admin",
+      "Care",
+      "Finance",
+      "Fisherman's",
+      "Homeless Outreach",
+      "Media",
+      "Music",
+      "Prayer",
+      "Rides",
+      "Sound",
+      "Web",
+      "Welcome & Follow-Up",
+    ],
+  );
+  // Basic attacks are projectiles or cones; cones never need a speed.
+  for (const id of IDS) {
+    const f = FIGHTERS[id];
+    assert.ok(f.hp > 0 && f.ammo > 0 && f.reload > 0 && f.range > 0, id);
+    if (f.abilities.attack.kind === "shot") assert.ok(f.projectileSpeed > 0, id);
+  }
 });
 test("countdown locks movement and attacks", () => {
   const e = new Engine("showdown", members());
@@ -806,4 +840,328 @@ test("timeline restarts when the client clock jumps back (reload)", () => {
   e.step();
   e.step();
   assert.ok(p.pos.y > y, "new timeline is applied");
+});
+
+// --- Ministry leaders beyond the pilot seven -------------------------------
+/** A started match with p0 as `fighter`, p1 (and p3.. in broomball) as rivals. */
+const duel = (fighter: FighterId, mode: "showdown" | "broomball" = "showdown") => {
+  const e = engine(fighter, mode);
+  e.state.walls = [];
+  return e;
+};
+const charged = (p: { charge: number }) => (p.charge = 5000);
+
+test("every fighter can attack and Super in both modes without breaking the match", () => {
+  for (const mode of ["showdown", "broomball"] as const)
+    for (const id of IDS) {
+      const e = engine(id, mode);
+      const [p] = e.playerList;
+      const rival = e.playerList[mode === "showdown" ? 1 : 3];
+      p.pos = { x: 10, y: mode === "showdown" ? 12 : 10 };
+      rival.pos = { x: 13, y: p.pos.y };
+      // A rewind needs two seconds of history before it can resolve.
+      advance(e, 2.2);
+      charged(p);
+      e.setInput(p.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, attack: true, super: true });
+      advance(e, 3);
+      assert.ok(p.charge < 5000, `${id} ${mode} Super was not accepted`);
+      assert.ok(rival.hp < FIGHTERS[rival.fighter].hp || !rival.alive, `${id} ${mode} dealt no damage`);
+      // The wire copy must survive JSON: no Infinity or NaN anywhere.
+      const snap = JSON.stringify(e.snapshot(p.id));
+      assert.ok(!/null|NaN|Infinity/.test(snap.replace(/"(carrier|last|passer|scorer|winner)":null/g, "")), `${id} ${mode} non-finite wire value`);
+      for (const q of e.state.projectiles) assert.ok(Number.isFinite(q.pos.x), id);
+    }
+});
+
+test("Dylan's line cast reels a rival closer without dropping the ball", () => {
+  const e = duel("dylan", "broomball");
+  const [p, , , t] = e.playerList;
+  p.pos = { x: 10, y: 10 };
+  t.pos = { x: 15, y: 10 };
+  e.state.ball.carrier = t.id;
+  e.state.ball.state = "carried";
+  fire(e);
+  advance(e, 0.4);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 720);
+  assert.ok(Math.abs(t.pos.x - 13.8) < 0.05, `reeled to ${t.pos.x}`);
+  assert.equal(e.state.ball.carrier, t.id, "a tug is not a knockback");
+});
+
+test("Dylan's net lands after a visible delay, drags rivals in and stuns them", () => {
+  const e = duel("dylan");
+  const [p, t] = e.playerList;
+  p.pos = { x: 10, y: 12 };
+  t.pos = { x: 16, y: 12 };
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  assert.ok(e.state.effects.some((x) => x.kind === "marker"));
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp, "nothing lands before the delay");
+  advance(e, 0.45);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 500);
+  assert.ok(Math.abs(t.pos.x - 15) < 0.05, `pulled to ${t.pos.x}`);
+  assert.ok(t.stunUntil > e.state.time);
+});
+
+test("Isaac's stapler fires three staples per ammo; his barrier blocks enemy shots only", () => {
+  const e = duel("isaac", "broomball");
+  const [p, ally, , rival] = e.playerList;
+  p.pos = { x: 10, y: 10 };
+  rival.pos = { x: 14, y: 10 };
+  ally.pos = { x: 4, y: 3 };
+  fire(e);
+  e.step();
+  assert.equal(p.ammo, 2, "one ammo for the whole burst");
+  advance(e, 0.6);
+  assert.equal(rival.hp, FIGHTERS[rival.fighter].hp - 990);
+  // Barrier 1.8 ahead, facing right; a rival shooting left hits it.
+  p.aim = { x: 1, y: 0 };
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  const wall = e.state.areas.find((a) => a.kind === "barrier")!;
+  assert.ok(wall);
+  rival.fighter = "rich";
+  rival.pos = { x: 16, y: 10 };
+  const before = p.hp;
+  fire(e, rival.id, { x: -1, y: 0 });
+  advance(e, 0.5);
+  assert.equal(p.hp, before, "the barrier absorbed the shot");
+  assert.equal(wall.hp, 3000 - 1350);
+  // Isaac's own staples pass through his barrier.
+  rival.hp = FIGHTERS.rich.hp;
+  p.ammo = 3;
+  fire(e);
+  advance(e, 0.6);
+  assert.ok(rival.hp < FIGHTERS.rich.hp, "own shots cross the barrier");
+});
+
+test("Tovya's ladle hits everyone in a wide arc; the leap clears cover and lands a slam", () => {
+  const e = engine("tovya", "broomball");
+  const [p, , , a, b] = e.playerList;
+  p.pos = { x: 10, y: 10 };
+  a.pos = { x: 11.5, y: 8.8 };
+  b.pos = { x: 11.5, y: 11.2 };
+  fire(e);
+  e.step();
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 1050);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 1050);
+  e.state.walls = [{ id: "cover", x: 12, y: 7, w: 1, h: 6 }];
+  a.pos = { x: 16, y: 10 };
+  a.hp = FIGHTERS[a.fighter].hp;
+  p.aim = { x: 1, y: 0 };
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  assert.ok(p.busyUntil > e.state.time, "airborne fighters cannot act");
+  advance(e, 0.6);
+  assert.ok(Math.abs(p.pos.x - 16) < 0.01, `landed at ${p.pos.x}`);
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 1200);
+  assert.ok(a.pos.x > 16.4, "the slam knocks rivals back");
+  assert.equal(p.charge, 0);
+});
+
+test("Rosalie's wave pierces every rival in its path", () => {
+  const e = duel("rosalie", "broomball");
+  const [p, , , a, b] = e.playerList;
+  p.pos = { x: 10, y: 10 };
+  a.pos = { x: 12, y: 10 };
+  b.pos = { x: 14, y: 10.3 };
+  fire(e);
+  advance(e, 0.6);
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 800);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 800);
+});
+
+test("Rosalie's red panda chases a rival, can be destroyed, and leaves with her", () => {
+  const e = duel("rosalie");
+  const [p, t] = e.playerList;
+  p.pos = { x: 6, y: 12 };
+  t.pos = { x: 14, y: 12 };
+  p.aim = { x: 1, y: 0 };
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  const panda = e.state.areas.find((a) => a.kind === "panda")!;
+  assert.ok(panda, "the panda is out");
+  advance(e, 2.5);
+  assert.ok(distance(panda.pos, t.pos) < 1.3, "it walked to the rival");
+  assert.ok(t.hp < FIGHTERS[t.fighter].hp, "and swiped");
+  assert.equal(p.charge, 0, "panda damage is Super damage: no charge");
+  // A second panda replaces the first.
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  assert.equal(e.state.areas.filter((a) => a.kind === "panda").length, 1);
+  // Shots wear it down.
+  const next = e.state.areas.find((a) => a.kind === "panda")!;
+  t.fighter = "rich";
+  t.pos = { x: next.pos.x + 4, y: next.pos.y };
+  next.hp = 1000;
+  fire(e, t.id, { x: -1, y: 0 });
+  advance(e, 0.3);
+  assert.equal(e.state.areas.some((a) => a.kind === "panda"), false, "destroyed");
+  // Bound: it disappears when Rosalie is eliminated.
+  charged(p);
+  e.playerList[0].pos = { x: 6, y: 12 };
+  assert.ok(e.activateSuper(p));
+  e.damage(p, 99999, t);
+  assert.equal(e.state.areas.some((a) => a.kind === "panda"), false);
+});
+
+test("Joelle's throw comes back and hits on both legs", () => {
+  const e = duel("joelle");
+  const [p, t] = e.playerList;
+  p.pos = { x: 10, y: 12 };
+  t.pos = { x: 13, y: 12 };
+  fire(e);
+  advance(e, 1.6);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 1120);
+  assert.equal(e.state.projectiles.length, 0, "caught on the way home");
+});
+
+test("Joelle's Super swaps places with the first rival hit and stuns them", () => {
+  const e = duel("joelle", "broomball");
+  const [p, , , t] = e.playerList;
+  p.pos = { x: 10, y: 10 };
+  t.pos = { x: 15, y: 10 };
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  advance(e, 0.4);
+  assert.ok(Math.abs(p.pos.x - 15) < 0.01 && Math.abs(t.pos.x - 10) < 0.01);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 500);
+  assert.ok(t.stunUntil > e.state.time);
+});
+
+test("Susannah's post chains to a second rival; her lob flies over cover", () => {
+  const e = duel("susannah", "broomball");
+  const [p, , , a, b] = e.playerList;
+  p.pos = { x: 10, y: 10 };
+  a.pos = { x: 13, y: 10 };
+  b.pos = { x: 15, y: 11 };
+  fire(e);
+  advance(e, 0.4);
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 720);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 450);
+  assert.equal(p.charge, 1170);
+  e.state.walls = [{ id: "cover", x: 12, y: 6, w: 1, h: 8 }];
+  b.pos = { x: 16, y: 10 };
+  b.hp = FIGHTERS[b.fighter].hp;
+  p.aim = { x: 1, y: 0 };
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  advance(e, 0.7);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 1300);
+});
+
+test("Joyce's note curves into a rival; her Super heals the whole team and protects it", () => {
+  const e = duel("joyce", "broomball");
+  const [p, ally, far, rival] = e.playerList;
+  p.pos = { x: 10, y: 10 };
+  rival.pos = { x: 15, y: 12 };
+  fire(e, p.id, { x: 1, y: 0 });
+  advance(e, 0.8);
+  assert.equal(rival.hp, FIGHTERS[rival.fighter].hp - 700, "homed in from a straight-ahead aim");
+  ally.pos = { x: 30, y: 2 };
+  ally.hp -= 2500;
+  far.hp -= 600;
+  p.hp -= 1000;
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  assert.equal(ally.hp, FIGHTERS[ally.fighter].hp - 700, "any distance");
+  assert.equal(far.hp, FIGHTERS[far.fighter].hp);
+  assert.equal(p.hp, FIGHTERS.joyce.hp);
+  assert.ok(ally.protectedUntil > e.state.time && p.protectedUntil > e.state.time);
+  assert.equal(e.damage(ally, 500, rival), false);
+});
+
+test("Miriam's dove slows by the strongest slow only; Be Still stuns around her", () => {
+  const e = duel("miriam");
+  const [p, t] = e.playerList;
+  p.pos = { x: 10, y: 12 };
+  t.pos = { x: 13, y: 12 };
+  fire(e);
+  advance(e, 0.4);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 680);
+  assert.equal(t.slow, 0.3);
+  advance(e, 1.5);
+  assert.equal(t.slow, 0, "the slow wears off");
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  assert.ok(t.stunUntil > e.state.time + 1);
+});
+
+test("Jemuel's ring hits behind him too; his covering shield absorbs damage first", () => {
+  const e = engine("jemuel", "broomball");
+  const [p, ally, , a, b] = e.playerList;
+  p.pos = { x: 10, y: 10 };
+  a.pos = { x: 8, y: 10 };
+  b.pos = { x: 12, y: 10 };
+  fire(e);
+  e.step();
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 900);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 900);
+  ally.pos = { x: 11, y: 11 };
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  assert.equal(ally.shield, 2000);
+  assert.equal(p.shield, 2000);
+  e.damage(ally, 2500, a);
+  assert.equal(ally.shield, 0);
+  assert.equal(ally.hp, FIGHTERS[ally.fighter].hp - 500);
+  assert.equal(a.stats.damage, 2500, "absorbed damage still counts as dealt");
+  advance(e, 6.1);
+  assert.equal(p.shield, 0, "the shield expires");
+});
+
+test("Russell's coins refund health; Budget Cuts empties rivals' ammo", () => {
+  const e = duel("russell");
+  const [p, t] = e.playerList;
+  p.pos = { x: 10, y: 12 };
+  t.pos = { x: 13, y: 12 };
+  p.hp -= 1000;
+  fire(e);
+  advance(e, 0.3);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 760);
+  assert.equal(p.hp, FIGHTERS.russell.hp - 1000 + 266);
+  t.ammo = 3;
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  assert.equal(t.ammo, 0);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 760 - 700);
+});
+
+test("Aura Pulse still knocks out a shielded rival", () => {
+  const e = engine("ethan");
+  const [p, t] = e.playerList;
+  p.pos = { x: 10, y: 12 };
+  t.pos = { x: 12, y: 12 };
+  t.shield = 2000;
+  t.shieldUntil = e.state.time + 5;
+  charged(p);
+  e.activateSuper(p);
+  assert.equal(t.alive, false);
+});
+
+test("a thrown Super behind cover is cut short; a zone behind cover keeps the charge", () => {
+  const e = duel("dylan");
+  const [p, t] = e.playerList;
+  p.pos = { x: 10, y: 12 };
+  t.pos = { x: 15, y: 12 };
+  e.state.walls = [{ id: "cover", x: 11, y: 10, w: 0.5, h: 4 }];
+  charged(p);
+  assert.ok(e.activateSuper(p));
+  advance(e, 0.5);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp, "the net hit the cover instead");
+  const z = duel("rosalie");
+  const r = z.playerList[0];
+  r.pos = { x: 10, y: 12 };
+  z.state.walls = [{ id: "cover", x: 11, y: 10, w: 0.5, h: 4 }];
+  charged(r);
+  assert.equal(z.activateSuper(r), false);
+  assert.equal(r.charge, 5000);
+});
+
+test("rooms offer every fighter as a default pick", () => {
+  const r = new Room("ABCDEF", () => {});
+  for (let i = 0; i < 10; i++) r.join("P" + i);
+  assert.deepEqual(
+    r.lobby.members.map((m) => m.fighter),
+    IDS.slice(0, 10),
+  );
 });

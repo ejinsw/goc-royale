@@ -67,7 +67,9 @@ export class Room {
     const member: Member = {
       id,
       name: clean,
-      fighter: IDS[i % 6],
+      // Spread first picks across the whole roster (was IDS[i % 6], which
+      // never offered the seventh or any later fighter).
+      fighter: IDS[i % IDS.length],
       team: i < 3 ? 0 : 1,
       ready: false,
       connected: true,

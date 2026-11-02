@@ -1,6 +1,6 @@
 # GOC Royale
 
-A browser-hosted arena brawler for private groups. React menus, Phaser gameplay, TypeScript simulation, and PeerJS/WebRTC data channels. **No application server, Socket.IO, accounts, or database.** The seven fighters are Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, and Ethan Ha (Music). Two modes: Showdown FFA (up to 10 players) and Broomball (up to 6). Neither mode enforces a minimum player count.
+A browser-hosted arena brawler for private groups. React menus, Phaser gameplay, TypeScript simulation, and PeerJS/WebRTC data channels. **No application server, Socket.IO, accounts, or database.** Seventeen fighters, one per GOC ministry team leader: the pilot seven (Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, Ethan Ha) plus Dylan, Isaac, Tovya, Rosalie, Joelle, Susannah, Joyce, Miriam, Jemuel and Russell (see docs/MINISTRY-TEAMS-BRIEF.md). Two modes: Showdown FFA (up to 10 players) and Broomball (up to 6). Neither mode enforces a minimum player count.
 
 ## Run it
 
@@ -44,7 +44,7 @@ Guest reconnect identity uses a private random token in sessionStorage, separate
 
 ## Implementation layout
 
-- `shared/definitions.ts`: seven fighters, balance values, map geometry, math.
+- `shared/definitions.ts`: fighters and their abilities as data, balance values, map geometry, math.
 - `shared/types.ts`: public room, match, and message schemas.
 - `shared/engine.ts`: authority over movement, collision, damage, abilities, hazards, ball physics, scoring, results.
 - `shared/room.ts`: lobby validation, membership, reconnect sessions, match lifecycle.
@@ -73,6 +73,6 @@ The next 3D assets are planned production work. Existing studies and portraits d
 
 Host authority is appropriate for a private, trusted friend group: the host can alter their own browser, see hidden state, and cheat. A browser-only build cannot provide independent anti-cheat. Private room codes are invitations, not authentication or confidentiality guarantees. WebRTC data channels are encrypted in transit; peers may learn one another's network addresses through ICE. No analytics, microphone, or camera are used.
 
-There is no public matchmaking, progression, gadgets, extra fighters, or additional mode. The placeholders and synthesized music/effects are original; fonts are self-hosted via Fontsource with included font licenses. See `docs/STATUS.md` before calling this a completed pilot release.
+There is no public matchmaking, progression, gadgets, or additional mode. The placeholders and synthesized music/effects are original; fonts are self-hosted via Fontsource with included font licenses. See `docs/STATUS.md` before calling this a completed pilot release.
 
 Latest roster update: Ethan uses Rizz (two 420-damage notes) and Aura Pulse (instant knockout of enemies within 4 units, blocked by walls and spawn protection). Brandon's current 2D portrait uses blue/gold; the next 3D specification uses a beige jacket with unchanged mechanics. The camera follows your fighter at 1.65× arena-fit scale, or the selected survivor when spectating. Movement changes and actions send on the next rendered frame; steady inputs remain 30 Hz. Actual Internet delay is not eliminated. (Networking was since reworked; see the paragraph above and docs/STATUS.md.)

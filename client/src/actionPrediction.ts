@@ -27,7 +27,9 @@ export class ActionPredictor {
       !paused &&
       !!self?.alive &&
       match.phase === "playing" &&
-      match.time >= self.stunUntil
+      match.time >= self.stunUntil &&
+      // Mid-leap: the authority ignores attacks until the fighter lands.
+      match.time >= self.busyUntil
     );
   }
 
