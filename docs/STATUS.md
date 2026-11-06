@@ -477,3 +477,92 @@ Brandon's GLB beside the procedural models (their styles differ); a
 reduced-motion visual review; context-loss recovery on a real GPU reset. The
 procedural fighters are placeholders, not §7.1-complete assets: their clips
 are code, not authored animation, and none has an asset manifest.
+
+## November 2, 2026 — all ministry leaders playable (branch `feature/ministry-teams`)
+
+Worktree: `~/Documents/GitHub/goc-royale-wt/feature-ministry-teams`. User
+request: every named ministry team leader becomes a fighter, every 3D model
+gets a distinctive feature, and future model changes must be easy. Details,
+kits and open items are in `docs/MINISTRY-TEAMS-BRIEF.md`.
+
+**Deliberate scope and rules change.** The roster grows from 7 to 17 (Dylan,
+Isaac, Tovya, Rosalie, Joelle, Susannah, Joyce, Miriam, Jemuel, Russell).
+`docs/PILOT-SPEC.txt` keeps its seven-fighter text as a historical document;
+this entry records the deviation. Video Resources has no leader and no fighter.
+
+- Abilities are now data in `shared/definitions.ts`, and `shared/engine.ts`
+  resolves them by kind with no fighter-id branches. The pilot seven were
+  converted to the same data; every pre-existing test passes unmodified.
+- New shared mechanics: shields (absorb first, still count as dealt), timed
+  slows (strongest wins), a leap that blocks input while airborne, companions
+  bound to their owner, a barrier that stops enemy shots only, burst attacks,
+  piercing, returning, homing and chaining shots, and Super shots.
+- Overlapping stuns from the new Supers keep the longer stun.
+- Fix: `shared/room.ts` seeded first picks with `IDS[i % 6]` and never offered
+  the seventh fighter; it now uses the whole roster.
+- 3D menu looks: one `LOOKS` row per fighter built from named feature, prop,
+  hair and companion tables (`client/src/ui/scene/fighterModels.ts`). Ethan's
+  hard-coded floating note became a generic companion slot.
+- Ten new placeholder SVG portraits mirror the 3D looks. The arena draws
+  projectiles from a per-fighter `SHOT_LOOKS` table, and cones, frames and
+  bursts from the owner's data.
+
+Verified: `npm run typecheck`, `npm test` (104 pass, 19 new), `npm run build`.
+In headless Chromium, the real menu scene rendered all 17 fighters, and the
+real Phaser arena ran every new kit's attack and Super with no page errors.
+The picker was checked at 390×844, 844×390 and 1280×720 with no horizontal
+overflow, and Done stays visible on a portrait phone. Scripted 40 s Node
+matches with forced Supers, delta-encoded at 18 Hz: 10-player Showdown of the
+new kits peaks at 32 KB/s per viewer and 2.6 Mbps host outbound, the same as
+the pilot roster. Authority step p95 is 0.09 ms (pilot 0.13 ms). Menu models
+are 5.9k–10.5k triangles each; the pilot seven grew 0.4k–1.3k each.
+
+Not verified: two-client networked matches and human playtests of the new
+kits (balance is first-pass), physical devices, frame time with the larger
+menu models, reduced-motion review of the new effects, and the new synthesized
+cues by ear. None of the ten has a likeness reference.
+
+## November 6, 2026 — integrated 3D arena and 17-fighter roster
+
+Branches `feature/arena-3d` and `feature/ministry-teams` were combined on
+`codex/integrate-3d-arena-roster`. The single Three.js arena remains the live
+match renderer, while the data-driven 17-fighter rules remain authoritative in
+`shared/`. No collision, damage, timing, scoring, or network rule was moved
+into presentation code.
+
+User decision: Brandon does not use any of the separately iterated GLB studies
+in the live game. Brandon now takes the same procedural `LOOKS` → rigid arena
+rig path as the other 16 fighters. The GLB loader and validation path remain
+available for future approved assets, but `GLB_ASSETS` has no live entries.
+A regression test asserts this selection and builds all 17 arena rigs.
+
+Merge integration added Three.js presentation for the new authoritative state:
+distinct projectile geometry for every shot fighter; panda and barrier area
+models with health bars; slow and shield markers; leap height that never alters
+the authoritative ground position; data-driven cone range/angle; and burst,
+marker, chain, swap, panda, and leap effects. The local predictor now stops
+movement while `busyUntil` blocks input. These are presentation changes only.
+
+Verification:
+
+- `npm run typecheck` passes.
+- `npm test` passes 105/105, including the new all-arena-rigs and Brandon asset
+  selection regression.
+- `npm run build` passes. The lazy procedural fighter-model chunk is 627.91 kB
+  minified / 157.94 kB gzip; Vite reports its >500 kB warning. This is tracked
+  as an optimization item, not hidden as a passing budget measurement.
+- `npm run netsim` passes every standard case. Correction p95 is 0.123–0.153
+  world units; all scenarios present 10/10 actions once, including 100 ms RTT
+  with 1% loss, 200 ms RTT with 3% loss, and the 500 ms interruption.
+- Local browser QA at 1280×720 showed all 17 picker entries and the intended
+  procedural Brandon (glasses, nametag, clipboard). A Brandon Showdown rendered
+  at p50 16.7 / p95 17.5 ms, 13 calls, and 21,408 triangles. A live Rosalie
+  Broomball match rendered at p50 16.7 / p95 17.5 ms, about 60 FPS, 9 calls,
+  and 24,368 triangles. Browser logs contained no warnings or errors.
+
+Still not verified after the merge: physical iOS/Android devices, an
+eight-fighter stress scene covering the expanded roster and effects, a complete
+match/rematch heap trend, real-GPU context-loss recovery, reduced-motion review,
+or human balance/game-feel testing of the ten new kits. The procedural models
+and code-authored clips remain placeholders rather than approved production
+assets with manifests.

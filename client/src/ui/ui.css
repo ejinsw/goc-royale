@@ -921,8 +921,16 @@ input {
 }
 
 /* Fighter picker contents. */
+/*
+ * One row by default, so the fighter card and Done stay in view on short
+ * sheets; two rows on a tall landscape side sheet, where 17 fighters then
+ * span 9 columns instead of 17.
+ */
 .picker-strip {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: auto;
+  grid-auto-columns: 84px;
   gap: 8px;
   padding: 4px 2px 10px;
   overflow-x: auto;
@@ -934,6 +942,11 @@ input {
   padding: 6px 6px 8px;
   scroll-snap-align: start;
   --fs: 14px;
+}
+@media (orientation: landscape) and (min-height: 600px) {
+  .picker-strip {
+    grid-template-rows: repeat(2, auto);
+  }
 }
 .picker-card {
   display: flex;

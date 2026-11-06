@@ -350,13 +350,13 @@ preferred conventions:
   skipped rather than replayed, and a stalled fighter visibly holds and then
   catches up at up to 2x for other viewers.
 - Local attack and Super release cues are predicted (sound, muzzle flash,
-  Josh cone, Super anticipation ring), but projectiles themselves are not:
+  data-driven cone, Super anticipation ring), but projectiles themselves are not:
   the projectile appears when the authoritative snapshot arrives, about one
   RTT after the predicted flash. Predicted cues are not yet animation clips.
-- The arena is a single Three.js renderer (`client/src/arena/`, branch
-  `feature/arena-3d`). Six fighters use procedural placeholder models whose
-  clip set is authored as code, not as validated animation assets with
-  manifests. Only Brandon's low-poly GLB passes import validation. Release
+- The arena is a single Three.js renderer (`client/src/arena/`). All 17
+  fighters use procedural placeholder models whose clip set is authored as
+  code, not as validated animation assets with manifests. The older Brandon
+  GLB studies are deliberately not selected by the live runtime. Release
   timing is still taken from the authoritative event, not from clip markers.
 - Respawn presentation is inferred from the alive flag because the engine
   does not emit `fighter_respawned`.

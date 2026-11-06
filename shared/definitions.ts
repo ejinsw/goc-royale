@@ -5,9 +5,185 @@ export type FighterId =
   | "samuel"
   | "josh"
   | "elijah"
-  | "ethan";
+  | "ethan"
+  | "dylan"
+  | "isaac"
+  | "tovya"
+  | "rosalie"
+  | "joelle"
+  | "susannah"
+  | "joyce"
+  | "miriam"
+  | "jemuel"
+  | "russell";
 export type Mode = "showdown" | "broomball";
 export type Vec = { x: number; y: number };
+
+/**
+ * Fighter abilities are data (pilot spec §14.2, docs/CODE-PRACTICES.md §1.3).
+ * shared/engine.ts has one resolver per `kind` and never branches on a
+ * fighter id, so a new fighter is a new row in FIGHTERS that composes the
+ * existing kinds and options. Add an option or a kind only when no
+ * combination of the existing ones expresses the ability.
+ *
+ * A basic attack's damage, range and projectile speed are the fighter's
+ * top-level `damage`, `range` and `projectileSpeed`.
+ */
+export type AttackSpec = ShotSpec | ConeSpec;
+
+/** Projectiles: one per `spread` angle, optionally fired as a timed burst. */
+export interface ShotSpec {
+  kind: "shot";
+  /** Angles (radians) off the aim, one projectile each. Default [0]. */
+  spread?: number[];
+  /** Fire the volley `count` times per ammo, `gap` seconds apart. */
+  burst?: { count: number; gap: number };
+  /** Hit radius beyond the target's body. Default 0.13. */
+  width?: number;
+  /** Wall ricochets before the projectile breaks. */
+  bounces?: number;
+  /** Passes through rivals, hitting each one once. */
+  pierce?: boolean;
+  /** Flies back after full range and can hit everyone again on the way. */
+  returns?: boolean;
+  /** Turns toward the nearest visible rival ahead, up to this rate (rad/s). */
+  homing?: number;
+  /** Seconds a hit rival stays visible inside bushes. */
+  reveal?: number;
+  /** Heals an injured teammate it touches by this much. */
+  healAllies?: number;
+  /** Bonus damage when the hit lands past `from` of the full range. */
+  farBonus?: { from: number; damage: number };
+  /** After a hit, jumps to the nearest other rival within `range`. */
+  chain?: { range: number; damage: number };
+  /** Drags a hit rival this far toward the shooter. Not a knockback. */
+  tug?: number;
+  /** Slows a hit rival (the strongest slow applies). */
+  slow?: { amount: number; duration: number };
+  /** Share of the damage dealt returned to the shooter as health. */
+  lifesteal?: number;
+}
+
+/** An instant cone (or full ring) from the fighter; hits each rival once. */
+export interface ConeSpec {
+  kind: "cone";
+  /** Half the cone angle in radians; Math.PI is a full ring. */
+  halfAngle: number;
+}
+
+/**
+ * A circle of effects. Effects on rivals need line of sight from the
+ * center; effects on teammates (the caster included) do not.
+ */
+export interface BurstSpec {
+  radius: number;
+  /** "knockout" removes all remaining health, shield included. */
+  damage?: number | "knockout";
+  stun?: number;
+  /** Push rivals this far away from the center. */
+  knock?: number;
+  /** Drag rivals to the center instead of pushing them out. */
+  pull?: boolean;
+  /** Empty rivals' ammo; they reload as normal. */
+  drain?: boolean;
+  /** Teammates recover this much health. */
+  heal?: number;
+  /** Teammates get a shield that absorbs damage first. */
+  shield?: { amount: number; duration: number };
+  /** Teammates take no damage for this long. */
+  protect?: number;
+}
+
+export type SuperSpec =
+  /** Place an area object `distance` units along the aim (see AREAS). */
+  | { kind: "zone"; area: AreaKind; distance: number }
+  /** A rectangle along the aim, after an optional visible windup. */
+  | {
+      kind: "frame";
+      windup: number;
+      range: number;
+      width: number;
+      damage: number;
+      stun: number;
+      knock: number;
+      effect: "photo" | "sound";
+    }
+  /** Wind up, then charge along the aim, hitting each rival once. */
+  | {
+      kind: "charge";
+      windup: number;
+      distance: number;
+      speed: number;
+      damage: number;
+      knock: number;
+    }
+  /** Return to the position from `seconds` ago and leave a blast behind. */
+  | { kind: "rewind"; seconds: number; heal: number; blast: BurstSpec }
+  /**
+   * A burst on the caster (`at` 0) or thrown `at` units along the aim. A
+   * thrown burst lands after `delay` with a visible marker. It stops at
+   * cover unless `overWalls` (a lob).
+   */
+  | ({
+      kind: "burst";
+      at: number;
+      delay?: number;
+      overWalls?: boolean;
+      effect?: "aura";
+    } & BurstSpec)
+  /** Jump `distance` along the aim over cover, landing with a burst. */
+  | { kind: "leap"; distance: number; air: number; landing: BurstSpec }
+  /** A Super projectile; `swap` trades places with the rival it hits. */
+  | {
+      kind: "shot";
+      speed: number;
+      range: number;
+      damage: number;
+      width: number;
+      swap?: boolean;
+      stun?: number;
+    };
+
+/** Area objects a Super can place: zones, stations, companions, walls. */
+export type AreaKind = "welcome" | "table" | "panda" | "barrier";
+export interface AreaSpec {
+  /** Effect radius (world units); a barrier's half length. */
+  radius: number;
+  /** Lifetime (s). */
+  duration: number;
+  /** Destructible: enemy shots and cones damage it. */
+  hp?: number;
+  /** How close an enemy shot must pass to hit it. */
+  hitRadius?: number;
+  /** Health per second for the owner's teammates inside the radius. */
+  heal?: number;
+  /** Movement slow for rivals inside the radius. */
+  slow?: number;
+  /** Removed when its owner is eliminated. */
+  bound?: boolean;
+  /**
+   * A companion: walks to the nearest visible rival within `sight` and
+   * deals `damage` every `every` seconds within `reach`. Its damage is Super
+   * damage, so it does not charge the owner's Super.
+   */
+  chase?: { speed: number; sight: number; reach: number; damage: number; every: number };
+  /** A wall across the aim that stops enemy shots, not movement or the ball. */
+  wall?: { thickness: number };
+}
+export const AREAS: Record<AreaKind, AreaSpec> = {
+  welcome: { radius: 3.5, duration: 5, heal: 220, slow: 0.3 },
+  table: { radius: 3, duration: 6, hp: 2000, hitRadius: 0.65, heal: 350 },
+  panda: {
+    radius: 0.7,
+    duration: 12,
+    hp: 3600,
+    hitRadius: 0.75,
+    bound: true,
+    chase: { speed: 5.4, sight: 9, reach: 1.15, damage: 500, every: 0.8 },
+  },
+  barrier: { radius: 2, duration: 6, hp: 3000, wall: { thickness: 0.5 } },
+};
+
 export interface Fighter {
   id: FighterId;
   name: string;
@@ -25,6 +201,8 @@ export interface Fighter {
   color: string;
   description: string;
   superDescription: string;
+  /** How the attack and Super resolve on the authority. */
+  abilities: { attack: AttackSpec; super: SuperSpec };
 }
 export const FIGHTERS: Record<FighterId, Fighter> = {
   brandon: {
@@ -44,6 +222,10 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     color: "#417bc2",
     description: "Throw a nametag. Mark enemies for 4 seconds.",
     superDescription: "A welcoming circle slows enemies and heals allies.",
+    abilities: {
+      attack: { kind: "shot", reveal: 4 },
+      super: { kind: "zone", area: "welcome", distance: 4 },
+    },
   },
   daniel: {
     id: "daniel",
@@ -63,6 +245,17 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "Five keys. One close-range problem.",
     superDescription:
       "Wind up, then charge in a van. Knock enemies aside and break crates.",
+    abilities: {
+      attack: { kind: "shot", spread: [-0.25, -0.125, 0, 0.125, 0.25] },
+      super: {
+        kind: "charge",
+        windup: 0.3,
+        distance: 10,
+        speed: 22,
+        damage: 1400,
+        knock: 2,
+      },
+    },
   },
   rich: {
     id: "rich",
@@ -82,6 +275,19 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "A precision flash with bonus damage at long range.",
     superDescription:
       "Frame the crowd, then stun everyone caught in the photo.",
+    abilities: {
+      attack: { kind: "shot", farBonus: { from: 0.8, damage: 200 } },
+      super: {
+        kind: "frame",
+        windup: 0.35,
+        range: 8,
+        width: 5,
+        damage: 900,
+        stun: 0.75,
+        knock: 0,
+        effect: "photo",
+      },
+    },
   },
   samuel: {
     id: "samuel",
@@ -101,6 +307,10 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "Snacks hurt rivals and heal injured teammates.",
     superDescription:
       "Deploy a destructible snack table that heals nearby allies.",
+    abilities: {
+      attack: { kind: "shot", healAllies: 850 },
+      super: { kind: "zone", area: "table", distance: 4 },
+    },
   },
   josh: {
     id: "josh",
@@ -120,6 +330,19 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "A wide sound cone hits every enemy in its path.",
     superDescription:
       "A huge sound blast pierces enemies and pushes them back.",
+    abilities: {
+      attack: { kind: "cone", halfAngle: Math.PI / 9 },
+      super: {
+        kind: "frame",
+        windup: 0,
+        range: 10,
+        width: 4,
+        damage: 1400,
+        stun: 0,
+        knock: 3,
+        effect: "sound",
+      },
+    },
   },
   elijah: {
     id: "elijah",
@@ -139,6 +362,15 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "A software bug ricochets once off a wall.",
     superDescription:
       "Rewind two seconds, recover up to 2,500 HP, leave an explosive glitch.",
+    abilities: {
+      attack: { kind: "shot", bounces: 1 },
+      super: {
+        kind: "rewind",
+        seconds: 2,
+        heal: 2500,
+        blast: { radius: 3, damage: 1200 },
+      },
+    },
   },
   ethan: {
     id: "ethan",
@@ -158,6 +390,268 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "Strum two notes, each dealing 420 damage.",
     superDescription:
       "Instantly knock out rivals within 4 units. Walls and spawn protection block it.",
+    abilities: {
+      attack: { kind: "shot", spread: [-0.055, 0.055] },
+      super: { kind: "burst", at: 0, radius: 4, damage: "knockout", effect: "aura" },
+    },
+  },
+  dylan: {
+    id: "dylan",
+    name: "Dylan",
+    team: "Fisherman's",
+    role: "Catcher",
+    hp: 6000,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.5,
+    damage: 720,
+    range: 7.5,
+    projectileSpeed: 15,
+    attack: "Line Cast",
+    super: "Fishers of Men",
+    color: "#2a8fd6",
+    description: "Cast a hook that reels rivals a step closer.",
+    superDescription:
+      "Throw a net. Everyone caught is dragged to the middle and stunned.",
+    abilities: {
+      attack: { kind: "shot", tug: 1.2 },
+      super: {
+        kind: "burst",
+        at: 4.5,
+        delay: 0.4,
+        radius: 3,
+        damage: 500,
+        pull: true,
+        stun: 0.8,
+      },
+    },
+  },
+  isaac: {
+    id: "isaac",
+    name: "Isaac",
+    team: "Admin",
+    role: "Defender",
+    hp: 6200,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.5,
+    damage: 330,
+    range: 8,
+    projectileSpeed: 18,
+    attack: "Stapler",
+    super: "Room Setup",
+    color: "#8d6e63",
+    description: "Three staples in a quick burst per shot.",
+    superDescription:
+      "Set up folding tables that block enemy shots for 6 seconds.",
+    abilities: {
+      attack: { kind: "shot", burst: { count: 3, gap: 0.09 } },
+      super: { kind: "zone", area: "barrier", distance: 1.8 },
+    },
+  },
+  tovya: {
+    id: "tovya",
+    name: "Tovya",
+    team: "Homeless Outreach",
+    role: "Brawler",
+    hp: 7600,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.2,
+    damage: 1050,
+    range: 2.6,
+    projectileSpeed: 0,
+    attack: "Ladle Swing",
+    super: "Dinner's Ready!",
+    color: "#9ead2c",
+    description: "A wide close-range swing hits everyone in front.",
+    superDescription: "Leap over cover and slam down, knocking rivals back.",
+    abilities: {
+      attack: { kind: "cone", halfAngle: 0.96 },
+      super: {
+        kind: "leap",
+        distance: 6,
+        air: 0.5,
+        landing: { radius: 2.5, damage: 1200, knock: 1.5 },
+      },
+    },
+  },
+  rosalie: {
+    id: "rosalie",
+    name: "Rosalie",
+    team: "Welcome & Follow-Up",
+    role: "Summoner",
+    hp: 5400,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.4,
+    damage: 800,
+    range: 6.5,
+    projectileSpeed: 13,
+    attack: "Warm Welcome",
+    super: "Follow-Up Panda",
+    color: "#e8553a",
+    description: "A wide wave that passes through every rival in its path.",
+    superDescription: "Throw out a giant red panda that chases rivals down.",
+    abilities: {
+      attack: { kind: "shot", pierce: true, width: 0.35 },
+      super: { kind: "zone", area: "panda", distance: 3 },
+    },
+  },
+  joelle: {
+    id: "joelle",
+    name: "Joelle",
+    team: "Rides",
+    role: "Skirmisher",
+    hp: 5000,
+    speed: 5.8,
+    ammo: 3,
+    reload: 1.4,
+    damage: 560,
+    range: 7,
+    projectileSpeed: 13,
+    attack: "Round Trip",
+    super: "Mix It Up",
+    color: "#ffb300",
+    description: "A throw that flies out and back, hitting on both legs.",
+    superDescription: "Swap places with the first rival hit and stun them.",
+    abilities: {
+      attack: { kind: "shot", pierce: true, returns: true },
+      super: {
+        kind: "shot",
+        speed: 20,
+        range: 9,
+        damage: 500,
+        width: 0.2,
+        swap: true,
+        stun: 0.5,
+      },
+    },
+  },
+  susannah: {
+    id: "susannah",
+    name: "Susannah",
+    team: "Media",
+    role: "Thrower",
+    hp: 4800,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.5,
+    damage: 720,
+    range: 8,
+    projectileSpeed: 14,
+    attack: "Share Post",
+    super: "Merch Drop",
+    color: "#ff6f91",
+    description: "A post that hits a rival, then gets shared to the next one.",
+    superDescription: "Lob a bundle of tees over cover. It bursts on landing.",
+    abilities: {
+      attack: { kind: "shot", chain: { range: 3.5, damage: 450 } },
+      super: {
+        kind: "burst",
+        at: 6,
+        delay: 0.6,
+        overWalls: true,
+        radius: 2.3,
+        damage: 1300,
+        knock: 1.5,
+      },
+    },
+  },
+  joyce: {
+    id: "joyce",
+    name: "Joyce",
+    team: "Care",
+    role: "Support",
+    hp: 5300,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.4,
+    damage: 700,
+    range: 8.5,
+    projectileSpeed: 11,
+    attack: "Care Note",
+    super: "Christmas Grams",
+    color: "#2e9e5b",
+    description: "A paper-plane note that curves toward rivals.",
+    superDescription:
+      "Heal yourself and every teammate 1,800 HP wherever they are, plus 1 s of protection.",
+    abilities: {
+      attack: { kind: "shot", homing: 2.6 },
+      super: { kind: "burst", at: 0, radius: Infinity, heal: 1800, protect: 1 },
+    },
+  },
+  miriam: {
+    id: "miriam",
+    name: "Miriam",
+    team: "Prayer",
+    role: "Peacekeeper",
+    hp: 5200,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.4,
+    damage: 680,
+    range: 8,
+    projectileSpeed: 12,
+    attack: "Peace Dove",
+    super: "Be Still",
+    color: "#7e57c2",
+    description: "A dove that slows rivals by 30% for 1.5 seconds.",
+    superDescription: "Stun every rival around you for 1.25 seconds.",
+    abilities: {
+      attack: { kind: "shot", slow: { amount: 0.3, duration: 1.5 } },
+      super: { kind: "burst", at: 0, radius: 3.5, damage: 400, stun: 1.25 },
+    },
+  },
+  jemuel: {
+    id: "jemuel",
+    name: "Jemuel",
+    team: "Prayer",
+    role: "Guardian",
+    hp: 6800,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.5,
+    damage: 900,
+    range: 2.8,
+    projectileSpeed: 0,
+    attack: "Morning Light",
+    super: "Prayer Covering",
+    color: "#c2185b",
+    description: "A ring of light hits every rival close around you.",
+    superDescription:
+      "Shield yourself and nearby teammates from 2,000 damage for 6 seconds.",
+    abilities: {
+      attack: { kind: "cone", halfAngle: Math.PI },
+      super: {
+        kind: "burst",
+        at: 0,
+        radius: 4.5,
+        shield: { amount: 2000, duration: 6 },
+      },
+    },
+  },
+  russell: {
+    id: "russell",
+    name: "Russell",
+    team: "Finance",
+    role: "Disruptor",
+    hp: 5500,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.4,
+    damage: 760,
+    range: 8,
+    projectileSpeed: 14,
+    attack: "Reimbursement",
+    super: "Budget Cuts",
+    color: "#7cb342",
+    description: "Coins that refund 35% of their damage as health.",
+    superDescription: "Rivals around you take damage and lose all their ammo.",
+    abilities: {
+      attack: { kind: "shot", lifesteal: 0.35 },
+      super: { kind: "burst", at: 0, radius: 4.5, damage: 700, drain: true },
+    },
   },
 };
 export const IDS = Object.keys(FIGHTERS) as FighterId[];

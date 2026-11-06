@@ -44,7 +44,16 @@ export interface MountOptions {
 }
 
 const col = (s: string) => parseInt(s.replace("#", ""), 16);
-const MOVE_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+const MOVE_KEYS = [
+  "KeyW",
+  "KeyA",
+  "KeyS",
+  "KeyD",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+];
 /** Authoritative cues for an action already played as a prediction are skipped within this window (s). */
 const PREDICTION_WINDOW = 1;
 
@@ -97,7 +106,12 @@ class Arena {
     fn: (e: HTMLElementEventMap[K]) => void,
     options?: AddEventListenerOptions,
   ): void;
-  private on(target: Window | HTMLElement, type: string, fn: (e: Event) => void, options?: AddEventListenerOptions) {
+  private on(
+    target: Window | HTMLElement,
+    type: string,
+    fn: (e: Event) => void,
+    options?: AddEventListenerOptions,
+  ) {
     target.addEventListener(type, fn, options);
     this.cleanups.push(() => target.removeEventListener(type, fn, options));
   }
@@ -105,7 +119,12 @@ class Arena {
   private listen() {
     this.on(window, "keydown", (e) => {
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
-      if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
+      if (
+        ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
+          e.code,
+        )
+      )
+        e.preventDefault();
       this.keys.add(e.code);
       if (e.code === "Space" && !e.repeat) this.bridge.input.super = true;
     });
@@ -122,12 +141,23 @@ class Arena {
     });
     // Mouse play: aim follows the cursor; HUD controls sit above the arena
     // and keep their own clicks. Touch is handled by the HUD's stick router.
-    this.on(window, "pointermove", (e) => {
-      if (e.pointerType === "mouse") this.mouse = { x: e.clientX, y: e.clientY };
-    }, { passive: true });
-    this.on(window, "pointerdown", (e) => {
-      if (e.pointerType !== "mouse") this.mouse = null;
-    }, { capture: true, passive: true });
+    this.on(
+      window,
+      "pointermove",
+      (e) => {
+        if (e.pointerType === "mouse")
+          this.mouse = { x: e.clientX, y: e.clientY };
+      },
+      { passive: true },
+    );
+    this.on(
+      window,
+      "pointerdown",
+      (e) => {
+        if (e.pointerType !== "mouse") this.mouse = null;
+      },
+      { capture: true, passive: true },
+    );
     this.on(this.parent, "pointerdown", (e) => {
       if (e.pointerType !== "mouse") return;
       this.mouse = { x: e.clientX, y: e.clientY };
@@ -137,7 +167,11 @@ class Arena {
     this.on(window, "pointerup", (e) => {
       if (e.pointerType !== "mouse" || !this.mouseDown) return;
       this.bridge.input.attack = true;
-      this.bridge.input.power = clamp((performance.now() - this.mouseDown) / 800, 0.35, 1);
+      this.bridge.input.power = clamp(
+        (performance.now() - this.mouseDown) / 800,
+        0.35,
+        1,
+      );
       this.mouseDown = 0;
     });
     this.on(this.parent, "contextmenu", (e) => e.preventDefault());
@@ -145,7 +179,9 @@ class Arena {
 
   private frame = (nowMs: number) => {
     this.raf = requestAnimationFrame(this.frame);
-    const deltaMs = this.lastFrame ? Math.min(250, nowMs - this.lastFrame) : 1000 / 60;
+    const deltaMs = this.lastFrame
+      ? Math.min(250, nowMs - this.lastFrame)
+      : 1000 / 60;
     this.lastFrame = nowMs;
     const s = this.bridge.match;
     if (!s) return;
@@ -171,7 +207,11 @@ class Arena {
     // Re-aim every frame, so the aim keeps pointing at a still cursor while
     // the fighter or camera moves.
     if (this.mouse && this.view && me?.alive && !this.bridge.paused) {
-      const aim = this.view.aim(this.mouse.x, this.mouse.y, this.renderPos.get(me.id) ?? me.pos);
+      const aim = this.view.aim(
+        this.mouse.x,
+        this.mouse.y,
+        this.renderPos.get(me.id) ?? me.pos,
+      );
       if (aim) this.bridge.input.aim = aim;
     }
     // Send this frame's input before drawing so it leaves as early as
@@ -203,7 +243,11 @@ class Arena {
       if (!p.alive) continue;
       let rp = this.renderPos.get(p.id) || { ...p.pos };
       if (p.id === this.bridge.id) {
-        const canPredict = !this.bridge.paused && s.phase === "playing" && s.time >= p.stunUntil;
+        const canPredict =
+          !this.bridge.paused &&
+          s.phase === "playing" &&
+          s.time >= p.stunUntil &&
+          s.time >= p.busyUntil;
         const result = this.predictor.frame(
           s,
           p.pos,
@@ -214,13 +258,17 @@ class Arena {
           canPredict,
         );
         rp = result.pos;
-        if (result.correction !== null) metrics.recordCorrection(result.correction);
+        if (result.correction !== null)
+          metrics.recordCorrection(result.correction);
       } else {
         const blend = Math.min(1, deltaMs / 35);
         rp =
           distance(rp, p.pos) > 3
             ? { ...p.pos }
-            : { x: rp.x + (p.pos.x - rp.x) * blend, y: rp.y + (p.pos.y - rp.y) * blend };
+            : {
+                x: rp.x + (p.pos.x - rp.x) * blend,
+                y: rp.y + (p.pos.y - rp.y) * blend,
+              };
       }
       this.renderPos.set(p.id, rp);
     }
@@ -243,7 +291,9 @@ class Arena {
     this.lastInputKey = inputKey;
     this.lastSend = time;
     const seq = ++this.localSeq;
-    const move = this.bridge.paused ? { x: 0, y: 0 } : { ...this.bridge.input.move };
+    const move = this.bridge.paused
+      ? { x: 0, y: 0 }
+      : { ...this.bridge.input.move };
     // Client clock for the movement timeline; same clock as predictor.frame.
     const t = performance.now() / 1000;
     const payload: Input = this.bridge.paused
@@ -257,7 +307,11 @@ class Arena {
       const kind = this.actions.tryAttack(me, s, t, this.bridge.paused);
       if (kind) this.playPredictedAttack(kind, me, t);
     }
-    if (me && payload.super && this.actions.trySuper(me, s, t, this.bridge.paused)) {
+    if (
+      me &&
+      payload.super &&
+      this.actions.trySuper(me, s, t, this.bridge.paused)
+    ) {
       sound("super_cue");
       this.cue("super", me, 0xf4c95d, t);
       if (this.view?.action(me.id, "super", t)) metrics.anim.predicted++;
@@ -267,8 +321,21 @@ class Arena {
     this.bridge.input.super = false;
   }
 
-  private cue(kind: CueKind, me: Player, color: number, t: number) {
-    this.view?.cue(kind, { ...(this.renderPos.get(me.id) ?? me.pos) }, { ...this.bridge.input.aim }, color, t);
+  private cue(
+    kind: CueKind,
+    me: Player,
+    color: number,
+    t: number,
+    cone?: { range: number; half: number },
+  ) {
+    this.view?.cue(
+      kind,
+      { ...(this.renderPos.get(me.id) ?? me.pos) },
+      { ...this.bridge.input.aim },
+      color,
+      t,
+      cone,
+    );
   }
 
   private playPredictedAttack(kind: PredictedAttack, me: Player, t: number) {
@@ -280,8 +347,18 @@ class Arena {
       return;
     }
     sound("attack", IDS.indexOf(me.fighter));
-    // Josh's basic attack is an instant cone; others fire projectiles.
-    this.cue(me.fighter === "josh" ? "cone" : "attack", me, col(FIGHTERS[me.fighter].color), t);
+    const fighter = FIGHTERS[me.fighter];
+    const attack = fighter.abilities.attack;
+    // Cone attacks are instant; shot attacks create authoritative projectiles.
+    this.cue(
+      attack.kind === "cone" ? "cone" : "attack",
+      me,
+      col(fighter.color),
+      t,
+      attack.kind === "cone"
+        ? { range: fighter.range, half: attack.halfAngle }
+        : undefined,
+    );
     // The animation starts on the input frame and is never restarted by the
     // authoritative attack_started that follows (standard §7.2).
     if (this.view?.action(me.id, "basic_attack", t)) {
@@ -296,18 +373,29 @@ class Arena {
       if (this.consumedEffects.has(e.id)) continue;
       this.consumedEffects.add(e.id);
       // A confirmed local attack already played its cue on the input frame.
-      if (e.kind === "attack" && e.owner === this.bridge.id && this.actions.confirmAttack(now)) {
+      if (
+        e.kind === "attack" &&
+        e.owner === this.bridge.id &&
+        this.actions.confirmAttack(now)
+      ) {
         this.predictedEffectIds.add(e.id);
         continue;
       }
-      sound(e.kind, IDS.indexOf(s.players.find((p) => p.id === e.owner)?.fighter || "brandon"));
+      sound(
+        e.kind,
+        IDS.indexOf(
+          s.players.find((p) => p.id === e.owner)?.fighter || "brandon",
+        ),
+      );
       this.view?.effect(e, s, now);
     }
-    if (this.consumedEffects.size > 3000) this.consumedEffects = new Set(s.effects.map((e) => e.id));
+    if (this.consumedEffects.size > 3000)
+      this.consumedEffects = new Set(s.effects.map((e) => e.id));
     // Attack effects live 0.2 s; keep only ids still present.
     if (this.predictedEffectIds.size > 64)
       for (const id of this.predictedEffectIds)
-        if (!s.effects.some((e) => e.id === id)) this.predictedEffectIds.delete(id);
+        if (!s.effects.some((e) => e.id === id))
+          this.predictedEffectIds.delete(id);
   }
 
   /**
@@ -319,7 +407,10 @@ class Arena {
   private playEvents(s: Match, now: number) {
     if (!s.events?.length) return;
     const self = s.players.find((p) => p.id === this.bridge.id);
-    const focus = (this.bridge.spectate ? s.players.find((p) => p.id === this.bridge.spectate) : self) || null;
+    const focus =
+      (this.bridge.spectate
+        ? s.players.find((p) => p.id === this.bridge.spectate)
+        : self) || null;
     for (const e of s.events) {
       if (this.consumedEvents.has(e.id)) continue;
       this.consumedEvents.add(e.id);
@@ -330,9 +421,11 @@ class Arena {
       const near = focus ? clamp(1 - distance(focus.pos, e.pos) / 14, 0, 1) : 1;
       if (near <= 0) continue;
       const impulse = eventImpulse(e);
-      if (impulse > 0) this.view?.shake(impulse * 90 + 60, impulse * 0.004 * near, now);
+      if (impulse > 0)
+        this.view?.shake(impulse * 90 + 60, impulse * 0.004 * near, now);
     }
-    if (this.consumedEvents.size > 4000) this.consumedEvents = new Set(s.events.map((e) => e.id));
+    if (this.consumedEvents.size > 4000)
+      this.consumedEvents = new Set(s.events.map((e) => e.id));
   }
 
   /** One animation cue per event; local actions already played as predictions are skipped. */
@@ -344,12 +437,17 @@ class Arena {
       metrics.anim.skipped++;
     };
     const start = (clip: "basic_attack" | "super" | "ball_shot") => {
-      if (view.action(e.owner, clip, now) && local) metrics.anim.authoritative++;
+      if (view.action(e.owner, clip, now) && local)
+        metrics.anim.authoritative++;
     };
     switch (e.type) {
       case "attack_started": {
         if (local) {
-          while (this.predictedAttacks.length && now - this.predictedAttacks[0] > PREDICTION_WINDOW) this.predictedAttacks.shift();
+          while (
+            this.predictedAttacks.length &&
+            now - this.predictedAttacks[0] > PREDICTION_WINDOW
+          )
+            this.predictedAttacks.shift();
           if (this.predictedAttacks.length) {
             this.predictedAttacks.shift();
             return skip();
@@ -358,13 +456,16 @@ class Arena {
         return start("basic_attack");
       }
       case "super_started":
-        if (local && now - this.predictedSuperAt < PREDICTION_WINDOW) return skip();
+        if (local && now - this.predictedSuperAt < PREDICTION_WINDOW)
+          return skip();
         return start("super");
       case "ball_released":
         // Only a shot or pass plays the shot clip; drops from stuns and
         // knockbacks already have their own reaction.
-        if (local && now - this.predictedReleaseAt < PREDICTION_WINDOW) return skip();
-        if (s.ball.state === "flight" && s.ball.last === e.owner) start("ball_shot");
+        if (local && now - this.predictedReleaseAt < PREDICTION_WINDOW)
+          return skip();
+        if (s.ball.state === "flight" && s.ball.last === e.owner)
+          start("ball_shot");
         return;
       case "attack_hit": {
         // Zone ticks are tiny; reactions are for real hits.
@@ -380,7 +481,9 @@ class Arena {
         view.action(e.owner, "eliminated", now);
         return;
       case "goal_scored":
-        for (const p of s.players) if (p.alive) view.action(p.id, p.team === e.value ? "victory" : "defeat", now);
+        for (const p of s.players)
+          if (p.alive)
+            view.action(p.id, p.team === e.value ? "victory" : "defeat", now);
         return;
     }
   }
@@ -425,7 +528,11 @@ function eventImpulse(e: GameEvent): number {
   }
 }
 
-export function mountGame(parent: HTMLElement, bridge: GameBridge, opts: MountOptions = {}): ArenaHandle {
+export function mountGame(
+  parent: HTMLElement,
+  bridge: GameBridge,
+  opts: MountOptions = {},
+): ArenaHandle {
   const arena = new Arena(parent, bridge, opts);
   return { destroy: () => arena.destroy() };
 }

@@ -1,4 +1,4 @@
-import type { FighterId, Mode, Vec, Wall } from "./definitions";
+import type { AreaKind, FighterId, Mode, Vec, Wall } from "./definitions";
 export interface Member {
   id: string;
   name: string;
@@ -36,7 +36,16 @@ export interface Player extends Member {
   protectedUntil: number;
   stunUntil: number;
   revealUntil: number;
+  /** Effective movement slow this tick: the strongest active slow. */
   slow: number;
+  /** A timed slow from an attack, active until slowUntil. */
+  slowBy: number;
+  slowUntil: number;
+  /** Damage absorbed before health, until shieldUntil. */
+  shield: number;
+  shieldUntil: number;
+  /** Mid-Super (a leap): no movement input or attacks until then. */
+  busyUntil: number;
   quietSince: number;
   lastAttack: number;
   placement: number;
@@ -71,15 +80,25 @@ export interface Projectile {
   remaining: number;
   traveled: number;
   bounces: number;
+  /** Rivals already hit on this leg (piercing shots). */
+  hit?: string[];
+  /** On the return leg of a returning shot. */
+  back?: boolean;
+  /** Fired by a Super: uses the fighter's Super spec, never charges. */
+  super?: boolean;
 }
 export interface Area {
   id: number;
   owner: string;
-  kind: "welcome" | "table";
+  kind: AreaKind;
   pos: Vec;
   radius: number;
   end: number;
   hp: number;
+  /** Facing: a barrier's normal, a companion's heading. */
+  dir?: Vec;
+  /** A companion's next attack time. */
+  next?: number;
 }
 export interface Effect {
   id: number;
@@ -94,7 +113,19 @@ export interface Effect {
     | "van"
     | "goal"
     | "attack"
-    | "eliminated";
+    | "eliminated"
+    /** A Super burst ring; value = radius. */
+    | "burst"
+    /** Where a thrown Super will land; value = radius. */
+    | "marker"
+    /** A chained hit: from pos along dir for value units. */
+    | "chain"
+    /** Two fighters traded places: from pos along dir for value units. */
+    | "swap"
+    /** A companion's swipe. */
+    | "panda"
+    /** Where a leap lands; value = landing radius. */
+    | "leap";
   pos: Vec;
   dir: Vec;
   owner: string;

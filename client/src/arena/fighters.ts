@@ -90,12 +90,23 @@ const LOOPING: ReadonlySet<ClipName> = new Set<ClipName>([
   "carry_ball",
   "stunned",
 ]);
-const LOCO = ["idle", "run_forward", "run_backward", "strafe_left", "strafe_right"] as const;
+const LOCO = [
+  "idle",
+  "run_forward",
+  "run_backward",
+  "strafe_left",
+  "strafe_right",
+] as const;
 type UpperShot = "basic_attack" | "super" | "ball_shot" | "hit";
 type FullShot = "eliminated" | "respawn" | "victory" | "defeat";
 /** One-shot clips the arena can trigger. */
 export type ActionClip = UpperShot | FullShot;
-const FULL_SHOTS: ReadonlySet<ClipName> = new Set<ClipName>(["eliminated", "respawn", "victory", "defeat"]);
+const FULL_SHOTS: ReadonlySet<ClipName> = new Set<ClipName>([
+  "eliminated",
+  "respawn",
+  "victory",
+  "defeat",
+]);
 
 /**
  * Which part of the body a clip contributes to. Locomotion drives both
@@ -173,14 +184,22 @@ export class AnimationGraph {
     if (this.knockedOut) return false;
     // A hit reaction never interrupts an attack, Super or shot in progress.
     if (clip === "hit" && this.acting) return false;
-    if (this.upper) this.fading = { shot: this.upper, weight: this.envelope(this.upper, now, false) };
+    if (this.upper)
+      this.fading = {
+        shot: this.upper,
+        weight: this.envelope(this.upper, now, false),
+      };
     this.upper = { clip, start: now };
     return true;
   }
 
   /** Let go of held goal reactions when play resumes. */
   releaseHeld() {
-    if (this.full && (this.full.clip === "victory" || this.full.clip === "defeat")) this.full = null;
+    if (
+      this.full &&
+      (this.full.clip === "victory" || this.full.clip === "defeat")
+    )
+      this.full = null;
   }
 
   reset() {
@@ -213,7 +232,13 @@ export class AnimationGraph {
   update(
     dt: number,
     now: number,
-    m: { speed: number; fwd: number; right: number; stunned: boolean; carrying: boolean },
+    m: {
+      speed: number;
+      fwd: number;
+      right: number;
+      stunned: boolean;
+      carrying: boolean;
+    },
   ) {
     const run = clamp(m.speed / RUN_FULL, 0, 1);
     const f = Math.max(0, m.fwd),
@@ -222,7 +247,16 @@ export class AnimationGraph {
       l = Math.max(0, -m.right);
     const sum = f + b + r + l;
     const k = smoothK(dt, 0.08);
-    const targets = sum > 0 ? [1 - run, (run * f) / sum, (run * b) / sum, (run * l) / sum, (run * r) / sum] : [1, 0, 0, 0, 0];
+    const targets =
+      sum > 0
+        ? [
+            1 - run,
+            (run * f) / sum,
+            (run * b) / sum,
+            (run * l) / sum,
+            (run * r) / sum,
+          ]
+        : [1, 0, 0, 0, 0];
     for (let i = 0; i < 5; i++) this.loco[i] += (targets[i] - this.loco[i]) * k;
     this.phase = (this.phase + dt * m.speed * CYCLES_PER_UNIT) % 1;
     this.clock += dt;
@@ -231,7 +265,8 @@ export class AnimationGraph {
 
     let U = 0;
     if (this.upper) {
-      if (now - this.upper.start >= this.duration(this.upper.clip)) this.upper = null;
+      if (now - this.upper.start >= this.duration(this.upper.clip))
+        this.upper = null;
       else U = this.envelope(this.upper, now, false);
     }
     if (this.fading) {
@@ -241,7 +276,8 @@ export class AnimationGraph {
     let F = 0;
     if (this.full) {
       const hold = this.full.clip !== "respawn";
-      if (!hold && now - this.full.start >= this.duration(this.full.clip)) this.full = null;
+      if (!hold && now - this.full.start >= this.duration(this.full.clip))
+        this.full = null;
       else F = this.envelope(this.full, now, hold);
     }
     const S = this.stun * (1 - F);
@@ -255,14 +291,29 @@ export class AnimationGraph {
       const w = this.loco[i];
       if (w < 0.001) continue;
       const clip = LOCO[i];
-      const time = i === 0 ? this.clock % this.duration(clip) : this.phase * this.duration(clip);
+      const time =
+        i === 0
+          ? this.clock % this.duration(clip)
+          : this.phase * this.duration(clip);
       this.push(clip, "lower", time, w * body);
       this.push(clip, "upper", time, w * (1 - override) * body);
     }
     const at = (s: Shot) => Math.min(now - s.start, this.duration(s.clip));
-    if (this.upper) this.push(this.upper.clip, "upper", at(this.upper), U * body);
-    if (this.fading) this.push(this.fading.shot.clip, "upper", at(this.fading.shot), fade * body);
-    this.push("carry_ball", "upper", this.clock % this.duration("carry_ball"), C * body);
+    if (this.upper)
+      this.push(this.upper.clip, "upper", at(this.upper), U * body);
+    if (this.fading)
+      this.push(
+        this.fading.shot.clip,
+        "upper",
+        at(this.fading.shot),
+        fade * body,
+      );
+    this.push(
+      "carry_ball",
+      "upper",
+      this.clock % this.duration("carry_ball"),
+      C * body,
+    );
     if (this.full) this.push(this.full.clip, "full", at(this.full), F);
     this.push("stunned", "full", this.clock % this.duration("stunned"), S);
   }
@@ -279,14 +330,26 @@ interface Rig {
 
 // ---------------------------------------------------------------- procedural
 
-const B = { root: 0, hips: 1, torso: 2, head: 3, armL: 4, armR: 5, legL: 6, legR: 7, extra: 8 } as const;
+const B = {
+  root: 0,
+  hips: 1,
+  torso: 2,
+  head: 3,
+  armL: 4,
+  armR: 5,
+  legL: 6,
+  legR: 7,
+  extra: 8,
+} as const;
 const BONE_COUNT = 9;
 /** Pose layout: three Euler angles per bone, then three scalars. */
 const ROOT_Y = BONE_COUNT * 3;
 const SQUASH = ROOT_Y + 1;
 const TORSO_SQUASH = ROOT_Y + 2;
 const POSE_SIZE = ROOT_Y + 3;
-const LOWER_INDICES = [B.root, B.hips, B.legL, B.legR].flatMap((b) => [b * 3, b * 3 + 1, b * 3 + 2]).concat([ROOT_Y, SQUASH]);
+const LOWER_INDICES = [B.root, B.hips, B.legL, B.legR]
+  .flatMap((b) => [b * 3, b * 3 + 1, b * 3 + 2])
+  .concat([ROOT_Y, SQUASH]);
 const UPPER_INDICES = [B.torso, B.head, B.armL, B.armR, B.extra]
   .flatMap((b) => [b * 3, b * 3 + 1, b * 3 + 2])
   .concat([TORSO_SQUASH]);
@@ -315,7 +378,13 @@ const TAU = Math.PI * 2;
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
-const set = (p: Float32Array, bone: number, x: number, y: number, z: number) => {
+const set = (
+  p: Float32Array,
+  bone: number,
+  x: number,
+  y: number,
+  z: number,
+) => {
   p[bone * 3] = x;
   p[bone * 3 + 1] = y;
   p[bone * 3 + 2] = z;
@@ -334,7 +403,10 @@ function restPose(p: Float32Array, hold: Hold) {
  * used. Signs: negative x rotation swings a limb forward, positive x leans
  * the torso forward, the prop arm is armR (+x).
  */
-const PROCEDURAL_CLIPS: Record<ClipName, (t: number, p: Float32Array, hold: Hold) => void> = {
+const PROCEDURAL_CLIPS: Record<
+  ClipName,
+  (t: number, p: Float32Array, hold: Hold) => void
+> = {
   idle(t, p) {
     const b = Math.sin((TAU * t) / 1.5);
     p[SQUASH] = 0.012 * b;
@@ -515,9 +587,14 @@ export interface ProceduralAsset {
   skin: BufferGeometry;
   shell: BufferGeometry;
   hold: Hold;
+  extraAt: readonly [number, number, number];
 }
 
-function rigid(geometry: BufferGeometry, bone: number, offset?: readonly [number, number, number]) {
+function rigid(
+  geometry: BufferGeometry,
+  bone: number,
+  offset?: readonly [number, number, number],
+) {
   if (offset) geometry.translate(offset[0], offset[1], offset[2]);
   const n = geometry.attributes.position.count;
   const index = new Uint16Array(n * 4),
@@ -534,6 +611,7 @@ function rigid(geometry: BufferGeometry, bone: number, offset?: readonly [number
 export function buildProceduralAsset(id: FighterId): ProceduralAsset {
   const p = buildFighter(id, { separateLegs: true });
   const neck = [0, NECK_Y, 0] as const;
+  const extraAt = p.companion?.anchor ?? EXTRA_AT;
   const shell = [
     rigid(p.body, B.torso),
     rigid(p.legL!, B.legL),
@@ -541,14 +619,15 @@ export function buildProceduralAsset(id: FighterId): ProceduralAsset {
     rigid(p.head, B.head, neck),
     rigid(p.armL, B.armL, [-SHOULDER[0], SHOULDER[1], SHOULDER[2]]),
     rigid(p.armR, B.armR, SHOULDER),
-    ...(p.extra ? [rigid(p.extra, B.extra, EXTRA_AT)] : []),
+    ...(p.companion ? [rigid(p.companion.geometry, B.extra, extraAt)] : []),
   ];
   const face = rigid(p.face, B.head, neck);
   const skin = mergeGeometries([...shell, face], false);
   const outline = mergeGeometries(shell, false);
   for (const g of [...shell, face]) g.dispose();
-  if (!skin || !outline) throw new Error(`fighter geometry merge failed: ${id}`);
-  return { skin, shell: outline, hold: LOOKS[id].hold };
+  if (!skin || !outline)
+    throw new Error(`fighter geometry merge failed: ${id}`);
+  return { skin, shell: outline, hold: LOOKS[id].hold, extraAt };
 }
 
 const PROCEDURAL_BOUNDS = new Sphere(new Vector3(0, 0.9, 0), 1.5);
@@ -561,7 +640,11 @@ class ProceduralRig implements Rig {
   private pose = new Float32Array(POSE_SIZE);
   private acc = new Float32Array(POSE_SIZE);
   private tmp = new Float32Array(POSE_SIZE);
-  constructor(private asset: ProceduralAsset, material: Material, outline: Material) {
+  constructor(
+    private asset: ProceduralAsset,
+    material: Material,
+    outline: Material,
+  ) {
     this.bones = Array.from({ length: BONE_COUNT }, () => new Bone());
     const [root, hips, torso, head, armL, armR, legL, legR, extra] = this.bones;
     root.add(hips, extra);
@@ -573,7 +656,7 @@ class ProceduralRig implements Rig {
     armR.position.set(SHOULDER[0], SHOULDER[1] - HIP_Y, SHOULDER[2]);
     legL.position.set(-HIP_X, 0, 0);
     legR.position.set(HIP_X, 0, 0);
-    extra.position.set(...EXTRA_AT);
+    extra.position.set(...this.asset.extraAt);
     const mesh = new SkinnedMesh(asset.skin, material);
     mesh.add(root);
     this.skeleton = new Skeleton(this.bones);
@@ -609,14 +692,25 @@ class ProceduralRig implements Rig {
     }
     // Missing weight falls back to the rest pose, as the GLB mixer does.
     restPose(tmp, hold);
-    for (const j of LOWER_INDICES) pose[j] = (acc[j] + tmp[j] * Math.max(0, 1 - lower)) / Math.max(1, lower);
-    for (const j of UPPER_INDICES) pose[j] = (acc[j] + tmp[j] * Math.max(0, 1 - upper)) / Math.max(1, upper);
-    for (let b = 0; b < BONE_COUNT; b++) this.bones[b].rotation.set(pose[b * 3], pose[b * 3 + 1], pose[b * 3 + 2]);
+    for (const j of LOWER_INDICES)
+      pose[j] = (acc[j] + tmp[j] * Math.max(0, 1 - lower)) / Math.max(1, lower);
+    for (const j of UPPER_INDICES)
+      pose[j] = (acc[j] + tmp[j] * Math.max(0, 1 - upper)) / Math.max(1, upper);
+    for (let b = 0; b < BONE_COUNT; b++)
+      this.bones[b].rotation.set(pose[b * 3], pose[b * 3 + 1], pose[b * 3 + 2]);
     const root = this.bones[B.root],
       torso = this.bones[B.torso];
     root.position.y = pose[ROOT_Y];
-    root.scale.set(1 - pose[SQUASH] * 0.5, 1 + pose[SQUASH], 1 - pose[SQUASH] * 0.5);
-    torso.scale.set(1 - pose[TORSO_SQUASH] * 0.5, 1 + pose[TORSO_SQUASH], 1 - pose[TORSO_SQUASH] * 0.5);
+    root.scale.set(
+      1 - pose[SQUASH] * 0.5,
+      1 + pose[SQUASH],
+      1 - pose[SQUASH] * 0.5,
+    );
+    torso.scale.set(
+      1 - pose[TORSO_SQUASH] * 0.5,
+      1 + pose[TORSO_SQUASH],
+      1 - pose[TORSO_SQUASH] * 0.5,
+    );
   }
   dispose() {
     this.skeleton.dispose();
@@ -629,11 +723,20 @@ class ProceduralRig implements Rig {
  * Fighters with an approved runtime asset. A fighter missing here, or whose
  * asset fails validation, uses the procedural rig instead.
  */
-const GLB_ASSETS: Partial<Record<FighterId, { glb: string; manifest: string }>> = {
-  brandon: { glb: "art3d/brandon/brandon.glb", manifest: "art3d/brandon/manifest.json" },
+const GLB_ASSETS: Partial<
+  Record<FighterId, { glb: string; manifest: string }>
+> = {
+  // Runtime assets are opt-in only after art, animation, and device review.
+  // Brandon intentionally uses the shared procedural LOOKS model with the
+  // rest of the roster; the experimental Brandon GLBs remain study assets.
 };
 /** Standard §7.3 runtime limits, enforced when an asset is imported. */
-const RUNTIME_BUDGET = { triangles: 25000, bones: 40, materials: 2, skinnedMeshes: 2 };
+const RUNTIME_BUDGET = {
+  triangles: 25000,
+  bones: 40,
+  materials: 2,
+  skinnedMeshes: 2,
+};
 
 interface GlbClips {
   upper: AnimationClip;
@@ -644,7 +747,13 @@ export interface GlbAsset {
   template: Object3D;
   scale: number;
   clips: Record<ClipName, GlbClips>;
-  report: { triangles: number; bones: number; materials: number; textures: number; skinnedMeshes: number };
+  report: {
+    triangles: number;
+    bones: number;
+    materials: number;
+    textures: number;
+    skinnedMeshes: number;
+  };
 }
 
 interface Manifest {
@@ -658,7 +767,9 @@ interface Manifest {
 const UPPER_BONE = /spine|chest|neck|head|shoulder|clav|arm|hand|finger|thumb/i;
 
 function splitClip(clip: AnimationClip): GlbClips {
-  const upper = clip.tracks.filter((t) => UPPER_BONE.test(PropertyBinding.parseTrackName(t.name).nodeName));
+  const upper = clip.tracks.filter((t) =>
+    UPPER_BONE.test(PropertyBinding.parseTrackName(t.name).nodeName),
+  );
   const lower = clip.tracks.filter((t) => !upper.includes(t));
   return {
     upper: new AnimationClip(`${clip.name}:upper`, clip.duration, upper),
@@ -678,24 +789,40 @@ function validate(scene: Object3D, clips: AnimationClip[], manifest: Manifest) {
     const clip = byName.get(name);
     const entry = manifest.clips?.[name];
     if (!clip) problems.push(`clip "${name}" is missing from the GLB`);
-    else if (!entry) problems.push(`clip "${name}" is missing from the manifest`);
+    else if (!entry)
+      problems.push(`clip "${name}" is missing from the manifest`);
     else {
       if (Math.abs(clip.duration - entry.seconds) > 0.05)
-        problems.push(`clip "${name}" lasts ${clip.duration.toFixed(3)} s, manifest says ${entry.seconds}`);
-      if (entry.loop !== LOOPING.has(name)) problems.push(`clip "${name}" loop is ${entry.loop}, the graph needs ${LOOPING.has(name)}`);
+        problems.push(
+          `clip "${name}" lasts ${clip.duration.toFixed(3)} s, manifest says ${entry.seconds}`,
+        );
+      if (entry.loop !== LOOPING.has(name))
+        problems.push(
+          `clip "${name}" loop is ${entry.loop}, the graph needs ${LOOPING.has(name)}`,
+        );
     }
   }
-  const report = { triangles: 0, bones: 0, materials: 0, textures: 0, skinnedMeshes: 0 };
+  const report = {
+    triangles: 0,
+    bones: 0,
+    materials: 0,
+    textures: 0,
+    skinnedMeshes: 0,
+  };
   const materials = new Set<Material>();
   const textures = new Set<unknown>();
   scene.traverse((o) => {
     const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     const g = mesh.geometry;
-    report.triangles += (g.index ? g.index.count : g.attributes.position.count) / 3;
-    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+    report.triangles +=
+      (g.index ? g.index.count : g.attributes.position.count) / 3;
+    for (const m of Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material]) {
       materials.add(m);
-      for (const v of Object.values(m)) if ((v as { isTexture?: boolean } | null)?.isTexture) textures.add(v);
+      for (const v of Object.values(m))
+        if ((v as { isTexture?: boolean } | null)?.isTexture) textures.add(v);
     }
     const skinned = o as SkinnedMesh;
     if (skinned.isSkinnedMesh) {
@@ -706,19 +833,38 @@ function validate(scene: Object3D, clips: AnimationClip[], manifest: Manifest) {
   report.materials = materials.size;
   report.textures = textures.size;
   if (!report.skinnedMeshes) problems.push("no skinned mesh");
-  if (report.triangles > RUNTIME_BUDGET.triangles) problems.push(`${report.triangles} triangles exceeds ${RUNTIME_BUDGET.triangles}`);
-  if (report.bones > RUNTIME_BUDGET.bones) problems.push(`${report.bones} bones exceeds ${RUNTIME_BUDGET.bones}`);
-  if (report.materials > RUNTIME_BUDGET.materials) problems.push(`${report.materials} materials exceeds ${RUNTIME_BUDGET.materials}`);
+  if (report.triangles > RUNTIME_BUDGET.triangles)
+    problems.push(
+      `${report.triangles} triangles exceeds ${RUNTIME_BUDGET.triangles}`,
+    );
+  if (report.bones > RUNTIME_BUDGET.bones)
+    problems.push(`${report.bones} bones exceeds ${RUNTIME_BUDGET.bones}`);
+  if (report.materials > RUNTIME_BUDGET.materials)
+    problems.push(
+      `${report.materials} materials exceeds ${RUNTIME_BUDGET.materials}`,
+    );
   if (report.skinnedMeshes > RUNTIME_BUDGET.skinnedMeshes)
-    problems.push(`${report.skinnedMeshes} skinned meshes exceeds ${RUNTIME_BUDGET.skinnedMeshes}`);
-  if (manifest.triangles !== undefined && Math.abs(manifest.triangles - report.triangles) > 0.5)
-    problems.push(`manifest says ${manifest.triangles} triangles, GLB has ${report.triangles}`);
+    problems.push(
+      `${report.skinnedMeshes} skinned meshes exceeds ${RUNTIME_BUDGET.skinnedMeshes}`,
+    );
+  if (
+    manifest.triangles !== undefined &&
+    Math.abs(manifest.triangles - report.triangles) > 0.5
+  )
+    problems.push(
+      `manifest says ${manifest.triangles} triangles, GLB has ${report.triangles}`,
+    );
   if (manifest.bones !== undefined && manifest.bones !== report.bones)
-    problems.push(`manifest says ${manifest.bones} bones, GLB has ${report.bones}`);
+    problems.push(
+      `manifest says ${manifest.bones} bones, GLB has ${report.bones}`,
+    );
   return { problems, report };
 }
 
-async function loadGlb(id: FighterId, spec: { glb: string; manifest: string }): Promise<GlbAsset | null> {
+async function loadGlb(
+  id: FighterId,
+  spec: { glb: string; manifest: string },
+): Promise<GlbAsset | null> {
   const base = import.meta.env.BASE_URL;
   const [gltf, manifest] = await Promise.all([
     new GLTFLoader().loadAsync(base + spec.glb),
@@ -729,7 +875,9 @@ async function loadGlb(id: FighterId, spec: { glb: string; manifest: string }): 
   ]);
   const { problems, report } = validate(gltf.scene, gltf.animations, manifest);
   if (problems.length) {
-    console.warn(`[arena] ${id} asset rejected, using the procedural model: ${problems.join("; ")}`);
+    console.warn(
+      `[arena] ${id} asset rejected, using the procedural model: ${problems.join("; ")}`,
+    );
     return null;
   }
   let height = 0;
@@ -740,8 +888,14 @@ async function loadGlb(id: FighterId, spec: { glb: string; manifest: string }): 
     height = Math.max(height, mesh.geometry.boundingBox!.max.y);
   });
   const clips = {} as Record<ClipName, GlbClips>;
-  for (const name of CLIPS) clips[name] = splitClip(gltf.animations.find((c) => c.name === name)!);
-  return { template: gltf.scene, scale: FIGHTER_HEIGHT / (height || FIGHTER_HEIGHT), clips, report };
+  for (const name of CLIPS)
+    clips[name] = splitClip(gltf.animations.find((c) => c.name === name)!);
+  return {
+    template: gltf.scene,
+    scale: FIGHTER_HEIGHT / (height || FIGHTER_HEIGHT),
+    clips,
+    report,
+  };
 }
 
 const assetLoads = new Map<FighterId, Promise<GlbAsset | null>>();
@@ -757,7 +911,10 @@ export function fighterAsset(id: FighterId): Promise<GlbAsset | null> {
   let load = assetLoads.get(id);
   if (!load) {
     load = loadGlb(id, spec).catch((e) => {
-      console.warn(`[arena] ${id} asset failed to load, using the procedural model:`, e);
+      console.warn(
+        `[arena] ${id} asset failed to load, using the procedural model:`,
+        e,
+      );
       assetLoads.delete(id);
       return null;
     });
@@ -781,7 +938,11 @@ class GlbRig implements Rig {
   private mesh: SkinnedMesh;
   private actions = {} as LayeredActions;
   private live: AnimationAction[] = [];
-  constructor(private asset: GlbAsset, material: Material, outline: Material) {
+  constructor(
+    private asset: GlbAsset,
+    material: Material,
+    outline: Material,
+  ) {
     this.root = cloneSkinned(asset.template);
     let found: SkinnedMesh | undefined;
     this.root.traverse((o) => {
@@ -810,8 +971,22 @@ class GlbRig implements Rig {
       add(clip, "upper");
       add(clip, "lower");
     }
-    for (const clip of ["basic_attack", "super", "ball_shot", "hit", "carry_ball"] as const) add(clip, "upper");
-    for (const clip of ["eliminated", "respawn", "victory", "defeat", "stunned"] as const) add(clip, "full");
+    for (const clip of [
+      "basic_attack",
+      "super",
+      "ball_shot",
+      "hit",
+      "carry_ball",
+    ] as const)
+      add(clip, "upper");
+    for (const clip of [
+      "eliminated",
+      "respawn",
+      "victory",
+      "defeat",
+      "stunned",
+    ] as const)
+      add(clip, "full");
   }
   duration(clip: ClipName) {
     return this.asset.clips[clip].full.duration;
@@ -851,6 +1026,8 @@ export interface ActorFrame {
   alive: boolean;
   stunned: boolean;
   carrying: boolean;
+  /** Presentation-only height above the authoritative ground position. */
+  lift: number;
   /** Facing turn rate (1/s): faster for the local fighter. */
   turn: number;
 }
@@ -897,11 +1074,19 @@ export class FighterActor {
     return this.rig.kind;
   }
   private makeProcedural(): Rig {
-    return new ProceduralRig(this.procedural(this.fighter), this.material, this.mats.outline(OUTLINE_WORLD / PROCEDURAL_SCALE));
+    return new ProceduralRig(
+      this.procedural(this.fighter),
+      this.material,
+      this.mats.outline(OUTLINE_WORLD / PROCEDURAL_SCALE),
+    );
   }
   /** Swap in the validated GLB once it has loaded; the graph state carries over. */
   useAsset(asset: GlbAsset) {
-    const next = new GlbRig(asset, this.material, this.mats.outline(OUTLINE_WORLD / asset.scale));
+    const next = new GlbRig(
+      asset,
+      this.material,
+      this.mats.outline(OUTLINE_WORLD / asset.scale),
+    );
     this.group.remove(this.rig.root);
     this.rig.dispose();
     this.rig = next;
@@ -921,7 +1106,11 @@ export class FighterActor {
   }
   /** World-space point in front of the chest, for the carried ball. */
   hands(out: Vector3) {
-    return out.set(this.at.x + Math.sin(this.yaw) * 0.5, 0.75, this.at.y + Math.cos(this.yaw) * 0.5);
+    return out.set(
+      this.at.x + Math.sin(this.yaw) * 0.5,
+      0.75,
+      this.at.y + Math.cos(this.yaw) * 0.5,
+    );
   }
   update(dt: number, now: number, f: ActorFrame) {
     if (this.alive === null) this.alive = f.alive;
@@ -969,7 +1158,8 @@ export class FighterActor {
     const moving = this.speed > 0.6;
     const faceAim = !moving || now - this.aimAt < 0.7 || this.graph.acting;
     const target = faceAim ? aimYaw : Math.atan2(this.vx, this.vz);
-    if (!this.graph.knockedOut) this.yaw += angleDelta(target, this.yaw) * (1 - Math.exp(-dt * f.turn));
+    if (!this.graph.knockedOut)
+      this.yaw += angleDelta(target, this.yaw) * (1 - Math.exp(-dt * f.turn));
 
     // Travel direction in the fighter's frame: forward (sin, cos), right (-cos, sin).
     const s = Math.sin(this.yaw),
@@ -984,8 +1174,9 @@ export class FighterActor {
     });
     this.rig.apply(this.graph.channels, this.graph.count);
 
-    const sink = deadFor > DEATH_SHOW ? ((deadFor - DEATH_SHOW) / DEATH_SINK) * 0.9 : 0;
-    this.group.position.set(this.at.x, -sink, this.at.y);
+    const sink =
+      deadFor > DEATH_SHOW ? ((deadFor - DEATH_SHOW) / DEATH_SINK) * 0.9 : 0;
+    this.group.position.set(this.at.x, f.lift - sink, this.at.y);
     this.group.rotation.y = this.yaw;
     this.flash = Math.max(0, this.flash - dt * 7);
     this.material.emissive.setScalar(this.flash * 0.85);

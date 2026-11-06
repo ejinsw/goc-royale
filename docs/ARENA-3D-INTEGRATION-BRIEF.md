@@ -109,12 +109,13 @@ entry, so a different user decision is a small change.
    at the bottom edge stays clear of the HUD. Screen up is always map up, so
    stick, keyboard and mouse directions are unchanged. Mouse aim is picked
    per frame on a chest-height plane. `CAMERA` in `client/src/arena/view.ts`.
-2. **Fighter assets:** all seven fighters ship. Brandon uses the low-poly
-   `brandon.glb` (the §7.3 integration mule) once it passes import validation;
-   the other six use the menu's procedural models, merged into one rigidly
-   skinned mesh each, with the same 15-clip set authored as code. One
-   animation graph drives both. A fighter moves to a real asset through one
-   `GLB_ASSETS` entry in `client/src/arena/fighters.ts`.
+2. **Fighter assets:** all 17 fighters use the menu's shared procedural
+   `LOOKS` models, merged into one rigidly skinned mesh each, with the same
+   15-clip set authored as code. Brandon intentionally uses this path too;
+   the experimental Brandon GLBs are not selected by the live runtime. A
+   future approved fighter can move to a real asset through one `GLB_ASSETS`
+   entry in `client/src/arena/fighters.ts` after manifest, art, animation,
+   budget, and device review.
 3. **Map geometry:** flat ground. Stone walls 1.15 tall, wooden crates 0.9,
    bush clumps 0.95 (the one the viewed fighter stands in fades), hedge and
    boards outside the bounds, goals behind the mouths. Every footprint is read
