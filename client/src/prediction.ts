@@ -4,7 +4,7 @@ import type { Match } from "../../shared/types";
 /**
  * Local movement prediction and reconciliation (standard §4.3).
  *
- * Kept free of Phaser/DOM so the same code runs in the arena renderer and in
+ * Kept free of renderer/DOM code so the same code runs in the arena and in
  * the scripted latency/loss harness (tests/netsim.ts).
  *
  * The client keeps its own input timeline (each sent move and the client
