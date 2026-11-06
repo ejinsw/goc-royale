@@ -312,7 +312,7 @@ export function MatchHud({
               text={
                 touch
                   ? "Left thumb moves · Right thumb aims and fires · Tap to auto-aim"
-                  : "WASD move · Mouse aim · Click attack · Space Super · Hold click to charge a ball shot"
+                  : "WASD move · Mouse aim · Hold and release attack / Super · Hold longer to charge a ball shot"
               }
             />
           )}

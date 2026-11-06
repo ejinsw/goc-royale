@@ -7,8 +7,8 @@ import { feedback } from "../core/feedback";
  *
  * - Touches in the left half start the move stick and touches in the right
  *   half start the attack stick, wherever the thumb lands (floating sticks).
- * - Touches on the Super stick start Super; a mouse click on it fires Super
- *   with the current mouse aim, so desktop uses the same control.
+ * - Touches on the Super stick start a local preview; release fires. A mouse
+ *   click on it uses the current mouse aim, so desktop uses the same control.
  * - Positions and thumb transforms are written straight to the DOM. Layout
  *   metrics are read only on resize, never per frame, and nothing here
  *   touches React state.
@@ -108,6 +108,15 @@ export function installStickRouter(o: StickRouterOptions): () => void {
     if (n > 0.05) o.bridge.input.aim = { x: v.x / n, y: v.y / n };
   };
 
+  const syncAimIntent = () => {
+    o.bridge.aiming =
+      sticks.super?.pointer != null
+        ? "super"
+        : sticks.attack?.pointer != null
+          ? "attack"
+          : null;
+  };
+
   /** Aim at the nearest visible enemy in basic-attack range. */
   const autoAim = () => {
     const m = o.bridge.match,
@@ -168,6 +177,7 @@ export function installStickRouter(o: StickRouterOptions): () => void {
     s.value = { x: 0, y: 0 };
     s.power = 0.35;
     s.el.dataset.active = "";
+    syncAimIntent();
     place(s, s.origin);
     track(role, s, e.clientX, e.clientY);
     feedback(s.el, "press", { profile: "stick" });
@@ -177,6 +187,7 @@ export function installStickRouter(o: StickRouterOptions): () => void {
     const s = sticks[role];
     if (!s || s.pointer === null) return;
     s.pointer = null;
+    syncAimIntent();
     delete s.el.dataset.active;
     feedback(s.el, "release", { profile: "stick" });
     s.thumb.style.transform = "";

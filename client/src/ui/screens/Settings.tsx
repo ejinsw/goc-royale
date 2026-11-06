@@ -46,8 +46,8 @@ export function SettingsSheet({
         columns={["", "Keyboard + mouse", "Touch"]}
         rows={[
           { key: "move", cells: ["Move", "WASD / arrows", "Left thumb, anywhere"] },
-          { key: "aim", cells: ["Attack", "Aim with mouse, click", "Right thumb: drag to aim, tap to auto-aim"] },
-          { key: "super", cells: ["Super", "Space / right click", "Super button"] },
+          { key: "aim", cells: ["Attack", "Hold left click, release", "Right thumb: drag to preview, release"] },
+          { key: "super", cells: ["Super", "Hold Space / right click", "Drag Super to preview, release"] },
           { key: "ball", cells: ["Ball shot", "Hold click, release", "Drag farther for power"] },
         ]}
       />

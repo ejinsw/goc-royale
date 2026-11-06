@@ -30,9 +30,9 @@ The default network uses the public PeerJS Cloud signaling service and a Google 
 
 ### Controls
 
-- Desktop: WASD/arrows move, mouse aims, left click attacks, Space/right click activates Super, Escape opens settings.
+- Desktop: WASD/arrows move and the mouse aims. Hold left click to preview an attack or Space/right click to preview a Super, then release to fire. Escape opens settings.
 - Carrying the Broomball: hold left click to charge; release toward the cursor to pass/shoot. A carrier cannot attack or use a Super.
-- Touch: left stick moves. Drag and release right stick to aim/fire; short taps auto-aim at an enemy in range and line of sight. Drag and release the small Super stick when charged. Right-stick drag length controls ball power.
+- Touch: left stick moves. Dragging the right or Super stick previews the ability footprint; release to fire. Short attack taps auto-aim at an enemy in range and line of sight. Right-stick drag length controls ball power.
 - Portrait mobile gameplay shows a landscape prompt. Settings include independent music/sound and screen shake.
 - Eliminated Showdown participants watch the arena; Next Survivor highlights another surviving fighter. Broomball respawns after three seconds.
 

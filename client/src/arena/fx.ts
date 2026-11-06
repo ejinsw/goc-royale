@@ -39,6 +39,7 @@ import {
 } from "../../../shared/definitions";
 import type { Area } from "../../../shared/types";
 import { merge, part } from "../ui/scene/geometry";
+import type { AimIntent, AimShape } from "./aimPreview";
 import type { ArenaMaterials } from "./materials";
 
 /**
@@ -1267,6 +1268,139 @@ export class Vans {
 }
 
 // -------------------------------------------------------------------- aim
+
+/**
+ * Persistent, local-only action footprint and movement pip. Geometry is
+ * allocated once and only transforms/visibility change per frame (§5.2).
+ */
+export class AimGuide {
+  readonly group = new Group();
+  private aimMaterial: MeshBasicMaterial;
+  private coreMaterial: MeshBasicMaterial;
+  private lane: Mesh;
+  private cone: Mesh;
+  private circle: Mesh;
+  private bar: Mesh;
+  private core: Mesh;
+  private moveDisc: Mesh;
+  private moveRing: Mesh;
+  private white = new Color(0xffffff);
+
+  constructor(mats: ArenaMaterials) {
+    this.aimMaterial = mats.flat(0xffffff, {
+      opacity: 0.2,
+      doubleSided: true,
+    });
+    this.coreMaterial = mats.flat(0xffffff, {
+      opacity: 0.48,
+      doubleSided: true,
+    });
+    const laneGeo = mats.track(
+      new PlaneGeometry(2, 1)
+        .rotateX(-Math.PI / 2)
+        .translate(0, 0, 0.5),
+    );
+    this.lane = new Mesh(laneGeo, this.aimMaterial);
+    this.core = new Mesh(laneGeo, this.coreMaterial);
+    this.cone = new Mesh(mats.track(coneGeometry()), this.aimMaterial);
+    this.circle = new Mesh(
+      mats.track(new CircleGeometry(1, 48).rotateX(-Math.PI / 2)),
+      this.aimMaterial,
+    );
+    this.bar = new Mesh(
+      mats.track(new PlaneGeometry(2, 1).rotateX(-Math.PI / 2)),
+      this.aimMaterial,
+    );
+    this.moveDisc = new Mesh(
+      mats.track(new CircleGeometry(0.1, 20).rotateX(-Math.PI / 2)),
+      mats.flat(0xe8ffd0, { opacity: 0.92, doubleSided: true }),
+    );
+    this.moveRing = new Mesh(
+      mats.track(new RingGeometry(0.13, 0.18, 24).rotateX(-Math.PI / 2)),
+      mats.flat(0x78e69b, { opacity: 0.78, doubleSided: true }),
+    );
+    for (const mesh of [
+      this.lane,
+      this.core,
+      this.cone,
+      this.circle,
+      this.bar,
+      this.moveDisc,
+      this.moveRing,
+    ]) {
+      mesh.visible = false;
+      mesh.renderOrder = 5;
+      this.group.add(mesh);
+    }
+  }
+
+  update(
+    at: Vec,
+    dir: Vec,
+    move: Vec,
+    color: number,
+    intent: AimIntent | null,
+    shape: AimShape | null,
+  ) {
+    this.lane.visible = false;
+    this.core.visible = false;
+    this.cone.visible = false;
+    this.circle.visible = false;
+    this.bar.visible = false;
+
+    const moving = Math.hypot(move.x, move.y);
+    this.moveDisc.visible = this.moveRing.visible = moving > 0.08;
+    if (moving > 0.08) {
+      const distance = 0.85 + Math.min(1, moving) * 0.35;
+      const x = at.x + (move.x / moving) * distance;
+      const y = at.y + (move.y / moving) * distance;
+      this.moveDisc.position.set(x, 0.09, y);
+      this.moveRing.position.set(x, 0.085, y);
+    }
+
+    if (!intent || !shape) return;
+    this.aimMaterial.color.setHex(color).lerp(this.white, 0.55);
+    this.aimMaterial.opacity = intent === "super" ? 0.28 : 0.3;
+    this.coreMaterial.color.setHex(intent === "super" ? 0xfff2a8 : 0xffffff);
+    const angle = Math.atan2(dir.x, dir.y);
+    if (shape.kind === "lane") {
+      this.lane.visible = true;
+      this.lane.position.set(at.x, 0.065, at.y);
+      this.lane.rotation.y = angle;
+      this.lane.scale.set(shape.width / 2, 1, shape.range);
+      if (shape.coreWidth) {
+        this.core.visible = true;
+        this.core.position.set(at.x, 0.072, at.y);
+        this.core.rotation.y = angle;
+        this.core.scale.set(shape.coreWidth / 2, 1, shape.range);
+      }
+      return;
+    }
+    if (shape.kind === "cone") {
+      this.cone.visible = true;
+      this.cone.position.set(at.x, 0.065, at.y);
+      this.cone.rotation.y = angle;
+      this.cone.scale.set(shape.halfWidth, 1, shape.range);
+      return;
+    }
+    const x = at.x + dir.x * shape.distance;
+    const y = at.y + dir.y * shape.distance;
+    if (shape.kind === "circle") {
+      this.circle.visible = true;
+      this.circle.position.set(x, 0.065, y);
+      this.circle.scale.set(shape.radius, 1, shape.radius);
+      return;
+    }
+    this.bar.visible = true;
+    this.bar.position.set(x, 0.065, y);
+    this.bar.rotation.y = angle;
+    this.bar.scale.set(shape.length / 2, 1, shape.thickness);
+  }
+
+  hide() {
+    for (const mesh of this.group.children) mesh.visible = false;
+  }
+}
 
 /** The local fighter's dashed aim line on the ground (2.4 units, as before). */
 export function aimArrow(mats: ArenaMaterials) {
