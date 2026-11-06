@@ -3,7 +3,7 @@
 **Status:** Mandatory repository standard  
 **Applies to:** `client/src/`, `shared/`, `tests/`, `client/public/art3d/`,
 `assets/3d/`, and gameplay-facing documentation  
-**Last updated:** October 29, 2026
+**Last updated:** November 6, 2026
 
 ## 1. Purpose
 
@@ -353,7 +353,7 @@ preferred conventions:
   data-driven cone, Super anticipation ring), but projectiles themselves are not:
   the projectile appears when the authoritative snapshot arrives, about one
   RTT after the predicted flash. Predicted cues are not yet animation clips.
-- The arena is a single Three.js renderer (`client/src/arena/`). All 17
+- The arena is a single Three.js renderer (`client/src/arena/`). All 18
   fighters use procedural placeholder models whose clip set is authored as
   code, not as validated animation assets with manifests. The older Brandon
   GLB studies are deliberately not selected by the live runtime. Release

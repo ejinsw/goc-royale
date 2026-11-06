@@ -125,7 +125,10 @@ export interface Effect {
     /** A companion's swipe. */
     | "panda"
     /** Where a leap lands; value = landing radius. */
-    | "leap";
+    | "leap"
+    /** David's center-hit harmony and Side Eye warning/release. */
+    | "harmony"
+    | "gaze";
   pos: Vec;
   dir: Vec;
   owner: string;

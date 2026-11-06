@@ -1,6 +1,6 @@
 # GOC Royale
 
-A browser-hosted arena brawler for private groups. React menus, a Three.js 3D arena, TypeScript simulation, and PeerJS/WebRTC data channels. **No application server, Socket.IO, accounts, or database.** Seventeen fighters, one per GOC ministry team leader: the pilot seven (Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, Ethan Ha) plus Dylan, Isaac, Tovya, Rosalie, Joelle, Susannah, Joyce, Miriam, Jemuel and Russell (see docs/MINISTRY-TEAMS-BRIEF.md). Two modes: Showdown FFA (up to 10 players) and Broomball (up to 6). Neither mode enforces a minimum player count.
+A browser-hosted arena brawler for private groups. React menus, a Three.js 3D arena, TypeScript simulation, and PeerJS/WebRTC data channels. **No application server, Socket.IO, accounts, or database.** Eighteen fighters: the 17 GOC ministry team leaders—the pilot seven (Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, Ethan Ha) plus Dylan, Isaac, Tovya, Rosalie, Joelle, Susannah, Joyce, Miriam, Jemuel and Russell (see docs/MINISTRY-TEAMS-BRIEF.md)—and David, a Music-team Vocal Controller. Two modes: Showdown FFA (up to 10 players) and Broomball (up to 6). Neither mode enforces a minimum player count.
 
 ## Run it
 
@@ -68,7 +68,7 @@ Development overlay: press the backtick key during play (or open the app with `?
 - [Brandon asset specification](docs/BRANDON_3D_ASSET.md): first individual production brief; other fighters need their own before modeling.
 - [Performance and gameplay standards](docs/PERFORMANCE-AND-GAMEPLAY-STANDARDS.md): mandatory runtime limits and acceptance gates.
 
-Matches render in 3D (see [the integration brief](docs/ARENA-3D-INTEGRATION-BRIEF.md)). All 17 fighters, including Brandon, use the shared procedural `LOOKS` model system. The experimental Brandon GLB studies are not used by the live game. Production character assets remain planned work, and the arena has not been profiled on physical phones.
+Matches render in 3D (see [the integration brief](docs/ARENA-3D-INTEGRATION-BRIEF.md)). All 18 fighters, including Brandon and David, use the shared procedural `LOOKS` model system. The experimental Brandon GLB studies are not used by the live game. Production character assets remain planned work, and the arena has not been profiled on physical phones.
 
 ## Trust and scope
 
@@ -76,4 +76,4 @@ Host authority is appropriate for a private, trusted friend group: the host can 
 
 There is no public matchmaking, progression, gadgets, or additional mode. The placeholders and synthesized music/effects are original; fonts are self-hosted via Fontsource with included font licenses. See `docs/STATUS.md` before calling this a completed pilot release.
 
-Latest roster update: Ethan uses Rizz (two 420-damage notes) and Aura Pulse (instant knockout of enemies within 4 units, blocked by walls and spawn protection). Brandon's current 2D portrait uses blue/gold; the next 3D specification uses a beige jacket with unchanged mechanics. The camera follows your fighter at 1.65× arena-fit scale, or the selected survivor when spectating. Movement changes and actions send on the next rendered frame; steady inputs remain 30 Hz. Actual Internet delay is not eliminated. (Networking was since reworked; see the paragraph above and docs/STATUS.md.)
+Latest roster update: David uses Mixed Voice (500 damage, plus 400 for its narrow center) and Side Eye (a 0.4-second warning followed by 750 damage, a collision-safe sideways shove, and a one-second 25% slow). Ethan uses Rizz (two 420-damage notes) and Aura Pulse (instant knockout of enemies within 4 units, blocked by walls and spawn protection). Brandon's current 2D portrait uses blue/gold; the next 3D specification uses a beige jacket with unchanged mechanics. The camera follows your fighter at 1.65× arena-fit scale, or the selected survivor when spectating. Movement changes and actions send on the next rendered frame; steady inputs remain 30 Hz. Actual Internet delay is not eliminated. (Networking was since reworked; see the paragraph above and docs/STATUS.md.)

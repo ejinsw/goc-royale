@@ -566,3 +566,46 @@ match/rematch heap trend, real-GPU context-loss recovery, reduced-motion review,
 or human balance/game-feel testing of the ten new kits. The procedural models
 and code-authored clips remain placeholders rather than approved production
 assets with manifests.
+
+## November 6, 2026 — David playable (branch `codex/feature-david`)
+
+**Deliberate roster and balance change.** David expands the roster from 17 to
+18 as a Music-team Vocal Controller. This is an original provisional character
+design; no likeness reference has been supplied or claimed.
+
+- Mixed Voice is one 500-damage projectile with a narrow, clearly presented
+  center lane that adds 400 damage. The projectile uses braided blue/gold
+  geometry, a two-layer synthesized cue, and a harmony impact for the center.
+- Side Eye has a 0.4 s rectangular warning, then deals 750 damage, pushes each
+  target 1.6 units sideways away from the gaze center line using the existing
+  collision-safe movement path, and applies a 25% slow for 1 s. It does not
+  stun. The warning is predicted on the local input frame and is not restarted
+  when authority confirms it; damage, displacement, and slow remain
+  authoritative.
+- The center bonus, perpendicular displacement, and frame slow are generic
+  ability-data options, not David-id engine branches.
+- David has an original procedural 3D look with in-ear monitors and a handheld
+  microphone plus a matching SVG portrait. His menu model is 6,378 triangles,
+  below the provisional 10k–25k per-fighter budget.
+
+Verification:
+
+- `npm run typecheck` passes.
+- `npm test` passes 107/107, including center-versus-outer Mixed Voice damage,
+  Side Eye windup/damage/displacement/slow, all-fighter gameplay in both modes,
+  every picker model, and every arena rig.
+- `npm run build` passes. The procedural-model chunk is 628.41 kB minified /
+  158.06 kB gzip; the existing >500 kB Vite warning remains tracked.
+- `npm run netsim` passes every §4.4 case with 10/10 actions presented once.
+  Correction p95 is 0.123–0.153 world units, including 100 ms RTT / 1% loss,
+  200 ms RTT / 3% loss, and the 500 ms interruption.
+- Local browser QA at 1280×720 showed David's picker portrait, procedural model,
+  complete kit text, and a live Broomball Mixed Voice projectile. The live arena
+  measured p50 16.7 / p95 17.6 ms at about 60 FPS: 9 calls / 16,904 triangles at
+  rest and 15 calls / 17,686 triangles during the attack. There were no browser
+  warnings or errors.
+
+Still not verified for David: the Side Eye presentation in a live two-player
+match, physical iOS/Android performance and touch controls, an eight-fighter
+stress scene, reduced-motion review, synthesized cues by ear, or human
+balance/game-feel testing.

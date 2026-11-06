@@ -47,6 +47,15 @@ const CUES: Record<string, Tone[]> = {
     { wave: "sine", from: 750, to: 750, at: 0.06, dur: 0.08, gain: 0.6 },
   ],
   panda: [{ wave: "sawtooth", from: 150, to: 90, dur: 0.12, gain: 0.45 }],
+  mixed_voice: [
+    { wave: "sine", from: 360, to: 180, dur: 0.14, gain: 0.7 },
+    { wave: "triangle", from: 540, to: 270, dur: 0.14, gain: 0.45 },
+  ],
+  harmony: [
+    { wave: "sine", from: 660, to: 660, dur: 0.11, gain: 0.55 },
+    { wave: "sine", from: 990, to: 990, at: 0.02, dur: 0.11, gain: 0.45 },
+  ],
+  gaze: [{ wave: "triangle", from: 250, to: 110, dur: 0.16, gain: 0.65 }],
   ui_tap: [{ wave: "sine", from: 720, to: 560, dur: 0.05, gain: 0.45 }],
   ui_press: [{ wave: "triangle", from: 320, to: 190, dur: 0.06, gain: 0.8 }],
   ui_thump: [{ wave: "triangle", from: 190, to: 85, dur: 0.09, gain: 1 }],

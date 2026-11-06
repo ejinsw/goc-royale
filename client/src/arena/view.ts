@@ -94,7 +94,7 @@ export interface ArenaFrame {
   dt: number;
 }
 
-export type CueKind = "attack" | "cone" | "release" | "super";
+export type CueKind = "attack" | "cone" | "gaze" | "release" | "super";
 
 export interface ArenaView {
   frame(f: ArenaFrame): void;
@@ -107,7 +107,7 @@ export interface ArenaView {
     dir: Vec,
     color: number,
     now: number,
-    cone?: { range: number; half: number },
+    shape?: { range: number; half: number },
   ): void;
   /** Start a one-shot clip on a fighter. False when the graph ignored it. */
   action(id: string, clip: ActionClip, now: number): boolean;
@@ -720,9 +720,48 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
           effects.streak(e.pos, e.dir, 0, 1.2, 0.18, 0xfbe8d3, dur, now, 0.9);
           effects.ring(e.pos, 0.2, 0.8, 0xe8553a, dur, now);
           break;
+        case "harmony":
+          effects.ring(e.pos, 0.18, 0.85, 0xf2c65d, dur, now, 0.9, 0.08);
+          effects.ring(e.pos, 0.08, 0.62, 0x4f7fd1, dur, now, 0.9, 0.08);
+          break;
+        case "gaze": {
+          const superSpec = owner ? FIGHTERS[owner.fighter].abilities.super : null;
+          const range = superSpec?.kind === "frame" ? superSpec.range : 6.5;
+          const width = superSpec?.kind === "frame" ? superSpec.width : 4.5;
+          effects.rect(
+            e.pos,
+            e.dir,
+            range,
+            width,
+            e.value ? 0xfff2a8 : color,
+            dur,
+            now,
+            e.value ? 0.5 : 0.22,
+          );
+          if (e.value) {
+            const center = {
+              x: e.pos.x + e.dir.x * range * 0.55,
+              y: e.pos.y + e.dir.y * range * 0.55,
+            };
+            const side = { x: -e.dir.y, y: e.dir.x };
+            effects.streak(center, side, 0, width * 0.45, 0.12, 0xfff2a8, dur, now, 0.9);
+            effects.streak(
+              center,
+              { x: -side.x, y: -side.y },
+              0,
+              width * 0.45,
+              0.12,
+              0xfff2a8,
+              dur,
+              now,
+              0.9,
+            );
+          }
+          break;
+        }
       }
     },
-    cue(kind, from, dir, color, now, cone) {
+    cue(kind, from, dir, color, now, shape) {
       if (kind === "super") {
         effects.ring(from, 0.7, 1.3, color, 0.25, now);
         return;
@@ -731,12 +770,25 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         effects.cone(
           from,
           dir,
-          cone?.range ?? 6.5,
-          cone?.half ?? 0.5,
+          shape?.range ?? 6.5,
+          shape?.half ?? 0.5,
           color,
           0.25,
           now,
           0.28,
+        );
+        return;
+      }
+      if (kind === "gaze") {
+        effects.rect(
+          from,
+          dir,
+          shape?.range ?? 6.5,
+          (shape?.half ?? 2.25) * 2,
+          color,
+          0.4,
+          now,
+          0.22,
         );
         return;
       }

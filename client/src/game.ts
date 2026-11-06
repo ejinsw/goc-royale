@@ -313,7 +313,16 @@ class Arena {
       this.actions.trySuper(me, s, t, this.bridge.paused)
     ) {
       sound("super_cue");
-      this.cue("super", me, 0xf4c95d, t);
+      const superSpec = FIGHTERS[me.fighter].abilities.super;
+      this.cue(
+        superSpec.kind === "frame" && superSpec.effect === "gaze" ? "gaze" : "super",
+        me,
+        0xf4c95d,
+        t,
+        superSpec.kind === "frame" && superSpec.effect === "gaze"
+          ? { range: superSpec.range, half: superSpec.width / 2 }
+          : undefined,
+      );
       if (this.view?.action(me.id, "super", t)) metrics.anim.predicted++;
       this.predictedSuperAt = t;
     }
@@ -326,7 +335,7 @@ class Arena {
     me: Player,
     color: number,
     t: number,
-    cone?: { range: number; half: number },
+    shape?: { range: number; half: number },
   ) {
     this.view?.cue(
       kind,
@@ -334,7 +343,7 @@ class Arena {
       { ...this.bridge.input.aim },
       color,
       t,
-      cone,
+      shape,
     );
   }
 
@@ -346,8 +355,8 @@ class Arena {
       this.predictedReleaseAt = t;
       return;
     }
-    sound("attack", IDS.indexOf(me.fighter));
     const fighter = FIGHTERS[me.fighter];
+    sound(fighter.attackSound ?? "attack", IDS.indexOf(me.fighter));
     const attack = fighter.abilities.attack;
     // Cone attacks are instant; shot attacks create authoritative projectiles.
     this.cue(
@@ -377,6 +386,17 @@ class Arena {
         e.kind === "attack" &&
         e.owner === this.bridge.id &&
         this.actions.confirmAttack(now)
+      ) {
+        this.predictedEffectIds.add(e.id);
+        continue;
+      }
+      // Side Eye's warning was already drawn on the local input frame; only
+      // the resolving flash is replayed from authority.
+      if (
+        e.kind === "gaze" &&
+        !e.value &&
+        e.owner === this.bridge.id &&
+        now - this.predictedSuperAt < PREDICTION_WINDOW
       ) {
         this.predictedEffectIds.add(e.id);
         continue;

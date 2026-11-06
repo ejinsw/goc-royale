@@ -610,7 +610,18 @@ export class Engine {
         return () => {
           if (spec.windup <= 0) {
             this.effect(spec.effect, p.pos, p.id, p.aim, undefined, 0.6);
-            this.rectangle(p, p.pos, p.aim, spec.range, spec.width, spec.damage, spec.stun, spec.knock);
+            this.rectangle(
+              p,
+              p.pos,
+              p.aim,
+              spec.range,
+              spec.width,
+              spec.damage,
+              spec.stun,
+              spec.knock,
+              spec.sideKnock,
+              spec.slow,
+            );
             return true;
           }
           later({ ...p.pos });
@@ -771,12 +782,16 @@ export class Engine {
     damage: number,
     stun: number,
     knock: number,
+    sideKnock = 0,
+    slow?: NonNullable<ShotSpec["slow"]>,
   ) {
     for (const t of this.state.players) {
       if (!t.alive || this.allies(owner, t)) continue;
       const d = sub(t.pos, pos),
         along = d.x * dir.x + d.y * dir.y,
-        across = Math.abs(d.x * dir.y - d.y * dir.x);
+        side = { x: -dir.y, y: dir.x },
+        lateral = d.x * side.x + d.y * side.y,
+        across = Math.abs(lateral);
       if (
         along >= 0 &&
         along <= range &&
@@ -789,6 +804,8 @@ export class Engine {
           this.dropBall(t);
         }
         if (knock) this.knock(t, dir, knock);
+        if (sideKnock) this.knock(t, lateral >= 0 ? side : mul(side, -1), sideKnock);
+        if (slow) this.applySlow(t, slow);
       }
     }
   }
@@ -845,14 +862,19 @@ export class Engine {
       }
     }
     if (!t.alive) return;
-    if (spec.slow && (s.time >= t.slowUntil || spec.slow.amount >= t.slowBy)) {
-      t.slowBy = spec.slow.amount;
-      t.slowUntil = s.time + spec.slow.duration;
-    }
+    if (spec.slow) this.applySlow(t, spec.slow);
     if (spec.tug) {
       // Reel toward the shooter, never past arm's length; not a knockback.
       const n = Math.min(spec.tug, distance(owner.pos, t.pos) - 1);
       if (n > 0) this.move(t, mul(unit(sub(owner.pos, t.pos)), n));
+    }
+  }
+  /** Apply the strongest active slow and refresh an equal-strength one. */
+  private applySlow(t: Player, slow: NonNullable<ShotSpec["slow"]>) {
+    const s = this.state;
+    if (s.time >= t.slowUntil || slow.amount >= t.slowBy) {
+      t.slowBy = slow.amount;
+      t.slowUntil = s.time + slow.duration;
     }
   }
   /** A Super shot hit: damage, then stun and an optional place swap. */
@@ -973,13 +995,23 @@ export class Engine {
             dead = true;
             break;
           }
-          const bonus =
+          const farBonus =
             spec.farBonus && q.traveled >= f.range * spec.farBonus.from
               ? spec.farBonus.damage
               : 0;
+          const centered =
+            !!spec.centerBonus &&
+            Math.abs(
+              (t.pos.x - q.pos.x) * q.dir.y -
+                (t.pos.y - q.pos.y) * q.dir.x,
+            ) <= RULES.radius + spec.centerBonus.width;
+          const centerBonus = centered ? spec.centerBonus!.damage : 0;
           const before = t.hp + t.shield;
-          if (this.damage(t, power + bonus, owner))
+          if (this.damage(t, power + farBonus + centerBonus, owner)) {
+            if (centered)
+              this.effect("harmony", t.pos, owner.id, q.dir, centerBonus, 0.3);
             this.afterHit(owner, t, spec, before);
+          }
           if (spec.pierce) {
             (q.hit ??= []).push(t.id);
             continue;
@@ -1300,7 +1332,18 @@ export class Engine {
       }
       const spec = item.spec;
       if (spec.kind === "frame") {
-        this.rectangle(p, item.pos, item.dir, spec.range, spec.width, spec.damage, spec.stun, spec.knock);
+        this.rectangle(
+          p,
+          item.pos,
+          item.dir,
+          spec.range,
+          spec.width,
+          spec.damage,
+          spec.stun,
+          spec.knock,
+          spec.sideKnock,
+          spec.slow,
+        );
         this.effect(spec.effect, item.pos, p.id, item.dir, 1, 0.4);
         this.emit("super_resolved", item.pos, p.id, item.dir);
       } else if (spec.kind === "charge") {

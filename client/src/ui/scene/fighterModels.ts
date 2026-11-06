@@ -51,6 +51,7 @@ export type FeatureName =
   | "capBack"
   | "apron"
   | "headphones"
+  | "inEars"
   | "hoodie"
   | "cameraStrap"
   | "plushCharm"
@@ -70,6 +71,7 @@ export type PropName =
   | "speaker"
   | "laptop"
   | "guitar"
+  | "microphone"
   | "rod"
   | "stapler"
   | "ladle"
@@ -191,6 +193,16 @@ export const LOOKS: Record<FighterId, FighterLook> = {
     prop: "guitar",
     companion: "note",
     hold: { x: -0.85, z: -0.35 },
+  }),
+  david: look({
+    shirt: "#4f7fd1",
+    hair: "#2d3442",
+    collar: "#f4f7fb",
+    accent: "#f2c65d",
+    hairStyle: "swept",
+    sweep: 0.55,
+    features: ["inEars"],
+    prop: "microphone",
   }),
   dylan: look({
     shirt: "#2a8fd6",
@@ -434,6 +446,14 @@ const FEATURES: Record<FeatureName, (l: FighterLook) => Pieces> = {
       part(ring(0.47, 0.035, Math.PI), DARK, [0, 0.3, -0.02]),
       part(cylinder(0.12, 0.09), l.accent, [-0.46, 0.29, 0], [0, 0, HALF]),
       part(cylinder(0.12, 0.09), l.accent, [0.46, 0.29, 0], [0, 0, HALF]),
+    ],
+  }),
+  inEars: (l) => ({
+    head: [
+      part(sphere(0.065, 10, 7), l.accent, [-0.43, 0.3, 0.04]),
+      part(sphere(0.065, 10, 7), l.accent, [0.43, 0.3, 0.04]),
+      rod([-0.43, 0.27, 0.01], [-0.31, 0.05, -0.2], 0.01, DARK),
+      rod([0.43, 0.27, 0.01], [0.31, 0.05, -0.2], 0.01, DARK),
     ],
   }),
   hoodie: (l) => ({
@@ -911,6 +931,14 @@ const PROPS: Record<
         [-0.05, 0.42, 0.29],
         [0, 0, -0.85],
       ),
+  },
+  microphone: {
+    slot: "armR",
+    build: () => [
+      part(capsule(0.035, 0.25), "#2f3540", [0, 0.04, 0.04]),
+      part(sphere(0.09, 12, 8), "#69717f", [0, 0.25, 0.04], [0, 0, 0], [1, 1.15, 1]),
+      part(ring(0.07, 0.012), "#f2c65d", [0, 0.24, 0.04], [HALF, 0, 0]),
+    ],
   },
   rod: {
     slot: "armR",
