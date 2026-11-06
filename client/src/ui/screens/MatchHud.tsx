@@ -47,6 +47,9 @@ interface HudView {
 const deriveHud = (match: Match | null, selfId: string, spectate: string | null): HudView | null => {
   if (!match) return null;
   const self = match.players.find((p) => p.id === selfId);
+  const watched =
+    match.players.find((p) => p.id === spectate && p.alive) ??
+    (!self?.alive ? match.players.find((p) => p.alive) : undefined);
   const carrier = match.players.find((p) => p.id === match.ball.carrier);
   const countdown =
     match.phase === "countdown" ? Math.max(1, Math.ceil(match.phaseUntil - match.time)) : null;
@@ -80,7 +83,7 @@ const deriveHud = (match: Match | null, selfId: string, spectate: string | null)
     superReady: (self?.charge ?? 0) >= RULES.superCharge,
     placement: self?.placement ?? 0,
     respawnIn: Math.max(0, Math.ceil((self?.respawn || 0) - match.time)),
-    spectateName: match.players.find((p) => p.id === spectate)?.name || "the arena",
+    spectateName: watched?.name || "the arena",
   };
 };
 
@@ -193,6 +196,13 @@ export function MatchHud({
   live.current = { carrying: !!hud?.carrying, superReady: !!hud?.superReady };
   const alive = !!hud?.alive;
 
+  // A respawn or new match always returns camera ownership to the player.
+  useEffect(() => {
+    if (!alive) return;
+    bridge.spectate = null;
+    if (spectate !== null) setSpectate(null);
+  }, [alive, bridge, spectate, setSpectate]);
+
   // One router per life: sticks exist only while the local fighter is alive.
   useEffect(() => {
     if (!alive || !layer.current) return;
@@ -275,7 +285,7 @@ export function MatchHud({
             )}
           </div>
         </div>
-        {/* One stacked column under the clock, so announcements never overlap. */}
+        {/* One centered stack, so announcements never overlap the corner HUD. */}
         <div className="hud-feed">
           {hud.ball && (
             <Display

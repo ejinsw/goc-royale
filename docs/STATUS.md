@@ -652,3 +652,36 @@ Still not verified: physical simultaneous multi-touch on iOS/Android, the
 eight-fighter worst-case effect scene, complete-match/rematch heap trend,
 real-GPU context-loss recovery, or human readability/game-feel testing across
 every fighter footprint.
+
+## November 6, 2026 — camera ownership and mobile full screen
+
+Branch `codex/camera-fullscreen`. This is presentation and game-UI work only;
+authoritative gameplay and network behavior are unchanged.
+
+- A living local fighter now always owns the camera. Spectating is allowed only
+  while the local fighter is out, stale/dead targets fall back to a living
+  survivor, and respawn, rematch, lobby return, and leave clear spectator state.
+- The follow camera centers on its fighter across the whole arena instead of
+  clamping near field edges. At an edge it intentionally reveals scenery beyond
+  the playable bounds; collision and playable bounds are unchanged.
+- Settings now offers a user-triggered full-screen toggle. Dynamic viewport
+  sizing, safe-area coverage, standalone metadata, and the existing
+  `viewport-fit=cover` support mobile browser layouts. iPhone users are directed
+  to Add to Home Screen where element fullscreen is unavailable.
+- The match timer/status panel is smaller and anchored in the upper-right
+  safe-area corner instead of occupying the top center of the playfield.
+
+Verification:
+
+- `npm test` passes 114/114, including four new target-selection cases for
+  local respawn, valid spectating, dead/missing targets, and no survivors.
+- `npm run build` passes; the existing 628.41 kB procedural-model warning is
+  unchanged.
+- Live Chromium QA at 1440×900 and 1280×720 showed the fighter centered beside
+  the rink edge, with out-of-bounds scenery visible, and the compact timer in
+  the upper-right safe corner. Settings exposed the full-screen control and its
+  iPhone installed-mode guidance without browser warnings or errors.
+
+Still not verified: physical iOS/Android browser and installed-mode behavior,
+safe areas on a notched device, or a live death/spectate/respawn loop across
+two real clients.

@@ -31,6 +31,7 @@ const PATHS = {
   eye: "M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12ZM12 9.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6Z",
   dot: "M12 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z",
   timer: "M12 7.5v5l3 2M9.5 2.5h5M12 21a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17Z",
+  expand: "M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5",
 } as const;
 
 export type IconName = keyof typeof PATHS;

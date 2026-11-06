@@ -20,6 +20,7 @@ export function SettingsSheet({
   host,
   onReconnect,
   onLeave,
+  onFullscreen,
   onClose,
 }: {
   values: SettingsValues;
@@ -28,6 +29,7 @@ export function SettingsSheet({
   host: boolean;
   onReconnect: () => Promise<unknown>;
   onLeave: () => void;
+  onFullscreen: () => Promise<unknown>;
   onClose: () => void;
 }) {
   return (
@@ -38,6 +40,8 @@ export function SettingsSheet({
         <Control kind="toggle" label="Screen shake" value={values.shake} onChange={(shake) => onChange({ shake })} />
         <Control kind="toggle" label="Reduce motion" value={values.reducedMotion} onChange={(reducedMotion) => onChange({ reducedMotion })} />
         <Control kind="toggle" label="Vibration" value={values.haptics} onChange={(haptics) => onChange({ haptics })} />
+        <Control kind="button" variant="dark" icon="expand" label="Toggle full screen" onPress={onFullscreen} />
+        <Display kind="label" level="caption" text="Full screen hides browser bars where supported. On iPhone, Add to Home Screen gives the cleanest view." />
       </div>
       <Display
         kind="table"

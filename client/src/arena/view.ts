@@ -42,6 +42,7 @@ import {
   type ProjectileView,
 } from "./fx";
 import { aimPreviewFor, type AimIntent } from "./aimPreview";
+import { cameraFocusId } from "./cameraFocus";
 import { buildArenaMap, type ArenaMap } from "./map";
 import { createArenaMaterials } from "./materials";
 
@@ -63,20 +64,16 @@ import { createArenaMaterials } from "./materials";
 /**
  * Camera decision (integration brief, open decision 1): a perspective follow
  * camera at a fixed pitch. It shows the same framing as the 2D arena did, 1.65x
- * arena fit around the followed fighter, and it is clamped near the field
- * edges the same way. There is no yaw, so screen up is always map up and
- * stick, keyboard and mouse directions keep their meaning.
+ * arena fit around the followed fighter. The fighter remains centered at the
+ * field edges, where the view may reveal scenery beyond the playable bounds.
+ * There is no yaw, so screen up is always map up and stick, keyboard and mouse
+ * directions keep their meaning.
  */
 const CAMERA = {
   /** Low enough to see faces, high enough that cover never hides a fighter. */
   pitch: (50 * Math.PI) / 180,
   fov: 32,
   fit: 1.65,
-  /**
-   * How far past each field edge (world units) the view may show. The camera
-   * side gets more, so a fighter at the bottom edge stays clear of the HUD.
-   */
-  margin: { side: 1.6, far: 1.4, near: 3.2 },
 };
 /** Mouse aim is picked on this plane, about chest height, to avoid parallax. */
 const AIM_HEIGHT = 0.8;
@@ -253,8 +250,6 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     dist: 20,
     h: 17,
     back: 10,
-    ahead: 9,
-    behind: 7,
     halfW: 10,
     ui: 1,
   };
@@ -272,12 +267,9 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     camera.updateProjectionMatrix();
     const zoom = CAMERA.fit * Math.min(W / m.w, H / m.h);
     const t = Math.tan((CAMERA.fov * Math.PI) / 360);
-    const half = (CAMERA.fov * Math.PI) / 360;
     view.dist = H / (2 * zoom * t);
     view.h = view.dist * Math.sin(CAMERA.pitch);
     view.back = view.dist * Math.cos(CAMERA.pitch);
-    view.ahead = view.h / Math.tan(CAMERA.pitch - half) - view.back;
-    view.behind = view.back - view.h / Math.tan(CAMERA.pitch + half);
     view.halfW = view.dist * t * (W / H);
     billboards.px = (2 * view.dist * t) / H;
     // Overhead labels grow with tall screens but never drop below phone size.
@@ -286,15 +278,8 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   const place = (focus: Vec | null, dt: number, now: number) => {
     const m = MAPS[mode!];
     const want = focus ?? { x: m.w / 2, y: m.h / 2 };
-    const { side, far, near } = CAMERA.margin;
-    const x =
-      m.w + 2 * side <= 2 * view.halfW
-        ? m.w / 2
-        : clamp(want.x, view.halfW - side, m.w - view.halfW + side);
-    const z =
-      m.h + far + near <= view.ahead + view.behind
-        ? (m.h + near - far) / 2 + (view.ahead - view.behind) / 2
-        : clamp(want.y, view.ahead - far, m.h - view.behind + near);
+    const x = want.x;
+    const z = want.y;
     if (!cam.ready) {
       cam.x = x;
       cam.z = z;
@@ -384,7 +369,8 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     fit();
     time += f.dt;
     const local = f.localId;
-    const focusId = f.spectateId || local;
+    const focusId = cameraFocusId(s.players, local, f.spectateId);
+    const localAlive = s.players.find((p) => p.id === local)?.alive ?? false;
 
     // Fighters: drawn position, aim, status, then animation.
     const present = new Set<string>();
@@ -414,12 +400,12 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     // Concealed in a bush (not in this viewer's snapshot): not drawn.
     for (const [id, a] of actors) if (!present.has(id)) a.hide();
 
-    const focusActor = actors.get(focusId);
+    const focusActor = focusId ? actors.get(focusId) : undefined;
     const focusPlayer = s.players.find((p) => p.id === focusId);
     const focus = focusActor?.shown
       ? focusActor.at
       : focusPlayer
-        ? (f.positions.get(focusId) ?? focusPlayer.pos)
+        ? ((focusId ? f.positions.get(focusId) : undefined) ?? focusPlayer.pos)
         : null;
     map!.update(s, focus, time, f.dt, (pos) => {
       effects.ring(pos, 0.4, 1.5, 0xc99155, 0.45, f.now);
@@ -468,7 +454,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         markers.ring(x, z, 0.74, 0xfff0b8);
         if (s.mode === "broomball") markers.ring(x, z, 0.6, ring, 0.035);
       } else markers.ring(x, z, 0.67, ring);
-      if (f.spectateId === p.id) markers.ring(x, z, 0.98, 0xffd86e);
+      if (!localAlive && focusId === p.id) markers.ring(x, z, 0.98, 0xffd86e);
       if (p.protectedUntil > s.time)
         markers.ring(x, z, 0.84, 0xffffff, 0.05 + 0.02 * Math.sin(time * 14));
       if (p.slow > 0) {

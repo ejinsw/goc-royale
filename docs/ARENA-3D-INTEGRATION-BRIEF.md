@@ -104,9 +104,9 @@ entry, so a different user decision is a small change.
 
 1. **Camera:** perspective follow camera at a fixed 50° pitch, 32° vertical
    field of view, no yaw. It keeps the 2D arena's framing: the view plane at
-   the followed fighter has the old 1.65× arena-fit scale, and the camera is
-   clamped near field edges, with extra room on the camera side so a fighter
-   at the bottom edge stays clear of the HUD. Screen up is always map up, so
+   the followed fighter has the old 1.65× arena-fit scale. The followed fighter
+   stays centered even at a field edge, allowing scenery beyond the playable
+   bounds to enter the view. Screen up is always map up, so
    stick, keyboard and mouse directions are unchanged. Mouse aim is picked
    per frame on a chest-height plane. `CAMERA` in `client/src/arena/view.ts`.
 2. **Fighter assets:** all 18 fighters use the menu's shared procedural

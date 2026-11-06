@@ -8,6 +8,7 @@ import { installDevOverlay } from "./devOverlay";
 import type { GameBridge } from "./game";
 import { preferences, setMusic, unlockAudio } from "./audio";
 import { setReducedMotion, uiPrefs } from "./ui/core/feedback";
+import { toggleFullscreen } from "./ui/core/fullscreen";
 import type { ControlHandle, PressResult } from "./ui/core/control";
 import { menuKit } from "./ui/menu/menuKit";
 import { MenuStage } from "./ui/scene/MenuStage";
@@ -150,6 +151,8 @@ function App() {
         store.current.clear();
         bridge.current.match = null;
         bridge.current.input = initialInput();
+        bridge.current.spectate = null;
+        setSpectate(null);
         setMatchPhase(null);
       }
     }
@@ -237,6 +240,8 @@ function App() {
     store.current.clear();
     bridge.current.match = null;
     bridge.current.input = initialInput();
+    bridge.current.spectate = null;
+    setSpectate(null);
     history.replaceState(null, "", location.pathname);
     setStatus(DEFAULT_STATUS);
   };
@@ -255,6 +260,25 @@ function App() {
   const openSettings = () => {
     unlockAudio();
     setSettings(true);
+  };
+  const fullscreen = async () => {
+    let changed: boolean;
+    try {
+      changed = await toggleFullscreen();
+    } catch (error) {
+      setToast({
+        text: "The browser could not enter full screen. On iPhone, use Add to Home Screen.",
+        key: Date.now(),
+      });
+      throw error;
+    }
+    if (!changed) {
+      setToast({
+        text: "Full screen is not available here. On iPhone, use Add to Home Screen.",
+        key: Date.now(),
+      });
+      throw new Error("Fullscreen unavailable");
+    }
   };
   const pickFighter = (id: FighterId) => {
     setChosen(id);
@@ -348,6 +372,7 @@ function App() {
           host={!!host}
           onReconnect={reconnect}
           onLeave={leave}
+          onFullscreen={fullscreen}
           onClose={() => setSettings(false)}
         />
       )}

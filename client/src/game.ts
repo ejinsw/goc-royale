@@ -15,6 +15,7 @@ import { uiPrefs } from "./ui/core/feedback";
 import { preloadFighterAssets } from "./arena/fighters";
 import { createArenaView, type ArenaView, type CueKind } from "./arena/view";
 import type { AimIntent } from "./arena/aimPreview";
+import { cameraFocusId } from "./arena/cameraFocus";
 
 /**
  * The match: input, prediction and presentation timing around the 3D arena
@@ -458,11 +459,8 @@ class Arena {
    */
   private playEvents(s: Match, now: number) {
     if (!s.events?.length) return;
-    const self = s.players.find((p) => p.id === this.bridge.id);
-    const focus =
-      (this.bridge.spectate
-        ? s.players.find((p) => p.id === this.bridge.spectate)
-        : self) || null;
+    const focusId = cameraFocusId(s.players, this.bridge.id, this.bridge.spectate);
+    const focus = s.players.find((p) => p.id === focusId) ?? null;
     for (const e of s.events) {
       if (this.consumedEvents.has(e.id)) continue;
       this.consumedEvents.add(e.id);
