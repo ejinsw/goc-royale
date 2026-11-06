@@ -7,7 +7,7 @@ import type { Match, Player } from "../../shared/types";
  * immediately instead of after a network round trip. Presentation only:
  * damage, ammo, cooldowns and Super charge stay authoritative.
  *
- * Kept free of Phaser/DOM for unit testing.
+ * Kept free of renderer/DOM code for unit testing.
  */
 export type PredictedAttack = "attack" | "release";
 
@@ -27,7 +27,9 @@ export class ActionPredictor {
       !paused &&
       !!self?.alive &&
       match.phase === "playing" &&
-      match.time >= self.stunUntil
+      match.time >= self.stunUntil &&
+      // Mid-leap: the authority ignores attacks until the fighter lands.
+      match.time >= self.busyUntil
     );
   }
 

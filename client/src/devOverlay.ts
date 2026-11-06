@@ -54,6 +54,8 @@ function render() {
     `GOC dev overlay  [\`] · ${metrics.role}`,
     `frame  p50 ${ms(p50)} ms  p95 ${ms(f.percentile(0.95))} ms  ~${Number.isFinite(p50) ? Math.round(1000 / p50) : "–"} fps`,
     `       long >33ms ${long}/${f.size}`,
+    `gpu    calls ${metrics.gpu.calls}  tris ${metrics.gpu.triangles}  geo ${metrics.gpu.geometries}  tex ${metrics.gpu.textures}`,
+    `anim   local predicted ${metrics.anim.predicted}  skipped ${metrics.anim.skipped}  authoritative ${metrics.anim.authoritative}`,
   ];
   if (metrics.role === "guest")
     lines.push(

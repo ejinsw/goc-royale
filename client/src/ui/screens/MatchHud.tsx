@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FIGHTERS, RULES, type FighterId } from "../../../../shared/definitions";
 import type { Match } from "../../../../shared/types";
 import { uiCue } from "../../audio";
-import type { GameBridge } from "../../game";
+import type { ArenaHandle, GameBridge } from "../../game";
 import { useGameSelector, type GameStore } from "../../gameStore";
 import { metrics } from "../../metrics";
 import type { PressResult } from "../core/control";
@@ -130,21 +130,39 @@ function useOnboardingControls() {
   return show;
 }
 
-/** The Phaser arena. Mounted only during a match; the menu scene is gone. */
+/**
+ * The 3D arena. Mounted only during a match, after the menu scene has been
+ * disposed, so one renderer is live at a time (docs/CODE-PRACTICES.md §7).
+ */
 function GameView({ bridge }: { bridge: GameBridge }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Set once if WebGL cannot start; the HUD and controls still work.
+  const [unavailable, setUnavailable] = useState(false);
   useEffect(() => {
     let disposed = false;
-    let game: import("phaser").Game | undefined;
+    let arena: ArenaHandle | undefined;
     void import("../../game").then((module) => {
-      if (!disposed) game = module.mountGame(ref.current!, bridge);
+      if (!disposed) arena = module.mountGame(ref.current!, bridge, { onUnavailable: () => setUnavailable(true) });
     });
     return () => {
       disposed = true;
-      game?.destroy(true);
+      arena?.destroy();
     };
   }, [bridge]);
-  return <div className="game-canvas" ref={ref} />;
+  return (
+    <div className="game-canvas" ref={ref}>
+      {unavailable && (
+        <Display
+          kind="callout"
+          className="hud-big"
+          variant="danger"
+          icon="warning"
+          text="The 3D arena could not start"
+          sub="This browser blocked WebGL. The match continues; try another browser to see it."
+        />
+      )}
+    </div>
+  );
 }
 
 export function MatchHud({

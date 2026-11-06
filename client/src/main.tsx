@@ -116,9 +116,12 @@ function App() {
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
   }, []);
+  // Warm the arena chunk and the fighters' runtime assets while in the lobby.
+  const lobbyFighters = lobby ? [...new Set(lobby.members.map((m) => m.fighter))].sort().join(",") : "";
   useEffect(() => {
-    if (lobby) void import("./game");
-  }, [!!lobby]);
+    if (!lobbyFighters) return;
+    void import("./game").then((m) => m.preloadArena(lobbyFighters.split(",") as FighterId[]));
+  }, [lobbyFighters]);
   useEffect(() => {
     if (!error) return;
     const id = setTimeout(() => setError(""), 6000);

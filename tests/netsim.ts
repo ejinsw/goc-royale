@@ -165,7 +165,7 @@ export function runScenario(cfg: Scenario): Result {
       latest = match;
       lastSnapshotAt = now;
       for (const e of match.events) {
-        // Present exactly once per id, as ArenaScene.playEvents does.
+        // Present exactly once per id, as the arena's playEvents does.
         if (seen.has(e.id)) {
           repeatDeliveries++;
           continue;
@@ -185,7 +185,7 @@ export function runScenario(cfg: Scenario): Result {
     const attack = now >= 4000 && now < attackUntil && now - lastAttack >= 1500;
     if (attack) lastAttack = now;
     const self = latest.players.find((p) => p.id === guestId);
-    // Mirror ArenaScene.sendInput.
+    // Mirror the arena's sendInput (client/src/game.ts).
     const key = `${move.x},${move.y}`;
     if (key !== lastKey || attack || now - lastSend >= 1000 / 30) {
       lastKey = key;

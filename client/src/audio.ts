@@ -31,6 +31,22 @@ const CUES: Record<string, Tone[]> = {
   // super_cue rises (anticipation); release falls (a soft whoosh).
   super_cue: [{ wave: "triangle", from: 330, to: 990 }],
   release: [{ wave: "sine", from: 520, to: 220 }],
+  // Ministry-leader Super cues (one entry per new effect kind).
+  burst: [
+    { wave: "triangle", from: 180, to: 70, dur: 0.16 },
+    { wave: "sine", from: 660, to: 330, at: 0.02, dur: 0.12, gain: 0.5 },
+  ],
+  marker: [{ wave: "sine", from: 420, to: 900, dur: 0.18, gain: 0.6 }],
+  leap: [{ wave: "triangle", from: 260, to: 620, dur: 0.2, gain: 0.8 }],
+  chain: [
+    { wave: "square", from: 900, to: 700, dur: 0.04, gain: 0.35 },
+    { wave: "square", from: 1100, to: 800, at: 0.05, dur: 0.05, gain: 0.35 },
+  ],
+  swap: [
+    { wave: "sine", from: 500, to: 500, dur: 0.06, gain: 0.6 },
+    { wave: "sine", from: 750, to: 750, at: 0.06, dur: 0.08, gain: 0.6 },
+  ],
+  panda: [{ wave: "sawtooth", from: 150, to: 90, dur: 0.12, gain: 0.45 }],
   ui_tap: [{ wave: "sine", from: 720, to: 560, dur: 0.05, gain: 0.45 }],
   ui_press: [{ wave: "triangle", from: 320, to: 190, dur: 0.06, gain: 0.8 }],
   ui_thump: [{ wave: "triangle", from: 190, to: 85, dur: 0.09, gain: 1 }],
@@ -73,10 +89,15 @@ function play(tones: Tone[], pitch: number) {
   }
 }
 
-/** Gameplay cue by effect kind. Attack pitch varies by fighter slot. */
+/**
+ * Gameplay cue by effect kind. Attack pitch varies by fighter slot: the
+ * first seven keep their original pitches, later slots cycle through the
+ * same range offset by a third step so the cue never climbs into a squeal.
+ */
 export function sound(kind: string, fighterIndex = 0) {
   if (kind === "attack") {
-    play([{ wave: "triangle", from: 240 + fighterIndex * 75, to: 80 }], 1);
+    const pitch = 240 + (fighterIndex % 7) * 75 + Math.floor(fighterIndex / 7) * 25;
+    play([{ wave: "triangle", from: pitch, to: 80 }], 1);
     return;
   }
   play(CUES[kind] ?? CUES.default, 1);
