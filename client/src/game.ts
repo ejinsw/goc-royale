@@ -14,6 +14,7 @@ import { metrics } from "./metrics";
 import { uiPrefs } from "./ui/core/feedback";
 import { preloadFighterAssets } from "./arena/fighters";
 import { createArenaView, type ArenaView, type CueKind } from "./arena/view";
+import type { AimIntent } from "./arena/aimPreview";
 
 /**
  * The match: input, prediction and presentation timing around the 3D arena
@@ -32,6 +33,8 @@ export interface GameBridge {
   spectate: string | null;
   send: (input: Input) => void;
   paused: boolean;
+  /** Local-only held action; never sent to authority. */
+  aiming: AimIntent | null;
 }
 
 export interface ArenaHandle {
@@ -61,6 +64,8 @@ class Arena {
   private view: ArenaView | null;
   private keys = new Set<string>();
   private mouseDown = 0;
+  private mouseAction: AimIntent | null = null;
+  private keySuper = false;
   /** Last mouse position (client px); null once touch is in use. */
   private mouse: { x: number; y: number } | null = null;
   private lastSend = 0;
@@ -126,17 +131,29 @@ class Arena {
       )
         e.preventDefault();
       this.keys.add(e.code);
-      if (e.code === "Space" && !e.repeat) this.bridge.input.super = true;
+      if (e.code === "Space" && !e.repeat) {
+        this.keySuper = true;
+        this.bridge.aiming = "super";
+      }
     });
     this.on(window, "keyup", (e) => {
       this.keys.delete(e.code);
       if (MOVE_KEYS.includes(e.code)) this.bridge.input.move = { x: 0, y: 0 };
+      if (e.code === "Space" && this.keySuper) {
+        if (!this.bridge.paused) this.bridge.input.super = true;
+        this.keySuper = false;
+        if (this.bridge.aiming === "super") this.bridge.aiming = null;
+      }
     });
     this.on(window, "blur", () => {
       this.keys.clear();
       this.bridge.input.move = { x: 0, y: 0 };
       this.bridge.input.attack = false;
+      this.bridge.input.super = false;
       this.mouseDown = 0;
+      this.mouseAction = null;
+      this.keySuper = false;
+      this.bridge.aiming = null;
       this.bridge.send({ move: { x: 0, y: 0 }, aim: this.bridge.input.aim });
     });
     // Mouse play: aim follows the cursor; HUD controls sit above the arena
@@ -159,20 +176,32 @@ class Arena {
       { capture: true, passive: true },
     );
     this.on(this.parent, "pointerdown", (e) => {
-      if (e.pointerType !== "mouse") return;
+      if (e.pointerType !== "mouse" || this.bridge.paused) return;
       this.mouse = { x: e.clientX, y: e.clientY };
-      if (e.button === 2) this.bridge.input.super = true;
-      else if (e.button === 0) this.mouseDown = performance.now();
+      if (e.button === 2) {
+        this.mouseAction = "super";
+        this.bridge.aiming = "super";
+      } else if (e.button === 0) {
+        this.mouseDown = performance.now();
+        this.mouseAction = "attack";
+        this.bridge.aiming = "attack";
+      }
     });
     this.on(window, "pointerup", (e) => {
-      if (e.pointerType !== "mouse" || !this.mouseDown) return;
-      this.bridge.input.attack = true;
-      this.bridge.input.power = clamp(
-        (performance.now() - this.mouseDown) / 800,
-        0.35,
-        1,
-      );
+      if (e.pointerType !== "mouse" || !this.mouseAction) return;
+      if (this.mouseAction === "attack" && e.button === 0) {
+        this.bridge.input.attack = true;
+        this.bridge.input.power = clamp(
+          (performance.now() - this.mouseDown) / 800,
+          0.35,
+          1,
+        );
+      } else if (this.mouseAction === "super" && e.button === 2) {
+        this.bridge.input.super = true;
+      } else return;
       this.mouseDown = 0;
+      this.mouseAction = null;
+      this.bridge.aiming = null;
     });
     this.on(this.parent, "contextmenu", (e) => e.preventDefault());
   }
@@ -227,6 +256,9 @@ class Arena {
       localId: this.bridge.id,
       spectateId: this.bridge.spectate,
       localAim: this.bridge.input.aim,
+      localMove: this.bridge.input.move,
+      aiming: this.bridge.aiming,
+      power: this.bridge.input.power ?? 0.35,
       age: (nowMs - this.matchAt) / 1000,
       now,
       dt: Math.min(deltaMs / 1000, 0.1),
@@ -510,6 +542,7 @@ class Arena {
 
   destroy() {
     cancelAnimationFrame(this.raf);
+    this.bridge.aiming = null;
     for (const c of this.cleanups.splice(0)) c();
     this.view?.dispose();
     this.view = null;

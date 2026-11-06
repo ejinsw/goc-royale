@@ -31,6 +31,7 @@ import {
 } from "./fighters";
 import {
   Areas,
+  AimGuide,
   Ball,
   Billboards,
   Effects,
@@ -40,6 +41,7 @@ import {
   aimArrow,
   type ProjectileView,
 } from "./fx";
+import { aimPreviewFor, type AimIntent } from "./aimPreview";
 import { buildArenaMap, type ArenaMap } from "./map";
 import { createArenaMaterials } from "./materials";
 
@@ -87,6 +89,9 @@ export interface ArenaFrame {
   localId: string;
   spectateId: string | null;
   localAim: Vec;
+  localMove: Vec;
+  aiming: AimIntent | null;
+  power: number;
   /** Seconds since `match` arrived, for extrapolating fast objects. */
   age: number;
   /** Seconds, same clock as performance.now() / 1000. */
@@ -174,6 +179,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   const ball = new Ball(mats);
   const vans = new Vans(mats);
   const arrow = aimArrow(mats);
+  const guide = new AimGuide(mats);
   scene.add(
     billboards.mesh,
     markers.shadows,
@@ -184,6 +190,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     ball.mesh,
     vans.group,
     arrow,
+    guide.group,
   );
 
   const procedural = new Map<FighterId, ProceduralAsset>();
@@ -597,7 +604,26 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
 
     const me = s.players.find((p) => p.id === local);
     const meActor = actors.get(local);
-    arrow.visible = !!me?.alive && !!meActor?.shown && s.phase !== "finished";
+    const canGuide = !!me?.alive && !!meActor?.shown && s.phase === "playing";
+    if (canGuide) {
+      const intent = f.aiming;
+      guide.update(
+        meActor!.at,
+        f.localAim,
+        f.localMove,
+        intent === "super" ? 0xf4c95d : hex(FIGHTERS[me!.fighter].color),
+        intent,
+        intent
+          ? aimPreviewFor(
+              me!.fighter,
+              intent,
+              s.ball.carrier === me!.id,
+              f.power,
+            )
+          : null,
+      );
+    } else guide.hide();
+    arrow.visible = canGuide && !f.aiming;
     if (arrow.visible) {
       arrow.position.set(meActor!.at.x, 0.05, meActor!.at.y);
       arrow.rotation.y = Math.atan2(f.localAim.x, f.localAim.y);

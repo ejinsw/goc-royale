@@ -83,6 +83,7 @@ function App() {
       spectate: null,
       send: (input) => net.current?.input(input),
       paused: false,
+      aiming: null,
     });
   const portrait = usePortrait();
 

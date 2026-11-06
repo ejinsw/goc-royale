@@ -609,3 +609,46 @@ Still not verified for David: the Side Eye presentation in a live two-player
 match, physical iOS/Android performance and touch controls, an eight-fighter
 stress scene, reduced-motion review, synthesized cues by ear, or human
 balance/game-feel testing.
+
+## November 6, 2026 — held aim previews and movement direction pip
+
+Branch `codex/aim-previews`. This is a controls and presentation change only;
+authoritative damage, collision, range, cooldowns, scoring, and network schemas
+are unchanged.
+
+- Holding a basic-attack control now shows its data-derived ground footprint;
+  release fires. Holding Space, right click, or the Super stick does the same
+  for a Super. Mouse, keyboard, and touch all write one mutable local intent on
+  `GameBridge`; it is never transmitted or placed in React state.
+- Footprints distinguish straight shots, spread and cone attacks, rectangular
+  frames, charges, projectile Supers, placed zones, barrier crossbars, leaps,
+  thrown or self-centered bursts, and rewinds. Mixed Voice also shows its narrow
+  center lane. A charged Broomball shot grows with held power.
+- A small mint direction pip appears just ahead of the local fighter whenever
+  movement input is active. It follows keyboard and analog stick direction,
+  independently of aim direction.
+- `AimGuide` owns fixed meshes created once with the arena and only changes
+  visibility, material color, and transforms per frame. No transient meshes,
+  second renderer, snapshot-rate React path, or new authority work was added.
+
+Verification:
+
+- `npm test` passes 110/110, including finite attack and Super footprints for
+  all 18 fighters, representative geometry checks, and charged-ball scaling.
+- `npm run build` passes. The game chunk is 115.80 kB minified / 38.48 kB gzip;
+  the existing 628.41 kB procedural-model warning is unchanged.
+- `npm run netsim` passes every §4.4 case with 10/10 actions presented once and
+  correction p95 of 0.123–0.153 world units.
+- Live Chromium QA at 1280×720, DPR 2 showed: an attack footprint throughout a
+  held left click with no release animation until pointer-up; a Super placement
+  circle throughout held Space; and the movement pip immediately while holding
+  a movement key. Frame time was p50 16.7 / p95 17.7 ms at about 60 FPS. The
+  scene used 9 calls / about 19.9k triangles at rest, 10 calls during the attack
+  footprint, and 13 calls / about 20k triangles with the movement pip. Hot
+  reload tore down the live arena and returned to the menu with no browser
+  warnings or errors.
+
+Still not verified: physical simultaneous multi-touch on iOS/Android, the
+eight-fighter worst-case effect scene, complete-match/rematch heap trend,
+real-GPU context-loss recovery, or human readability/game-feel testing across
+every fighter footprint.
