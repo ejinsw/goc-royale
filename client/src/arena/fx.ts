@@ -752,6 +752,22 @@ function projectileGeometry(kind: ShotKind): BufferGeometry {
           [0, 0, -0.5],
         ),
       ]);
+    case "david":
+      return merge([
+        part(
+          new TorusGeometry(0.13, 0.035, 6, 18, Math.PI * 1.45),
+          "#f2c65d",
+          [-0.07, 0, 0],
+          [Math.PI / 2, 0, 0.35],
+        ),
+        part(
+          new TorusGeometry(0.13, 0.035, 6, 18, Math.PI * 1.45),
+          "#4f7fd1",
+          [0.07, 0, 0],
+          [Math.PI / 2, 0, -0.35],
+        ),
+        part(new SphereGeometry(0.055, 10, 7), "#fff8d7"),
+      ]);
     case "dylan":
       return merge([
         part(

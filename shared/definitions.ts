@@ -6,6 +6,7 @@ export type FighterId =
   | "josh"
   | "elijah"
   | "ethan"
+  | "david"
   | "dylan"
   | "isaac"
   | "tovya"
@@ -54,6 +55,8 @@ export interface ShotSpec {
   healAllies?: number;
   /** Bonus damage when the hit lands past `from` of the full range. */
   farBonus?: { from: number; damage: number };
+  /** Bonus damage inside a narrower, clearly presented center hit radius. */
+  centerBonus?: { width: number; damage: number };
   /** After a hit, jumps to the nearest other rival within `range`. */
   chain?: { range: number; damage: number };
   /** Drags a hit rival this far toward the shooter. Not a knockback. */
@@ -106,7 +109,10 @@ export type SuperSpec =
       damage: number;
       stun: number;
       knock: number;
-      effect: "photo" | "sound";
+      /** Push perpendicular to aim, away from the rectangle's center line. */
+      sideKnock?: number;
+      slow?: { amount: number; duration: number };
+      effect: "photo" | "sound" | "gaze";
     }
   /** Wind up, then charge along the aim, hitting each rival once. */
   | {
@@ -201,6 +207,7 @@ export interface Fighter {
   color: string;
   description: string;
   superDescription: string;
+  attackSound?: "mixed_voice";
   /** How the attack and Super resolve on the authority. */
   abilities: { attack: AttackSpec; super: SuperSpec };
 }
@@ -393,6 +400,40 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     abilities: {
       attack: { kind: "shot", spread: [-0.055, 0.055] },
       super: { kind: "burst", at: 0, radius: 4, damage: "knockout", effect: "aura" },
+    },
+  },
+  david: {
+    id: "david",
+    name: "David",
+    team: "Music",
+    role: "Vocal Controller",
+    hp: 5500,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.4,
+    damage: 500,
+    range: 8,
+    projectileSpeed: 13,
+    attack: "Mixed Voice",
+    super: "Side Eye",
+    color: "#4f7fd1",
+    description: "Blend two vocal layers. The bright center deals bonus damage.",
+    superDescription: "A judging gaze shoves rivals sideways and briefly slows them.",
+    attackSound: "mixed_voice",
+    abilities: {
+      attack: { kind: "shot", width: 0.32, centerBonus: { width: 0.04, damage: 400 } },
+      super: {
+        kind: "frame",
+        windup: 0.4,
+        range: 6.5,
+        width: 4.5,
+        damage: 750,
+        stun: 0,
+        knock: 0,
+        sideKnock: 1.6,
+        slow: { amount: 0.25, duration: 1 },
+        effect: "gaze",
+      },
     },
   },
   dylan: {

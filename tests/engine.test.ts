@@ -28,7 +28,7 @@ const engine = (
 };
 const fire = (e: Engine, id = "p0", aim = { x: 1, y: 0 }) =>
   e.setInput(id, { move: { x: 0, y: 0 }, aim, attack: true });
-test("roster: the seven pilot fighters keep their HP, then the other ministry leaders", () => {
+test("roster: the seven pilot fighters keep their HP, followed by David and the other leaders", () => {
   assert.deepEqual(IDS, [
     "brandon",
     "daniel",
@@ -37,6 +37,7 @@ test("roster: the seven pilot fighters keep their HP, then the other ministry le
     "josh",
     "elijah",
     "ethan",
+    "david",
     "dylan",
     "isaac",
     "tovya",
@@ -192,6 +193,44 @@ test("Elijah ricochets exactly once", () => {
   advance(e, 0.2);
   assert.equal(e.state.projectiles[0]?.bounces, 0);
   assert.ok(e.state.projectiles[0]?.dir.x < 0);
+});
+test("David Mixed Voice rewards the narrow center without changing its outer hit", () => {
+  const centered = engine("david"),
+    [p, t] = centered.playerList;
+  centered.state.walls = [];
+  p.pos = { x: 10, y: 12 };
+  t.pos = { x: 13, y: 12 };
+  fire(centered);
+  advance(centered, 0.4);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 900);
+  assert.ok(centered.state.effects.some((effect) => effect.kind === "harmony"));
+
+  const outer = engine("david"),
+    [outerP, outerT] = outer.playerList;
+  outer.state.walls = [];
+  outerP.pos = { x: 10, y: 12 };
+  outerT.pos = { x: 13, y: 12.65 };
+  fire(outer);
+  advance(outer, 0.4);
+  assert.equal(outerT.hp, FIGHTERS[outerT.fighter].hp - 500);
+  assert.ok(!outer.state.effects.some((effect) => effect.kind === "harmony"));
+});
+test("David Side Eye warns, then shoves away from its center line and slows", () => {
+  const e = engine("david"),
+    [p, t] = e.playerList;
+  e.state.walls = [];
+  p.pos = { x: 10, y: 12 };
+  p.aim = { x: 1, y: 0 };
+  p.charge = 5000;
+  t.pos = { x: 14, y: 13 };
+  assert.ok(e.activateSuper(p));
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp);
+  assert.ok(e.state.effects.some((effect) => effect.kind === "gaze" && !effect.value));
+  advance(e, 0.5);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 750);
+  assert.ok(t.pos.y > 14.5);
+  assert.equal(t.slow, 0.25);
+  assert.ok(e.state.effects.some((effect) => effect.kind === "gaze" && effect.value === 1));
 });
 test("passive healing starts after four quiet seconds and stays bounded", () => {
   const e = engine();

@@ -109,7 +109,7 @@ entry, so a different user decision is a small change.
    at the bottom edge stays clear of the HUD. Screen up is always map up, so
    stick, keyboard and mouse directions are unchanged. Mouse aim is picked
    per frame on a chest-height plane. `CAMERA` in `client/src/arena/view.ts`.
-2. **Fighter assets:** all 17 fighters use the menu's shared procedural
+2. **Fighter assets:** all 18 fighters use the menu's shared procedural
    `LOOKS` models, merged into one rigidly skinned mesh each, with the same
    15-clip set authored as code. Brandon intentionally uses this path too;
    the experimental Brandon GLBs are not selected by the live runtime. A
