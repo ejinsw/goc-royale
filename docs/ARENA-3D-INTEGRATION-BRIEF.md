@@ -1,5 +1,10 @@
 # In-game 3D integration brief
 
+> **Historical note:** the Brandon-specific GLBs and standalone viewers named
+> in this landed integration brief are now redacted and deprecated. They are
+> retained only to explain prior decisions and are not live runtime candidates.
+> See [BRANDON-3D-REDACTED.md](BRANDON-3D-REDACTED.md).
+
 **Branch:** `feature/arena-3d`
 **Worktree:** `~/Documents/GitHub/goc-royale-wt/feature-arena-3d`
 **Base:** `main` at `67bafc3` (the game-style UI pass)
@@ -23,8 +28,8 @@ shapes and portraits.
   renderer requirement and scene disposal.
 - `docs/CHARACTER_3D_PIPELINE.md` — the eight production passes every
   fighter must go through.
-- `assets/3d/brandon/README.md` and `assets/3d/brandon-v4/README.md` — what
-  the existing models actually are and are not.
+- `docs/BRANDON-3D-REDACTED.md` — scope and handling of the retired
+  Brandon-specific 3D studies.
 
 ## Hard constraints
 
@@ -58,14 +63,8 @@ shapes and portraits.
 - `client/src/ui/scene/fighterModels.ts` — procedural low-poly models for all
   seven fighters from one per-fighter look table. These are a usable arena
   placeholder before rigged assets land, and they already share one material.
-- `client/public/art3d/brandon/brandon.glb` — 2,666 triangles, 17 bones, one
-  vertex-color material, 15 named clips. Per the standard §7.3 this low-poly
-  Brandon with the complete clip list is **the preferred integration mule**.
-- `client/public/art3d/brandon-v4/brandon-rig.glb` — 64,112 triangles, 26
-  bones, idle plus a joint demo. This is a deformation study, **not** a
-  runtime asset, and it is far over budget.
-- `client/public/art3d/engine.js`, `play.html`, `movement.html` — the existing
-  standalone viewers, useful for checking a model outside the game.
+- The Brandon-specific GLBs and standalone viewers are redacted historical
+  artifacts. They are not integration mules or runtime candidates.
 
 ## Open decisions for the user
 
@@ -112,7 +111,7 @@ entry, so a different user decision is a small change.
 2. **Fighter assets:** all 18 fighters use the menu's shared procedural
    `LOOKS` models, merged into one rigidly skinned mesh each, with the same
    15-clip set authored as code. Brandon intentionally uses this path too;
-   the experimental Brandon GLBs are not selected by the live runtime. A
+   the redacted Brandon GLBs are not selected by the live runtime. A
    future approved fighter can move to a real asset through one `GLB_ASSETS`
    entry in `client/src/arena/fighters.ts` after manifest, art, animation,
    budget, and device review.

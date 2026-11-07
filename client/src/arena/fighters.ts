@@ -727,8 +727,9 @@ const GLB_ASSETS: Partial<
   Record<FighterId, { glb: string; manifest: string }>
 > = {
   // Runtime assets are opt-in only after art, animation, and device review.
-  // Brandon intentionally uses the shared procedural LOOKS model with the
-  // rest of the roster; the experimental Brandon GLBs remain study assets.
+  // Redacted legacy GLB studies intentionally have no entries here. Brandon
+  // uses the shared procedural LOOKS model with the rest of the roster; see
+  // docs/BRANDON-3D-REDACTED.md.
 };
 /** Standard §7.3 runtime limits, enforced when an asset is imported. */
 const RUNTIME_BUDGET = {

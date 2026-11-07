@@ -1,8 +1,13 @@
 # GOC Royale — modeling skill selection
 
-Research/setup snapshot: October 26, 2026. Historical status: eight selected skills installed in ~/.codex/skills; all ten helper modules import successfully in Blender 5.2.3 LTS. A first Brandon shape study has now been produced with the sculpting workflow and live brush operations. Scenario extension 0.12.0 is installed and enabled; the live local MCP endpoint is connected and Python execution is verified. A new Brandon waist-up study now exists in assets/3d/brandon-v2; it is not a final character.
+> **Redaction notice:** Brandon-specific 3D studies mentioned below are
+> deprecated and redacted historical evidence. They are not production inputs
+> or likeness references. See
+> [BRANDON-3D-REDACTED.md](BRANDON-3D-REDACTED.md).
 
-**October 29 production update:** Apply these skills through [the shared character pipeline](CHARACTER_3D_PIPELINE.md) for all seven fighters. [Brandon's individual specification](BRANDON_3D_ASSET.md) is the first worked example. Brandon v4 remains a movement study; final face/finger/garment performance and mobile acceptance are pending. The research statistics and setup results below are dated evidence, not a fresh verification.
+Research/setup snapshot: October 26, 2026. Historical status: eight selected skills were installed and their helper modules were checked in Blender 5.2.3 LTS. The Brandon-specific outputs from that work are now redacted and deprecated.
+
+**November 7 redaction update:** Apply these skills through [the shared character pipeline](CHARACTER_3D_PIPELINE.md) for the roster. The retired Brandon-specific specification and v4 study are redacted and must not be used as production or likeness references. The research statistics and setup results below are dated evidence, not a fresh verification.
 
 ## Selected candidate
 
@@ -51,7 +56,7 @@ npx skills add scenario-labs/skills --skill scenario-blender-expert --skill scen
 
 ## First proof of usefulness
 
-Follow [the shared pipeline](CHARACTER_3D_PIPELINE.md) and [Brandon's current asset specification](BRANDON_3D_ASSET.md), preserving existing studies. Complete the eight passes with gray/colored turnarounds, expressive face, both five-finger hands, fitted props, believable garment folds and full limb deformation. Prove a close-up face/grip/garment performance before polished idle/run/attack clips. Repeat the checks on every fighter and its browser export; retargeting alone does not establish quality. Apply the mandatory runtime budgets and physical-device acceptance checks in [the performance standard](PERFORMANCE-AND-GAMEPLAY-STANDARDS.md).
+Follow [the shared pipeline](CHARACTER_3D_PIPELINE.md) with a newly approved, fighter-specific brief. Do not reuse the redacted Brandon studies. Complete the eight passes with gray/colored turnarounds, expressive face, both five-finger hands, fitted props, believable garment folds and full limb deformation. Prove a close-up face/grip/garment performance before polished idle/run/attack clips. Repeat the checks on every fighter and its browser export; retargeting alone does not establish quality. Apply the mandatory runtime budgets and physical-device acceptance checks in [the performance standard](PERFORMANCE-AND-GAMEPLAY-STANDARDS.md).
 
 ## Historical verified setup and reconnection reference
 

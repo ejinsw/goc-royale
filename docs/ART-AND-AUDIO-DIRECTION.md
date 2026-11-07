@@ -2,7 +2,7 @@
 
 Version 0.6 · October 29, 2026
 
-**Roster-wide production standard:** all seven fighters follow [CHARACTER_3D_PIPELINE.md](CHARACTER_3D_PIPELINE.md): painterly anime-inspired chibi 3D, shaped expressive faces, articulated five-finger hands, believable garments and the same eight production passes with per-character evidence. [BRANDON_3D_ASSET.md](BRANDON_3D_ASSET.md) is the first individual specification, not an exception to a simpler standard for the other fighters. Exact designs and budgets remain subject to review and device tests.
+**Roster-wide production standard:** all fighters follow [CHARACTER_3D_PIPELINE.md](CHARACTER_3D_PIPELINE.md): painterly anime-inspired chibi 3D, shaped expressive faces, articulated five-finger hands, believable garments and the same eight production passes with per-character evidence. The former Brandon-specific 3D specification is [redacted and deprecated](BRANDON-3D-REDACTED.md). Exact designs and budgets remain subject to review and device tests.
 
 **Current user requirements:** properly shaped and shaded stylized game fighters, actual 3D models, free production tools and limbs prepared for animation. The October 27 correction rejects the toy-cartoon interpretation; collectible proportions and a uniform molded-plastic finish are not approved. Keep readable cartoon shapes, a less strange-looking face and controlled smooth surfaces. Brandon’s beige jacket replaces the earlier blue/gold direction. Seven fighters; Showdown FFA and 3v3 Broomball. Ethan keeps Rizz and Aura Pulse.
 
@@ -10,7 +10,7 @@ Version 0.6 · October 29, 2026
 
 **Proposed for review:** the exact palette, proportions, material settings, animation timings, audio direction, asset budgets and runtime renderer below. These are production targets, not claims about assets already built.
 
-Primary direction: the October 29 painterly anime/chibi references and concept, built on the requirements for properly shaped bodies, expressive faces, usable fingers and animated clothing. See [the shared pipeline](CHARACTER_3D_PIPELINE.md) and each fighter’s individual asset specification. [Brandon redesign brief](BRANDON-REDESIGN-BRIEF.md) is historical. The earlier style comparison is historical exploration. Existing Ethan/Brandon PNGs remain likeness references, not production meshes. The v4 Brandon movement study has a full-body limb rig and browser export, with documented deformation limits. It does not yet implement the October 29 concept, articulated fingers, facial animation or finished clothing.
+Primary direction: the October 29 painterly anime/chibi references and concept, built on the requirements for properly shaped bodies, expressive faces, usable fingers and animated clothing. See [the shared pipeline](CHARACTER_3D_PIPELINE.md) and each fighter’s newly approved individual asset specification. The former Brandon redesign brief, standalone studies, and browser exports are redacted historical evidence and must not be used as production or likeness references.
 
 ## 1. Visual promise
 
@@ -92,7 +92,12 @@ Map visuals wrap the existing collision geometry. Do not change obstacle sizes o
 
 ## 6. Rig and animation specification
 
-**Current status:** Brandon v4 is a rigged movement prototype with idle/joint-demo clips and documented bend limits. The next asset requires rebuilt face/hands/garments, renewed deformation testing and production animation, as specified in [BRANDON_3D_ASSET.md](BRANDON_3D_ASSET.md). The requirements below are not claims that the final asset or shared roster rig is complete.
+**Historical status (redacted):** the retired Brandon-specific 3D studies and
+their former production brief are deprecated historical evidence only. They
+must not be used as production or likeness references. See
+[the redaction notice](BRANDON-3D-REDACTED.md). The shared requirements below
+remain applicable to future roster assets and do not claim that a final asset
+or shared roster rig is complete.
 
 Share humanoid naming and animation conventions for root, hips, spine, neck/head, arms/hands and legs/feet, with articulated finger chains, required face controls and limited garment support. Author the detailed controls needed for performance, then deliver a tested runtime rig with at most 40 deforming bones under the performance standard. Preserve expressions and grips through validated bone/shape-key/baked-motion choices. Provide foot-plant controls in Blender and named prop sockets: hand_r, hand_l, back, head. Refit and test each character; retargeting is not automatic acceptance. Use authored garment follow-through in the first milestone; no runtime cloth/hair solver is required.
 

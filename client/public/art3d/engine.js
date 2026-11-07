@@ -1,3 +1,5 @@
+// REDACTED / DEPRECATED: historical standalone 3D practice bundle.
+// The live game does not load this file.
 // shared/definitions.ts
 var FIGHTERS = {
   brandon: {

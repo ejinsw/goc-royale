@@ -1,4 +1,8 @@
-# Brandon — low-poly 3D prototype
+# [REDACTED] — deprecated low-poly 3D prototype
+
+> **REDACTED / DEPRECATED:** Retained only as historical repository evidence.
+> Do not rebuild, publish, integrate, or use as a likeness reference. See
+> [the repository redaction notice](../../../docs/BRANDON-3D-REDACTED.md).
 
 Created locally with Blender 4.1.0. Original procedural mesh guided by the user's Brandon references and selected low-poly cartoon direction. No paid generator used.
 

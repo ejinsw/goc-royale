@@ -1,4 +1,8 @@
-# Brandon v4 — limb movement study
+# [REDACTED] — deprecated v4 limb movement study
+
+> **REDACTED / DEPRECATED:** Retained only as historical repository evidence.
+> Do not rebuild, publish, integrate, or use as a likeness reference. See
+> [the repository redaction notice](../../../docs/BRANDON-3D-REDACTED.md).
 
 Updated October 27, 2026. **Rigged prototype, not final character art.** The direction is a stylized game fighter wearing a beige jacket, cream shirt, dark trousers and glasses. The face, hair, hands and outfit still need an art pass against the reference; this is not a toy/collectible design sign-off.
 

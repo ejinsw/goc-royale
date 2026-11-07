@@ -1,4 +1,9 @@
-# Brandon — character redesign brief
+# [REDACTED] — deprecated Brandon 3D redesign brief
+
+> **REDACTED / DEPRECATED:** Historical 3D planning only. Do not use this
+> document as a production, likeness, or implementation reference. See
+> [BRANDON-3D-REDACTED.md](BRANDON-3D-REDACTED.md). The live procedural fighter
+> and gameplay rules are outside this redaction.
 
 October 27, 2026 · Historical redesign brief
 

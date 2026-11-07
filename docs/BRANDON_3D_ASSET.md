@@ -1,4 +1,9 @@
-# Brandon — 3D asset production specification
+# [REDACTED] — deprecated Brandon 3D asset production specification
+
+> **REDACTED / DEPRECATED:** This unbuilt 3D plan is retained only as historical
+> repository evidence. Do not resume it or use it as a production or likeness
+> reference. See [BRANDON-3D-REDACTED.md](BRANDON-3D-REDACTED.md). The live
+> procedural fighter and gameplay rules are outside this redaction.
 
 Version 0.2 · October 29, 2026 · **Production plan; target asset not yet built**
 

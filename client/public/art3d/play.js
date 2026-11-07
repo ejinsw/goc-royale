@@ -1,3 +1,5 @@
+// REDACTED / DEPRECATED: retained only as historical viewer source.
+// Do not restore this module to a live runtime path.
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 import { Engine } from './engine.js';

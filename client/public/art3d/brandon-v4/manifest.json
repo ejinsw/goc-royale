@@ -17,11 +17,12 @@
   ],
   "materials": 11,
   "images": [],
-  "name": "Brandon",
+  "name": "[REDACTED]",
+  "status": "REDACTED — deprecated 3D study; not used by the live game",
   "stage": "rigged movement prototype",
   "date": "2026-10-27",
   "sha256": "f1338ef8b4090b8c1d0d4e8b2b23aa744f7c23bb2c7ba0764be8bbf28b36f051",
-  "authoring_source": "assets/3d/brandon-v4/brandon-rig.blend",
-  "viewer": "movement.html",
+  "authoring_source": "[REDACTED — deprecated historical source]",
+  "viewer": "[REDACTED]",
   "production_ready": false
 }

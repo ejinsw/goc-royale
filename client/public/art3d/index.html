@@ -1,23 +1,28 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Brandon · GOC Royale 3D Studio</title>
-<style>*{box-sizing:border-box}body{margin:0;background:#eee8db;color:#17283d;font-family:system-ui,sans-serif}header{position:absolute;top:24px;left:28px;z-index:2;pointer-events:none}header small{font-weight:800;letter-spacing:.16em;font-size:11px}h1{font-size:46px;letter-spacing:-2px;margin:8px 0}header p{font-size:13px;margin:0;color:#4a5b6b}#stage{width:calc(100% - 280px);height:100dvh;min-height:520px;display:block;touch-action:none}.controls{position:absolute;right:24px;top:24px;bottom:24px;width:240px;overflow:auto;background:#fffaf0ee;border:1px solid #d5cbb7;border-radius:20px;padding:20px;box-shadow:0 8px 30px #17283d10}h2{font-size:12px;letter-spacing:.1em;margin:4px 0 14px}.clips{display:grid;grid-template-columns:1fr 1fr;gap:7px}button,select,a{font:inherit}button{border:1px solid #b5bdc5;border-radius:8px;background:#fff;color:#17283d;padding:10px 5px;cursor:pointer;font-size:12px}button[aria-pressed=true]{background:#346cbc;color:white;border-color:#346cbc}button:hover{border-color:#346cbc}button:focus-visible,a:focus-visible,select:focus-visible{outline:3px solid #deab3a;outline-offset:2px}label{display:block;font-size:12px;margin:18px 0 8px}select{width:100%;padding:8px;border:1px solid #b5bdc5;border-radius:8px;background:white}#metrics{font-size:12px;line-height:1.8;border-top:1px solid #ddd2bf;margin-top:20px;padding-top:16px}a{display:block;color:#265da4;font-size:12px;margin-top:12px}.note{font-size:11px;color:#65717a;line-height:1.6}#status{position:absolute;bottom:26px;left:28px;font-size:12px;max-width:55%}.view-buttons{display:flex;gap:6px;margin-top:15px}.view-buttons button{flex:1}@media(max-width:900px){header{top:16px;left:18px}h1{font-size:30px}header p{max-width:230px}#stage{width:100%;height:65dvh;min-height:430px}.controls{position:relative;top:auto;right:auto;bottom:auto;width:auto;margin:0 12px 12px;padding:16px}.clips{grid-template-columns:repeat(5,1fr)}#status{position:static;padding:8px 18px;max-width:100%}#metrics{margin-top:14px;padding-top:12px}.note{margin-bottom:0}}</style>
-<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script></head><body><header><small>GOC ROYALE / CHARACTER STUDIO</small><h1>BRANDON KAM</h1><p>Low-poly cartoon · Welcome & Follow-Up</p></header><canvas id="stage" aria-label="Interactive 3D Brandon preview"></canvas><div id="status" role="status">Loading real 3D model…</div><aside class="controls"><a href="./play.html" style="font-size:16px;font-weight:800;margin:0 0 20px">PLAY THE 3D TEST →</a><h2>ANIMATION LAB</h2><div class="clips" id="clips"></div><label for="speed">Playback speed</label><select id="speed"><option value="0.5">0.5× · inspect</option><option value="1" selected>1× · normal</option><option value="1.5">1.5× · fast</option></select><div class="view-buttons"><button id="front">Front</button><button id="game">Game view</button><button id="pause">Pause</button></div><div id="metrics"></div><a href="./brandon/brandon.glb" download>Download animated GLB</a><a href="./brandon/manifest.json">Asset manifest</a><p class="note">Drag to orbit · scroll/pinch to zoom.<br>Prototype toy articulation. This studio is separate from the live game's 2D renderer.</p></aside><script type="module">
-import * as THREE from 'three';
-import { GLTFLoader } from './vendor/GLTFLoader.js';
-import { OrbitControls } from './vendor/OrbitControls.js';
-const canvas=document.querySelector('#stage'), status=document.querySelector('#status');
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.35;
-const scene=new THREE.Scene();scene.background=new THREE.Color('#eee8db');
-const camera=new THREE.PerspectiveCamera(36,1,.1,100);camera.position.set(4,3.3,6.5);
-const controls=new OrbitControls(camera,canvas);controls.target.set(0,1.5,0);controls.enableDamping=true;controls.minDistance=3;controls.maxDistance=12;controls.maxPolarAngle=Math.PI*.49;
-scene.add(new THREE.HemisphereLight('#fff5df','#8f9db3',2.5));
-const key=new THREE.DirectionalLight('#fff6e4',3);key.position.set(-3,7,5);key.castShadow=true;key.shadow.mapSize.set(1024,1024);key.shadow.camera.left=-4;key.shadow.camera.right=4;key.shadow.camera.top=5;key.shadow.camera.bottom=-4;key.shadow.bias=-.001;scene.add(key);
-const rim=new THREE.DirectionalLight('#bdd5ff',1.5);rim.position.set(3,3,-4);scene.add(rim);
-const floor=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:'#e5dece',roughness:1}));floor.rotation.x=-Math.PI/2;floor.position.y=-.11;floor.receiveShadow=true;scene.add(floor);
-const plinth=new THREE.Mesh(new THREE.CylinderGeometry(1.35,1.4,.10,64),new THREE.MeshStandardMaterial({color:'#e9d8af',roughness:.8}));plinth.position.y=-.055;plinth.receiveShadow=true;scene.add(plinth);
-let mixer,active,paused=false;const actions=new Map();
-function play(name){if(!mixer)return;const next=actions.get(name);if(!next)return;next.reset().setEffectiveWeight(1).setEffectiveTimeScale(1);const loop=['idle','run_forward','run_backward','strafe_left','strafe_right','carry_ball','stunned'].includes(name);next.setLoop(loop?THREE.LoopRepeat:THREE.LoopOnce,loop?Infinity:1);next.clampWhenFinished=true;next.play();if(active&&active!==next){active.fadeOut(.12);next.fadeIn(.12)}active=next;document.querySelectorAll('[data-clip]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.clip===name)));status.textContent='Playing '+name.replaceAll('_',' ')+' · drag to inspect all sides';}
-try{const model=await new GLTFLoader().loadAsync('./brandon/brandon.glb?v=3');scene.add(model.scene);model.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});mixer=new THREE.AnimationMixer(model.scene);const names=['idle','run_forward','run_backward','strafe_left','strafe_right','basic_attack','super','hit','eliminated','victory','carry_ball','ball_shot','stunned','respawn','defeat'];for(const clip of model.animations)actions.set(clip.name,mixer.clipAction(clip));for(const name of names){if(!actions.has(name))continue;const b=document.createElement('button');b.textContent=name.replaceAll('_',' ');b.dataset.clip=name;b.setAttribute('aria-pressed','false');b.onclick=()=>play(name);document.querySelector('#clips').append(b);}play('idle');const manifest=await fetch('./brandon/manifest.json?v=3').then(r=>r.json());document.querySelector('#metrics').textContent=`${manifest.triangles.toLocaleString()} triangles · ${manifest.bones} bones · ${manifest.materials} materials · ${model.animations.length} animation clips`;window.addEventListener('pagehide',()=>{renderer.dispose();controls.dispose();});}catch(error){status.textContent='Unable to load model: '+error.message;console.error(error);}
-document.querySelector('#speed').onchange=e=>{if(mixer)mixer.timeScale=Number(e.target.value)};document.querySelector('#pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'Resume':'Pause'};
-document.querySelector('#front').onclick=()=>{camera.position.set(0,2.3,7);controls.target.set(0,1.5,0)};document.querySelector('#game').onclick=()=>{camera.position.set(3.2,6,5);controls.target.set(0,1,0)};
-const clock=new THREE.Clock();function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.05),w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*renderer.getPixelRatio())||canvas.height!==Math.round(h*renderer.getPixelRatio())){renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}if(mixer&&!paused)mixer.update(dt);controls.update();renderer.render(scene,camera);}frame();
-</script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#121722">
+    <title>[REDACTED] — Deprecated 3D Study</title>
+    <style>
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background: #121722; color: #f3f5f8; }
+      main { width: min(620px, 100%); border: 1px solid #4b5568; border-radius: 18px; padding: clamp(28px, 7vw, 56px); background: #1a2130; box-shadow: 0 24px 80px #0008; }
+      .eyebrow { margin: 0 0 14px; color: #aeb7c7; font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+      h1 { margin: 0; font-size: clamp(42px, 10vw, 78px); line-height: .92; letter-spacing: -.055em; }
+      p { margin: 24px 0 0; color: #c7ceda; font-size: 16px; line-height: 1.65; }
+      a { display: inline-block; margin-top: 30px; border-radius: 10px; padding: 12px 18px; background: #4673ef; color: white; font-weight: 800; text-decoration: none; }
+      a:focus-visible { outline: 3px solid white; outline-offset: 4px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Deprecated 3D archive</p>
+      <h1>[REDACTED]</h1>
+      <p>This retired character study is preserved only as historical repository evidence. It is not part of the live game and must not be used as a production or likeness reference.</p>
+      <a href="/">Return to GOC Royale</a>
+    </main>
+  </body>
+</html>

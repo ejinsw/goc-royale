@@ -1,4 +1,8 @@
-# Brandon v2 — shape study
+# [REDACTED] — deprecated v2 shape study
+
+> **REDACTED / DEPRECATED:** Retained only as historical repository evidence.
+> Do not rebuild, publish, integrate, or use as a likeness reference. See
+> [the repository redaction notice](../../../docs/BRANDON-3D-REDACTED.md).
 
 October 26, 2026. Actual editable Blender geometry, created in Blender 5.2.3 using the installed Scenario sculpting workflow and live Blender brush operations. **This is a waist-up art study, not the final playable character.**
 

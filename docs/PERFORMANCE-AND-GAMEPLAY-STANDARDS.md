@@ -280,10 +280,10 @@ measured. Use KTX2 or an equivalent GPU texture format for textured production
 assets. Provide a lower-cost shadow and LOD strategy before increasing mesh
 complexity.
 
-The low-poly Brandon prototype with the complete gameplay clip list is the
-preferred integration mule. The higher-detail Brandon v4 rig is an art and
-deformation study until it has a complete clip set, is optimized to runtime
-budgets, and passes mobile profiling.
+The retired standalone Brandon GLB prototypes are **redacted and deprecated**.
+They are not integration mules, production inputs, or live runtime candidates.
+The shared procedural fighter path is the current integration baseline. See
+`docs/BRANDON-3D-REDACTED.md`.
 
 ## 8. Game UI conventions
 
@@ -357,7 +357,8 @@ preferred conventions:
 - The arena is a single Three.js renderer (`client/src/arena/`). All 18
   fighters use procedural placeholder models whose clip set is authored as
   code, not as validated animation assets with manifests. The older Brandon
-  GLB studies are deliberately not selected by the live runtime. Release
+  GLB studies are redacted, deprecated, and deliberately unavailable to the
+  live runtime. Release
   timing is still taken from the authoritative event, not from clip markers.
 - Respawn presentation is inferred from the alive flag because the engine
   does not emit `fighter_respawned`.
@@ -370,9 +371,9 @@ latency/loss harness exist; snapshots are delta-encoded and measured within
 the ingress and host-outbound budgets up to 10 players; the authority applies
 each movement input for the time it was held, and correction p95 meets the
 0.25-unit target in every scripted §4.4 case.
-- Brandon v4 is a high-detail rigged study with an incomplete gameplay clip set,
-  not a production runtime asset. Arena import validation would reject it
-  (64k triangles exceeds the 25k budget, and its clip set is incomplete).
+- The redacted Brandon v4 archive is not a production runtime asset. Arena
+  import validation would reject it (64k triangles exceeds the 25k budget, and
+  its clip set is incomplete).
 - Physical-device performance and controlled latency or loss campaigns remain
   incomplete.
 

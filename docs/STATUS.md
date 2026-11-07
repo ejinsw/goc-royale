@@ -84,26 +84,27 @@ Ethan now uses the user-approved generated portrait based on supplied reference 
 
 Brandon now also uses a generated portrait based on user-provided photos: blue/gold jacket, glasses, clipboard and nametags. Both custom portraits are integrated through the shared artwork selector in roster, lobby, results and gameplay, preserving their aspect ratio. The other five fighters retain original placeholders.
 
-Brandon 3D prototype: editable Blender source, a 2,666-triangle skinned GLB with one vertex-color material, 17 bones and ten named animation clips; separate local Three.js viewer. Browser run/Super checks and GLB structure validation completed. This is not yet the live multiplayer renderer; detailed quality/remaining work is documented in assets/3d/brandon/README.md.
+[REDACTED — deprecated 3D study] Historical prototype measurements and browser
+checks are retained in Git history and the adjacent archived README. This asset
+is not a live runtime candidate.
 
-Brandon 3D v0.2: 15 animation clips and a separate controllable practice scene at /art3d/play.html, using a bundle of the existing shared simulation. Browser checks verified a 700-damage marked hit, movement, and Welcome Committee healing after damage. Practice-only automatic Super refill; no multiplayer renderer migration yet.
+[REDACTED — deprecated 3D study] The former standalone practice scene is
+disabled and now displays a redaction notice.
 
 
-## October 26 — Brandon v2 shape study and live sculpting
+## October 26 — [REDACTED] deprecated v2 3D study
 
-Blender 5.2.3 LTS, eight Scenario Blender skills, and Scenario extension 0.12.0 are installed. The user enabled the connection; local MCP scene inspection and Python execution succeeded. Real live Smooth brush operations ran on the new study’s sleeves and hair with no missed stroke points.
+The former standalone v2 study and its measurements are redacted and retained
+only as historical repository evidence. It is not approved art, a likeness
+reference, or a runtime candidate. See `docs/BRANDON-3D-REDACTED.md`.
 
-The separate `assets/3d/brandon-v2/brandon-study.blend` contains a waist-up study with continuous face, jacket/sleeve and hair surfaces, fitted spectacles, rounded cuffs and simplified hands. Studio front/profile/three-quarter renders and silhouette/matcap review sheets are in `outputs/brandon-v2/`. The three main surfaces each pass connected-component (one) and non-manifold-edge (zero) checks. The README records the visual corrections and limits.
+## October 27 — [REDACTED] deprecated v4 3D study
 
-This is an art study, not a replacement playable asset. Hair volume/part, facial likeness, collar and hands still need review. The full lower body, deformation topology, final textures, rig, animations and browser/game export remain. Existing prototype assets, gameplay code, networking and the main menu work were preserved.
-
-## October 27 — Brandon v4 articulated movement study
-
-The separate full-body beige-jacket study now has connected sleeve/torso and pelvis/leg meshes, a 26-bone FK skeleton, blended weights and four elbow/knee support bones. Wrist skin covers the cuff transitions. The source is saved in `assets/3d/brandon-v4/brandon-rig.blend`; the measured browser export is `client/public/art3d/brandon-v4/brandon-rig.glb`.
-
-Open `http://localhost:5180/movement.html` on the existing art-preview server. It provides idle and joint-demo clips, timeline scrubbing, orbit, camera presets and a skeleton overlay. GLB loading, both clip selections and multiple posed views were verified in the browser. The 1.88 MB export contains 64,112 triangles and 26 bones; export/re-import comparison passes. Runtime weights have no unweighted/normalization/excess-influence flags. Sampled demo frames have no within-mesh crossings in the jacket, trousers or wrist skin.
-
-This is **a rigged movement prototype, not approved final art or a production-ready animation set**. Extreme elbow flexion and knee-fold stress flags remain documented, numerical shoulder-volume coverage is incomplete, and planted-foot controls, individual fingers, expressions and combat/run clips are unfinished. Art polish, mobile profiling and game integration remain. See `assets/3d/brandon-v4/README.md` and `outputs/brandon-v4/runtime-deformation.json` for the exact evidence and limits. Existing game/menu/network code and previous assets were preserved.
+The former standalone v4 study, browser viewer, and measurements are redacted
+and retained only as historical repository evidence. Direct viewer routes now
+show a static redaction notice and load no model. The study is not approved
+art, a likeness reference, or a runtime candidate. See
+`docs/BRANDON-3D-REDACTED.md`.
 
 
 ## October 29 — shared character production documentation
@@ -113,6 +114,27 @@ The art/audio direction, pilot specification, modeling-skill guidance and Brando
 The performance standard remains authoritative. Detailed source rigs may be richer, but runtime exports retain the section 7.3 limits: at most 40 deforming bones, 1–2 materials, preferably one skinned mesh, 512–1024px gameplay textures and at most 1 MB compressed initial fighter payload. Earlier 55–75 exported-bone / 2–4-material / 1–3 MB proposals and a 30 fps passing fallback are superseded. No budget exception is approved. Optimization must demonstrate that required expressions, grips and motion survive.
 
 This change updates documentation only. Brandon v4 remains a movement prototype; no new character model, facial/finger rig, production animation or mobile-performance result is claimed. Runtime gameplay, networking and renderer code were not changed by this documentation work.
+
+## November 7, 2026 — roster appearance refresh and 3D archive redaction
+
+The shared procedural fighter models and roster SVGs now reflect the approved
+appearance updates. Brandon uses a beige jacket, the roster no longer selects
+the retired Brandon or Ethan portrait PNGs, and Brandon continues to use the
+same live procedural rendering path as every other fighter.
+
+The retired standalone Brandon 3D studies are now explicitly redacted and
+deprecated. Their source archives remain only as historical repository
+evidence; they are not approved art, likeness references, or runtime inputs.
+The legacy `index.html`, `movement.html`, and `play.html` viewer routes now
+serve static redaction notices without scripts or GLB loading. See
+`docs/BRANDON-3D-REDACTED.md` for the exact boundary; the live playable fighter,
+abilities, simulation, networking, collision, timing, scoring, and camera are
+unchanged.
+
+Verification on Node 22.13.0: `npm test` passes 114/114, `npm run build` passes,
+the live app route responds, and all three retired viewer routes return the
+redaction notice with no script or GLB reference. No performance-budget
+exception is introduced.
 
 Documentation-update validation: all 37 local links across the eight touched documents resolve; `npm test` passes 48/48 and `npm run build` passes, with a large-chunk warning for the current gameplay bundle. These checks do not certify model quality, mobile performance or latency; those require the per-asset and runtime evidence above.
 
@@ -685,3 +707,45 @@ Verification:
 Still not verified: physical iOS/Android browser and installed-mode behavior,
 safe areas on a notched device, or a live death/spectate/respawn loop across
 two real clients.
+
+## November 6, 2026 — roster appearance refresh
+
+Branch `codex/character-appearance-refresh`. This is game-art and character-
+presentation work only. Fighter collision, visibility, damage, timing, scoring,
+abilities, network schemas, animation playback, and authoritative rules are
+unchanged.
+
+- Brandon now has a beige/brown jacket; Rich no longer has glasses; Samuel has
+  glasses and slightly longer hair; Josh has a black shirt; and Ethan has a blue
+  shirt with a natural bowl cut.
+- David has a side part and Isaac has a middle part. Tovya has a warm brown
+  skin tone, glasses, and wavy shoulder-length hair. Rosalie has unbraided
+  shoulder-length hair; Joelle has shoulder-length hair; and Joyce has wavy
+  brown hair.
+- Miriam has glasses. Jemuel has a close-shaved head and a broader procedural
+  build. Russell has a dark leather jacket with lapels, zipper, pockets, and
+  cuffs.
+- Brandon, Isaac, Rosalie, Joelle, Joyce, and Russell use a slightly tan skin
+  palette. Brandon and Ethan's one-off PNG portraits were removed; every picker,
+  lobby, result, and fighter sheet now uses the roster SVG that mirrors the live
+  procedural model.
+- New hair and garment pieces are merged into the existing per-part geometry.
+  This adds no renderer, material, texture, per-frame allocation, React update,
+  simulation work, or network work.
+
+Verification:
+
+- `npm test` passes 114/114. Every fighter builds in the menu and arena paths,
+  every look remains distinct, and changed models remain within the existing
+  procedural geometry budget (5,770–9,582 triangles).
+- `npm run build` passes. The procedural-model chunk is 630.44 kB minified /
+  159.57 kB gzip; the existing >500 kB Vite warning remains tracked.
+- Local Chromium QA at 1280×720 reviewed the changed roster models and icons,
+  including the long/wavy hair silhouettes, eyewear, tan palettes, Jemuel's
+  close shave and build, and Brandon/Russell jacket construction. Russell was
+  also observed front-on in the actual arena/results camera. No browser warning
+  or error was recorded.
+
+Still not verified for this art pass: physical iOS/Android appearance and frame
+pacing, an eight-fighter worst-case effect scene, complete-match/rematch heap
+trend, or human likeness review. No budget exception is requested.

@@ -1,5 +1,6 @@
 {
-  "character": "Brandon Kam",
+  "character": "[REDACTED]",
+  "status": "REDACTED — deprecated 3D study; not used by the live game",
   "version": "0.2 playable prototype",
   "style": "low-poly cartoon",
   "triangles": 2666,
@@ -69,7 +70,7 @@
     }
   },
   "textures": 0,
-  "source": "Procedurally authored original Blender geometry; likeness guided by user-supplied photos.",
+  "source": "[REDACTED — deprecated historical source]",
   "limitations": [
     "Rigid weighted articulated toy limbs; not final smooth deformation.",
     "No gameplay integration or collision changes.",

@@ -39,6 +39,13 @@ type Pieces = Partial<Record<Slot, BufferGeometry[]>>;
 export type HairStyle =
   | "swept"
   | "sides"
+  | "medium"
+  | "shoulder"
+  | "wavyShoulder"
+  | "middlePart"
+  | "sidePart"
+  | "bowl"
+  | "shaved"
   | "spiky"
   | "braids"
   | "ponytail"
@@ -62,7 +69,9 @@ export type FeatureName =
   | "beret"
   | "beanie"
   | "scarf"
-  | "bowtie";
+  | "bowtie"
+  | "jacket"
+  | "leatherJacket";
 export type PropName =
   | "clipboard"
   | "keys"
@@ -92,6 +101,7 @@ export interface FighterLook {
   /** Feature color: hats, hoods, scarves, aprons, headphones. */
   accent: string;
   pants?: string;
+  build?: "muscular";
   hairStyle: HairStyle;
   /** -1..1, which way the fringe sweeps. */
   sweep: number;
@@ -123,12 +133,13 @@ const look = (
  */
 export const LOOKS: Record<FighterId, FighterLook> = {
   brandon: look({
-    shirt: "#417bc2",
+    shirt: "#b48a62",
+    skin: "#d9a77d",
     hair: "#3b3337",
-    collar: "#f2c65d",
-    accent: "#f2c65d",
+    collar: "#ead8bf",
+    accent: "#765137",
     hairStyle: "sides",
-    features: ["glasses", "nametag"],
+    features: ["jacket", "glasses", "nametag"],
     prop: "clipboard",
   }),
   daniel: look({
@@ -148,7 +159,7 @@ export const LOOKS: Record<FighterId, FighterLook> = {
     accent: "#243e47",
     hairStyle: "swept",
     sweep: 0.5,
-    features: ["glasses", "cameraStrap"],
+    features: ["cameraStrap"],
     prop: "camera",
   }),
   samuel: look({
@@ -156,13 +167,13 @@ export const LOOKS: Record<FighterId, FighterLook> = {
     hair: "#4c3a31",
     collar: "#f4f7fb",
     accent: "#74dda6",
-    hairStyle: "swept",
+    hairStyle: "medium",
     sweep: -0.5,
-    features: ["apron"],
+    features: ["glasses", "apron"],
     prop: "cookie",
   }),
   josh: look({
-    shirt: "#f5a474",
+    shirt: "#17191f",
     hair: "#403733",
     collar: "#f4f7fb",
     accent: "#f9bd82",
@@ -182,12 +193,12 @@ export const LOOKS: Record<FighterId, FighterLook> = {
     prop: "laptop",
   }),
   ethan: look({
-    shirt: "#df83c8",
+    shirt: "#2f6fca",
     skin: "#e8bc94",
     hair: "#30343f",
-    collar: "#ffedb8",
+    collar: "#dbeaff",
     accent: "#a77be0",
-    hairStyle: "spiky",
+    hairStyle: "bowl",
     sweep: 0,
     features: ["plushCharm"],
     prop: "guitar",
@@ -199,7 +210,7 @@ export const LOOKS: Record<FighterId, FighterLook> = {
     hair: "#2d3442",
     collar: "#f4f7fb",
     accent: "#f2c65d",
-    hairStyle: "swept",
+    hairStyle: "sidePart",
     sweep: 0.55,
     features: ["inEars"],
     prop: "microphone",
@@ -217,10 +228,11 @@ export const LOOKS: Record<FighterId, FighterLook> = {
   }),
   isaac: look({
     shirt: "#8d6e63",
+    skin: "#d9a77d",
     hair: "#2b2523",
     collar: "#f4f7fb",
     accent: "#d7dde4",
-    hairStyle: "sides",
+    hairStyle: "middlePart",
     sweep: 0.2,
     features: ["headset"],
     prop: "stapler",
@@ -228,20 +240,22 @@ export const LOOKS: Record<FighterId, FighterLook> = {
   tovya: look({
     shirt: "#9ead2c",
     hair: "#3a2d26",
+    skin: "#a96f49",
     collar: "#f4f7fb",
     accent: "#ffffff",
-    hairStyle: "swept",
+    hairStyle: "wavyShoulder",
     sweep: 0.6,
-    features: ["chefHat"],
+    features: ["glasses", "chefHat"],
     prop: "ladle",
     hold: { x: -0.8, z: 0.36 },
   }),
   rosalie: look({
     shirt: "#e8553a",
+    skin: "#d9a77d",
     hair: "#2a2124",
     collar: "#fbe8d3",
     accent: "#c8442a",
-    hairStyle: "braids",
+    hairStyle: "shoulder",
     sweep: 0.3,
     features: ["pandaHood"],
     companion: "panda",
@@ -249,10 +263,11 @@ export const LOOKS: Record<FighterId, FighterLook> = {
   }),
   joelle: look({
     shirt: "#ffb300",
+    skin: "#d9a77d",
     hair: "#3b2c28",
     collar: "#f4f7fb",
     accent: "#1b1f2a",
-    hairStyle: "ponytail",
+    hairStyle: "shoulder",
     sweep: -0.3,
     features: ["sunglasses"],
     prop: "wheel",
@@ -270,10 +285,11 @@ export const LOOKS: Record<FighterId, FighterLook> = {
   }),
   joyce: look({
     shirt: "#2e9e5b",
-    hair: "#3a2a26",
+    skin: "#d9a77d",
+    hair: "#70452f",
     collar: "#f4f7fb",
     accent: "#d63a3a",
-    hairStyle: "long",
+    hairStyle: "wavyShoulder",
     sweep: -0.4,
     features: ["beanie"],
     prop: "envelope",
@@ -285,28 +301,31 @@ export const LOOKS: Record<FighterId, FighterLook> = {
     accent: "#5b3fa3",
     hairStyle: "bun",
     sweep: 0.2,
+    features: ["glasses"],
     prop: "book",
     companion: "dove",
   }),
   jemuel: look({
     shirt: "#c2185b",
-    hair: "#262224",
+    hair: "#4a403d",
     collar: "#f4f7fb",
     accent: "#f3c26b",
-    hairStyle: "swept",
+    hairStyle: "shaved",
+    build: "muscular",
     sweep: -0.6,
     features: ["scarf"],
     prop: "lantern",
     hold: { x: -0.35, z: 0.3 },
   }),
   russell: look({
-    shirt: "#7cb342",
+    shirt: "#24201f",
+    skin: "#d9a77d",
     hair: "#2d2829",
-    collar: "#f4f7fb",
-    accent: "#24467a",
+    collar: "#d2b08a",
+    accent: "#754c32",
     hairStyle: "sides",
     sweep: -0.3,
-    features: ["bowtie"],
+    features: ["leatherJacket"],
     prop: "calculator",
   }),
 };
@@ -641,6 +660,57 @@ const FEATURES: Record<FeatureName, (l: FighterLook) => Pieces> = {
       part(sphere(0.03, 8, 6), shade(l.accent, 0.8), [0, 0.88, 0.245]),
     ],
   }),
+  jacket: (l) => ({
+    body: [
+      part(box(0.22, 0.42, 0.035, 0.012), "#f4eadc", [0, 0.66, 0.226]),
+      part(
+        box(0.13, 0.31, 0.04, 0.012),
+        shade(l.shirt, 0.78),
+        [-0.1, 0.75, 0.25],
+        [-0.08, 0, -0.28],
+      ),
+      part(
+        box(0.13, 0.31, 0.04, 0.012),
+        shade(l.shirt, 0.78),
+        [0.1, 0.75, 0.25],
+        [-0.08, 0, 0.28],
+      ),
+      part(box(0.016, 0.39, 0.022, 0.005), l.accent, [0, 0.63, 0.27]),
+    ],
+    armL: [part(cylinder(0.078, 0.055), l.accent, [0, -0.25, 0])],
+    armR: [part(cylinder(0.078, 0.055), l.accent, [0, -0.25, 0])],
+  }),
+  leatherJacket: (l) => ({
+    body: [
+      part(
+        box(0.17, 0.34, 0.045, 0.015),
+        shade(l.shirt, 1.35),
+        [-0.085, 0.73, 0.235],
+        [-0.08, 0, -0.2],
+      ),
+      part(
+        box(0.17, 0.34, 0.045, 0.015),
+        shade(l.shirt, 1.35),
+        [0.085, 0.73, 0.235],
+        [-0.08, 0, 0.2],
+      ),
+      part(box(0.018, 0.42, 0.025, 0.006), "#d7c2a5", [0, 0.66, 0.262]),
+      part(
+        box(0.13, 0.018, 0.024, 0.005),
+        l.accent,
+        [-0.13, 0.58, 0.255],
+        [0, 0, -0.2],
+      ),
+      part(
+        box(0.13, 0.018, 0.024, 0.005),
+        l.accent,
+        [0.13, 0.58, 0.255],
+        [0, 0, 0.2],
+      ),
+    ],
+    armL: [part(cylinder(0.082, 0.065), l.accent, [0, -0.25, 0])],
+    armR: [part(cylinder(0.082, 0.065), l.accent, [0, -0.25, 0])],
+  }),
 };
 
 /** Hats that cover the crown; the fringe would poke through them. */
@@ -672,6 +742,105 @@ const HAIR: Record<
         [0, 0, side * 0.12],
         [0.55, 1.55, 1.45],
       ),
+    ),
+  ],
+  medium: (l, bangs) => [
+    ...cap(l),
+    ...fringe(l, bangs),
+    ...[-1, 1].map((side) =>
+      part(
+        sphere(0.17, 12, 8),
+        l.hair,
+        [side * 0.37, 0.2, -0.05],
+        [0, 0, side * 0.08],
+        [0.72, 1.55, 1.2],
+      ),
+    ),
+  ],
+  shoulder: (l, bangs) => [
+    ...cap(l),
+    ...fringe(l, bangs),
+    part(box(0.75, 0.48, 0.26, 0.13), l.hair, [0, 0.08, -0.2]),
+    ...[-1, 1].map((side) =>
+      part(
+        capsule(0.105, 0.28),
+        l.hair,
+        [side * 0.36, 0.02, -0.02],
+        [0, 0, side * 0.08],
+      ),
+    ),
+  ],
+  wavyShoulder: (l, bangs) => [
+    ...cap(l),
+    ...fringe(l, bangs),
+    part(box(0.68, 0.4, 0.22, 0.11), l.hair, [0, 0.06, -0.2]),
+    ...[-1, 1].flatMap((side) =>
+      [0, 1, 2].map((k) =>
+        part(
+          sphere(0.14, 12, 8),
+          l.hair,
+          [side * (0.35 + (k % 2) * 0.035), 0.27 - k * 0.18, -0.01],
+          [0, 0, side * (k % 2 ? -0.16 : 0.16)],
+          [0.72, 1.05, 0.88],
+        ),
+      ),
+    ),
+  ],
+  middlePart: (l) => [
+    ...cap(l),
+    ...[-1, 1].map((side) =>
+      part(
+        sphere(0.21, 14, 8),
+        l.hair,
+        [side * 0.14, 0.59, 0.2],
+        [0.3, 0, side * 0.38],
+        [1.2, 0.42, 0.78],
+      ),
+    ),
+  ],
+  sidePart: (l) => [
+    ...cap(l),
+    part(
+      sphere(0.24, 14, 8),
+      l.hair,
+      [0.1, 0.59, 0.2],
+      [0.32, 0, 0.52],
+      [1.6, 0.42, 0.8],
+    ),
+    part(
+      sphere(0.13, 12, 8),
+      l.hair,
+      [-0.27, 0.48, 0.13],
+      [0.25, 0, -0.2],
+      [1, 0.5, 0.78],
+    ),
+  ],
+  bowl: (l) => [
+    ...cap(l),
+    part(
+      sphere(0.29, 16, 10),
+      l.hair,
+      [0, 0.57, 0.11],
+      [0.2, 0, 0],
+      [1.35, 0.46, 1],
+    ),
+    ...[-1, 1].map((side) =>
+      part(
+        sphere(0.15, 12, 8),
+        l.hair,
+        [side * 0.36, 0.34, -0.02],
+        [0, 0, side * 0.08],
+        [0.65, 1.25, 1],
+      ),
+    ),
+  ],
+  shaved: (l) => [
+    part(
+      dome(0.43, 0.34, 18, 8),
+      l.hair,
+      [0, 0.3, -0.015],
+      [0, 0, 0],
+      [1.01, 1, 1],
     ),
   ],
   spiky: (l) => {
@@ -936,7 +1105,13 @@ const PROPS: Record<
     slot: "armR",
     build: () => [
       part(capsule(0.035, 0.25), "#2f3540", [0, 0.04, 0.04]),
-      part(sphere(0.09, 12, 8), "#69717f", [0, 0.25, 0.04], [0, 0, 0], [1, 1.15, 1]),
+      part(
+        sphere(0.09, 12, 8),
+        "#69717f",
+        [0, 0.25, 0.04],
+        [0, 0, 0],
+        [1, 1.15, 1],
+      ),
       part(ring(0.07, 0.012), "#f2c65d", [0, 0.24, 0.04], [HALF, 0, 0]),
     ],
   },
@@ -1221,9 +1396,11 @@ export const HIP_Y = 0.34;
 export const HIP_X = 0.12;
 
 function arm(l: FighterLook): BufferGeometry[] {
+  const shoulder = l.build === "muscular" ? 0.13 : 0.1;
+  const upperArm = l.build === "muscular" ? 0.085 : 0.068;
   return [
-    part(sphere(0.1, 12, 8), l.shirt, [0, -0.02, 0]),
-    part(capsule(0.068, 0.16), l.skin, [0, -0.18, 0]),
+    part(sphere(shoulder, 12, 8), l.shirt, [0, -0.02, 0]),
+    part(capsule(upperArm, 0.16), l.skin, [0, -0.18, 0]),
     part(sphere(0.075, 12, 8), l.skin, [0, -0.33, 0]),
   ];
 }
@@ -1266,10 +1443,11 @@ function leg(l: FighterLook, side: -1 | 1): BufferGeometry[] {
 }
 
 function body(l: FighterLook, withLegs: boolean): BufferGeometry[] {
+  const torso = l.build === "muscular" ? 0.32 : 0.27;
   return [
     ...(withLegs ? [...leg(l, -1), ...leg(l, 1)] : []),
     part(
-      capsule(0.27, 0.16),
+      capsule(torso, 0.16),
       l.shirt,
       [0, 0.62, 0],
       [0, 0, 0],
