@@ -654,6 +654,8 @@ export class Effects {
 // -------------------------------------------------------------- projectiles
 
 const PROJECTILE_Y = 0.85;
+/** Presentation-only readability scale; authoritative shot widths are unchanged. */
+const PROJECTILE_VISUAL_SCALE = 1.6;
 type ShotKind = FighterId;
 
 function projectileGeometry(kind: ShotKind): BufferGeometry {
@@ -967,7 +969,11 @@ export class Projectiles {
       _q.setFromAxisAngle(Y, yaw + spin);
       if (q.fighter === "ethan")
         _q.multiply(_qRoll.setFromAxisAngle(Z, Math.sin(time * 12) * 0.3));
-      _m.compose(_p.set(q.pos.x, PROJECTILE_Y, q.pos.y), _q, _s.set(1, 1, 1));
+      _m.compose(
+        _p.set(q.pos.x, PROJECTILE_Y, q.pos.y),
+        _q,
+        _s.setScalar(PROJECTILE_VISUAL_SCALE),
+      );
       mesh.setMatrixAt(i, _m);
       this.counts.set(q.fighter, i + 1);
       if (this.nt < 64) {

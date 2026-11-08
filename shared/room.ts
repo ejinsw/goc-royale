@@ -167,6 +167,23 @@ export class Room {
       const target = this.lobby.members.find((p) => p.id === c.id);
       if (target) target.team = c.team;
       this.lobby.members.forEach((p) => (p.ready = false));
+    } else if (c.type === "kick") {
+      if (!host) {
+        this.error(id, "Only the host can remove players.");
+        return;
+      }
+      const target = this.lobby.members.find((p) => p.id === c.id);
+      if (!target || target.id === this.lobby.host) {
+        this.error(id, "The host cannot be removed from their own room.");
+        return;
+      }
+      this.send(target.id, {
+        type: "removed",
+        message: "The host removed you from the room.",
+      });
+      this.lobby.members = this.lobby.members.filter((p) => p.id !== target.id);
+      this.sessions.delete(target.id);
+      this.lobby.members.forEach((p) => (p.ready = false));
     } else if (c.type === "shuffle" && host) {
       const shuffled = [...this.lobby.members];
       for (let i = shuffled.length - 1; i > 0; i--) {

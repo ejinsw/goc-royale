@@ -75,7 +75,11 @@ export function lobbyStage(
   lobby: Lobby,
   selfId: string,
   frame: StageFrame,
-  actions: { openPicker: () => PressResult; setTeam: (id: string, team: 0 | 1) => PressResult },
+  actions: {
+    openPicker: () => PressResult;
+    setTeam: (id: string, team: 0 | 1) => PressResult;
+    kick: (id: string) => PressResult;
+  },
 ): StageView {
   const teams = lobby.mode === "broomball";
   const isHost = lobby.host === selfId;
@@ -104,11 +108,33 @@ export function lobbyStage(
       icon: !m.connected ? "refresh" : m.ready ? "check" : undefined,
       caption: `${FIGHTERS[m.fighter].name}${m.id === lobby.host ? " · Host" : ""}`,
       variant: !m.connected ? "dark" : m.ready ? "primary" : self ? "selected" : undefined,
-      onPress: self
-        ? actions.openPicker
-        : teams && isHost
-          ? () => actions.setTeam(m.id, m.team === 0 ? 1 : 0)
-          : undefined,
+      onPress: self ? actions.openPicker : undefined,
+      actions: isHost
+        ? [
+            ...(teams
+              ? [
+                  {
+                    key: "team",
+                    label: `Move ${m.name} to ${m.team === 0 ? "Red" : "Blue"} team`,
+                    text: `TO ${m.team === 0 ? "RED" : "BLUE"}`,
+                    icon: "swap" as const,
+                    onPress: () => actions.setTeam(m.id, m.team === 0 ? 1 : 0),
+                  },
+                ]
+              : []),
+            ...(self
+              ? []
+              : [
+                  {
+                    key: "kick",
+                    label: `Kick ${m.name} from the room`,
+                    text: "KICK",
+                    icon: "leave" as const,
+                    onPress: () => actions.kick(m.id),
+                  },
+                ]),
+          ]
+        : undefined,
     };
   });
   return { state: { mode: teams ? "teams" : "party", frame, fighters }, plates };

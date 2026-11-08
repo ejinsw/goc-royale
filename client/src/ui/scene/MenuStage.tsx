@@ -21,6 +21,15 @@ export interface StagePlate {
   variant?: VariantName;
   /** Extra action after the fighter hops. */
   onPress?: () => PressResult;
+  /** Host actions use the same menuKit controls as the rest of the lobby. */
+  actions?: {
+    key: string;
+    label: string;
+    text: string;
+    icon?: IconName;
+    variant?: VariantName;
+    onPress: () => PressResult;
+  }[];
 }
 
 /**
@@ -82,6 +91,7 @@ export function MenuStage({ state, plates }: { state: StageState; plates: StageP
               kind="plate"
               label={p.label}
               variant={p.variant}
+              disabled={!p.onPress}
               onPress={() => {
                 scene.current?.react(p.key, "hop");
                 return p.onPress?.();
@@ -100,6 +110,26 @@ export function MenuStage({ state, plates }: { state: StageState; plates: StageP
                 </span>
               )}
             </Control>
+            {!!p.actions?.length && (
+              <div className="plate-actions">
+                {p.actions.map((action) => (
+                  <Control
+                    key={action.key}
+                    kind="button"
+                    size="sm"
+                    variant={action.variant ?? "dark"}
+                    icon={action.icon}
+                    label={action.label}
+                    onPress={() => {
+                      scene.current?.react(p.key, "hop");
+                      return action.onPress();
+                    }}
+                  >
+                    {action.text}
+                  </Control>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>

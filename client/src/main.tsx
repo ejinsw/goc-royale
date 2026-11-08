@@ -145,6 +145,10 @@ function App() {
   };
 
   const receive = (m: HostMessage) => {
+    if (m.type === "removed") {
+      leave(m.message);
+      return;
+    }
     if (m.type === "lobby") {
       setLobby(m.lobby);
       if (m.lobby.phase === "lobby") {
@@ -231,7 +235,7 @@ function App() {
         setError(`Share this room code: ${lobby?.code}`);
         throw e;
       });
-  const leave = () => {
+  function leave(message?: string) {
     net.current?.close();
     net.current = null;
     setLobby(null);
@@ -242,9 +246,11 @@ function App() {
     bridge.current.input = initialInput();
     bridge.current.spectate = null;
     setSpectate(null);
+    sessionStorage.removeItem("goc.session");
     history.replaceState(null, "", location.pathname);
     setStatus(DEFAULT_STATUS);
-  };
+    setError(message ?? "");
+  }
   const reconnect = async () => {
     setError("");
     try {
@@ -296,6 +302,10 @@ function App() {
         openPicker,
         setTeam: (id, team) => {
           command({ type: "team", id, team });
+          return "confirm";
+        },
+        kick: (id) => {
+          command({ type: "kick", id });
           return "confirm";
         },
       });

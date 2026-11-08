@@ -219,6 +219,7 @@ export type Command =
   | { type: "ready"; ready: boolean }
   | { type: "mode"; mode: Mode }
   | { type: "team"; id: string; team: 0 | 1 }
+  | { type: "kick"; id: string }
   | { type: "shuffle" }
   | { type: "start" }
   | { type: "lobby" }
@@ -237,4 +238,5 @@ export type HostMessage =
   /** Snapshot `n` encoded against snapshot `base` (see shared/delta.ts). */
   | { type: "delta"; n: number; base: number; diff: unknown }
   | { type: "error"; message: string }
+  | { type: "removed"; message: string }
   | { type: "pong"; at: number };

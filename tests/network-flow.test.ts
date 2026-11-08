@@ -145,6 +145,34 @@ test("guest cannot alter teams, mode, or return everyone to the lobby", () => {
   c[1].send({ type: "lobby" });
   assert.equal(r.lobby.phase, "match");
 });
+test("host can assign Broomball teams and remove a guest from the lobby", () => {
+  const { room: r, clients: c } = group(3);
+  c[0].send({ type: "mode", mode: "broomball" });
+  c[0].send({ type: "team", id: c[0].id, team: 1 });
+  c[0].send({ type: "team", id: c[1].id, team: 0 });
+  assert.equal(r.lobby.members.find((m) => m.id === c[0].id)?.team, 1);
+  assert.equal(r.lobby.members.find((m) => m.id === c[1].id)?.team, 0);
+
+  c[1].send({ type: "kick", id: c[2].id });
+  assert.equal(
+    r.lobby.members.some((m) => m.id === c[2].id),
+    true,
+  );
+  c[0].send({ type: "kick", id: c[2].id });
+  assert.equal(
+    r.lobby.members.some((m) => m.id === c[2].id),
+    false,
+  );
+  assert.equal(r.sessions.has(c[2].id), false);
+  assert.ok(
+    c[2].messages.some(
+      (m) => m.type === "removed" && /host removed you/i.test(m.message),
+    ),
+  );
+
+  c[0].send({ type: "kick", id: c[0].id });
+  assert.equal(r.lobby.host, c[0].id);
+});
 test("disconnect grace expiry cannot change finalized results", () => {
   const { room: r, clients: c } = group(2);
   c.forEach((p) => p.send({ type: "ready", ready: true }));

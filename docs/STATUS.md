@@ -749,3 +749,38 @@ Verification:
 Still not verified for this art pass: physical iOS/Android appearance and frame
 pacing, an eight-fighter worst-case effect scene, complete-match/rematch heap
 trend, or human likeness review. No budget exception is requested.
+
+## November 7, 2026 — projectile readability and host lobby controls
+
+Branch `fix/projectile-lobby-host-controls`. This is presentation, lobby UI,
+and host-authority networking work. Authoritative projectile dimensions,
+collision, damage, timing, scoring, and match simulation are unchanged.
+
+- Every projectile model is rendered at 1.6× scale so it fills the existing
+  highlight more clearly. The change reuses the existing instanced geometry,
+  material, transform, and draw path; it adds no draw call, per-frame allocation,
+  texture, or network data.
+- Broomball lobby plates now expose an explicit `TO RED` / `TO BLUE` menu-kit
+  control for every player when viewed by the host, including the host's own
+  plate. Selecting the host plate still opens the fighter picker.
+- Hosts now receive a `KICK` menu-kit control for each guest. Removal is enforced
+  by the authoritative room, rejects guest-issued requests and host self-removal,
+  invalidates the removed player's reconnect session, and returns that client to
+  the home screen with an explanation.
+
+Verification:
+
+- `npm test` passes 117/117, including host/guest authority, team assignment,
+  reconnect-session removal, and lobby-control visibility coverage.
+- `npm run build` passes; the existing procedural-model chunk-size warning is
+  unchanged.
+- `npm run netsim` passes all five required network scenarios with every attack
+  presented once.
+- Live Arc QA at 2880×1609 verified the desktop Broomball lobby, including a
+  successful host self-team change from Blue to Red through the explicit control,
+  and then started and rendered a Broomball match normally.
+
+Still not verified: physical multi-client mobile lobby use, physical iOS/Android
+frame pacing, an eight-fighter worst-case effect scene, complete-match/rematch
+heap trend, or human game-feel review of every projectile. No budget exception
+is requested.
