@@ -20,6 +20,31 @@ export type FighterId =
 export type Mode = "showdown" | "broomball";
 export type Vec = { x: number; y: number };
 
+/** Shared simulation item catalogue. Behavior is resolved by kind, not item ID. */
+export const ITEMS = {
+  golden_broom: {
+    name: "Golden broom",
+    useLabel: "Sweep",
+    kind: "sweep",
+    range: 3.8,
+    /** Full width perpendicular to aim. */
+    width: 6.6,
+    knock: 3,
+    ballSpeed: 14,
+    cooldown: 0.9,
+  },
+  goc_flyer: {
+    name: "GOC flyer",
+    useLabel: "Throw",
+    kind: "throw",
+    range: 9,
+    speed: 14,
+    damage: 800,
+    width: 0.18,
+  },
+} as const;
+export type ItemKind = keyof typeof ITEMS;
+
 /**
  * Fighter abilities are data (pilot spec §14.2, docs/CODE-PRACTICES.md §1.3).
  * shared/engine.ts has one resolver per `kind` and never branches on a
@@ -172,7 +197,13 @@ export interface AreaSpec {
    * deals `damage` every `every` seconds within `reach`. Its damage is Super
    * damage, so it does not charge the owner's Super.
    */
-  chase?: { speed: number; sight: number; reach: number; damage: number; every: number };
+  chase?: {
+    speed: number;
+    sight: number;
+    reach: number;
+    damage: number;
+    every: number;
+  };
   /** A wall across the aim that stops enemy shots, not movement or the ball. */
   wall?: { thickness: number };
 }
@@ -399,7 +430,13 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
       "Instantly knock out rivals within 4 units. Walls and spawn protection block it.",
     abilities: {
       attack: { kind: "shot", spread: [-0.055, 0.055] },
-      super: { kind: "burst", at: 0, radius: 4, damage: "knockout", effect: "aura" },
+      super: {
+        kind: "burst",
+        at: 0,
+        radius: 4,
+        damage: "knockout",
+        effect: "aura",
+      },
     },
   },
   david: {
@@ -417,11 +454,17 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     attack: "Mixed Voice",
     super: "Side Eye",
     color: "#4f7fd1",
-    description: "Blend two vocal layers. The bright center deals bonus damage.",
-    superDescription: "A judging gaze shoves rivals sideways and briefly slows them.",
+    description:
+      "Blend two vocal layers. The bright center deals bonus damage.",
+    superDescription:
+      "A judging gaze shoves rivals sideways and briefly slows them.",
     attackSound: "mixed_voice",
     abilities: {
-      attack: { kind: "shot", width: 0.32, centerBonus: { width: 0.04, damage: 400 } },
+      attack: {
+        kind: "shot",
+        width: 0.32,
+        centerBonus: { width: 0.04, damage: 400 },
+      },
       super: {
         kind: "frame",
         windup: 0.4,

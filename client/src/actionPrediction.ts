@@ -19,6 +19,7 @@ const SUPER_CUE_SPACING = 0.5;
 export class ActionPredictor {
   /** Client times (s) of predicted attacks not yet confirmed by the host. */
   pending: number[] = [];
+  private itemSequences = new Set<number>();
   private lastAttackAt = -Infinity;
   private lastSuperAt = -Infinity;
 
@@ -60,6 +61,22 @@ export class ActionPredictor {
     return "attack";
   }
 
+  /** Track item cues by the exact input that produced them. */
+  predictItem(seq: number) {
+    this.itemSequences.add(seq);
+  }
+
+  /** An event only suppresses the prediction for its own input sequence. */
+  confirmItem(seq: number | undefined): boolean {
+    return seq !== undefined && this.itemSequences.delete(seq);
+  }
+
+  /** Discard rejected predictions once authority acknowledges their inputs. */
+  acknowledgeItems(seq: number) {
+    for (const predicted of this.itemSequences)
+      if (predicted <= seq) this.itemSequences.delete(predicted);
+  }
+
   /**
    * Called once per authoritative attack effect owned by the local fighter.
    * Returns true when it confirms a prediction, so its cue must not replay.
@@ -82,6 +99,7 @@ export class ActionPredictor {
 
   reset() {
     this.pending = [];
+    this.itemSequences.clear();
     this.lastAttackAt = -Infinity;
     this.lastSuperAt = -Infinity;
   }

@@ -1,4 +1,11 @@
-import type { AreaKind, FighterId, Mode, Vec, Wall } from "./definitions";
+import type {
+  AreaKind,
+  FighterId,
+  ItemKind,
+  Mode,
+  Vec,
+  Wall,
+} from "./definitions";
 export interface Member {
   id: string;
   name: string;
@@ -25,6 +32,8 @@ export interface Stats {
   survived: number;
 }
 export interface Player extends Member {
+  /** One carried item, identified in Match.items. */
+  heldItem: number | null;
   pos: Vec;
   aim: Vec;
   hp: number;
@@ -56,6 +65,9 @@ export interface Input {
   aim: Vec;
   attack?: boolean;
   super?: boolean;
+  itemPickup?: boolean;
+  itemDrop?: boolean;
+  itemUse?: boolean;
   power?: number;
   /**
    * Monotonically increasing per-client input sequence (standard §4.3).
@@ -70,6 +82,18 @@ export interface Input {
    * at a bounded rate instead of applying only the newest move each tick.
    */
   t?: number;
+}
+/** Authority-owned pickup or thrown item. */
+export interface Item {
+  id: number;
+  kind: ItemKind;
+  pos: Vec;
+  state: "ground" | "carried" | "flight";
+  carrier: string | null;
+  owner: string | null;
+  dir: Vec;
+  remaining: number;
+  cooldownUntil: number;
 }
 export interface Projectile {
   id: number;
@@ -167,7 +191,11 @@ export type GameEventType =
   | "ball_released"
   | "goal_scored"
   | "fighter_eliminated"
-  | "fighter_respawned";
+  | "fighter_respawned"
+  | "item_picked_up"
+  | "item_dropped"
+  | "item_used"
+  | "item_hit";
 export interface GameEvent {
   id: number;
   tick: number;
@@ -176,6 +204,11 @@ export interface GameEvent {
   pos: Vec;
   dir?: Vec;
   value?: number;
+  itemKind?: ItemKind;
+  /** Input sequence that requested this action, for prediction reconciliation. */
+  inputSeq?: number;
+  /** Fighter affected, when an event has a specific player target. */
+  target?: string;
 }
 export interface Match {
   mode: Mode;
@@ -183,6 +216,7 @@ export interface Match {
   phase: "countdown" | "playing" | "goal" | "finished";
   phaseUntil: number;
   players: Player[];
+  items: Item[];
   projectiles: Projectile[];
   areas: Area[];
   effects: Effect[];

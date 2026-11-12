@@ -297,6 +297,10 @@ export class Network {
           }
           this.room!.broadcastLobby();
           clearTimeout(timeout);
+        } else if (id && this.peers.get(id) !== conn) {
+          // A reconnected session replaced this transport. Ignore anything
+          // still queued on the old channel, including its old sequence IDs.
+          return;
         } else if (id && m.type === "command")
           this.room?.command(id, m.command);
         else if (

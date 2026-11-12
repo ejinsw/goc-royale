@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { IDS } from "../shared/definitions";
-import { aimPreviewFor } from "../client/src/arena/aimPreview";
+import { IDS, ITEMS, RULES } from "../shared/definitions";
+import {
+  aimPreviewFor,
+  itemAimPreviewFor,
+} from "../client/src/arena/aimPreview";
 
 test("every fighter has finite attack and Super aim footprints", () => {
   for (const id of IDS)
@@ -38,4 +41,17 @@ test("ball shot preview grows with charge", () => {
   assert.equal(low.kind, "lane");
   assert.equal(high.kind, "lane");
   assert.ok(high.range > low.range);
+});
+
+test("item aim previews use authoritative broom and flyer dimensions", () => {
+  assert.deepEqual(itemAimPreviewFor("golden_broom"), {
+    kind: "lane",
+    range: ITEMS.golden_broom.range,
+    width: ITEMS.golden_broom.width,
+  });
+  assert.deepEqual(itemAimPreviewFor("goc_flyer"), {
+    kind: "lane",
+    range: ITEMS.goc_flyer.range,
+    width: 2 * (RULES.radius + ITEMS.goc_flyer.width),
+  });
 });

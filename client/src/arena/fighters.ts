@@ -80,7 +80,9 @@ export const CLIPS = [
   "victory",
   "defeat",
 ] as const;
-export type ClipName = (typeof CLIPS)[number];
+type AssetClipName = (typeof CLIPS)[number];
+/** Item actions have procedural profiles; authored assets fall back to basic attack. */
+export type ClipName = AssetClipName | "item_sweep" | "item_throw";
 const LOOPING: ReadonlySet<ClipName> = new Set<ClipName>([
   "idle",
   "run_forward",
@@ -97,7 +99,13 @@ const LOCO = [
   "strafe_left",
   "strafe_right",
 ] as const;
-type UpperShot = "basic_attack" | "super" | "ball_shot" | "hit";
+type UpperShot =
+  | "basic_attack"
+  | "super"
+  | "ball_shot"
+  | "hit"
+  | "item_sweep"
+  | "item_throw";
 type FullShot = "eliminated" | "respawn" | "victory" | "defeat";
 /** One-shot clips the arena can trigger. */
 export type ActionClip = UpperShot | FullShot;
@@ -362,6 +370,8 @@ const PROCEDURAL_DURATION: Record<ClipName, number> = {
   strafe_left: 0.8,
   strafe_right: 0.8,
   basic_attack: 0.36,
+  item_sweep: 0.46,
+  item_throw: 0.36,
   super: 0.8,
   ball_shot: 0.36,
   hit: 0.24,
@@ -475,6 +485,36 @@ const PROCEDURAL_CLIPS: Record<
       p[B.armL * 3] = lerp(0.35, 0, k);
     }
   },
+  item_sweep(t, p, hold) {
+    const n = Math.min(1, t / PROCEDURAL_DURATION.item_sweep);
+    // Wind up across the body, accelerate through a wide arc, then follow through.
+    const twist =
+      n < 0.32
+        ? lerp(0, 0.95, ease(n / 0.32))
+        : n < 0.65
+          ? lerp(0.95, -1.05, easeOut((n - 0.32) / 0.33))
+          : lerp(-1.05, 0, ease((n - 0.65) / 0.35));
+    p[B.torso * 3 + 1] = twist;
+    p[B.head * 3 + 1] = -twist * 0.3;
+    p[B.torso * 3] = 0.16 * Math.sin(Math.PI * n);
+    set(
+      p,
+      B.armR,
+      lerp(hold.x, -1.05, Math.sin(Math.PI * n)),
+      -twist * 0.35,
+      lerp(hold.z, 0.9, Math.sin(Math.PI * n)),
+    );
+    set(
+      p,
+      B.armL,
+      -0.65 * Math.sin(Math.PI * n),
+      0,
+      -0.22 - 0.35 * Math.sin(Math.PI * n),
+    );
+  },
+  item_throw(t, p, hold) {
+    PROCEDURAL_CLIPS.basic_attack(t, p, hold);
+  },
   super(t, p, hold) {
     const n = t / PROCEDURAL_DURATION.super;
     if (n < 0.4) {
@@ -584,6 +624,7 @@ const PROCEDURAL_CLIPS: Record<
 
 /** Per-fighter merged geometry, built once per arena and shared by duplicates. */
 export interface ProceduralAsset {
+  fighter: FighterId;
   skin: BufferGeometry;
   shell: BufferGeometry;
   hold: Hold;
@@ -627,7 +668,7 @@ export function buildProceduralAsset(id: FighterId): ProceduralAsset {
   for (const g of [...shell, face]) g.dispose();
   if (!skin || !outline)
     throw new Error(`fighter geometry merge failed: ${id}`);
-  return { skin, shell: outline, hold: LOOKS[id].hold, extraAt };
+  return { fighter: id, skin, shell: outline, hold: LOOKS[id].hold, extraAt };
 }
 
 const PROCEDURAL_BOUNDS = new Sphere(new Vector3(0, 0.9, 0), 1.5);
@@ -680,7 +721,17 @@ class ProceduralRig implements Rig {
     for (let i = 0; i < count; i++) {
       const c = channels[i];
       restPose(tmp, hold);
-      PROCEDURAL_CLIPS[c.clip](c.time, tmp, hold);
+      // Tovya's melee attack uses the same momentum-driven sweep profile.
+      const clip =
+        c.clip === "basic_attack" && this.asset.fighter === "tovya"
+          ? "item_sweep"
+          : c.clip;
+      const t =
+        clip === "item_sweep" && c.clip === "basic_attack"
+          ? (c.time * PROCEDURAL_DURATION.item_sweep) /
+            PROCEDURAL_DURATION.basic_attack
+          : c.time;
+      PROCEDURAL_CLIPS[clip](t, tmp, hold);
       if (c.layer !== "upper") {
         for (const j of LOWER_INDICES) acc[j] += tmp[j] * c.weight;
         lower += c.weight;
@@ -747,7 +798,7 @@ interface GlbClips {
 export interface GlbAsset {
   template: Object3D;
   scale: number;
-  clips: Record<ClipName, GlbClips>;
+  clips: Record<AssetClipName, GlbClips>;
   report: {
     triangles: number;
     bones: number;
@@ -888,7 +939,7 @@ async function loadGlb(
     mesh.geometry.computeBoundingBox();
     height = Math.max(height, mesh.geometry.boundingBox!.max.y);
   });
-  const clips = {} as Record<ClipName, GlbClips>;
+  const clips = {} as Record<AssetClipName, GlbClips>;
   for (const name of CLIPS)
     clips[name] = splitClip(gltf.animations.find((c) => c.name === name)!);
   return {
@@ -962,7 +1013,7 @@ class GlbRig implements Rig {
     shell.boundingSphere = GLB_BOUNDS.clone();
     this.root.scale.setScalar(asset.scale);
     this.mixer = new AnimationMixer(this.root);
-    const add = (clip: ClipName, layer: Layer) => {
+    const add = (clip: AssetClipName, layer: Layer) => {
       const action = this.mixer.clipAction(asset.clips[clip][layer]);
       action.play();
       action.weight = 0;
@@ -990,7 +1041,9 @@ class GlbRig implements Rig {
       add(clip, "full");
   }
   duration(clip: ClipName) {
-    return this.asset.clips[clip].full.duration;
+    const assetClip =
+      clip === "item_sweep" || clip === "item_throw" ? "basic_attack" : clip;
+    return this.asset.clips[assetClip].full.duration;
   }
   /** The graph owns time: each action is sampled at the time it asks for. */
   apply(channels: readonly Channel[], count: number) {
@@ -998,7 +1051,11 @@ class GlbRig implements Rig {
     this.live.length = 0;
     for (let i = 0; i < count; i++) {
       const c = channels[i];
-      const action = this.actions[c.clip][c.layer];
+      const assetClip =
+        c.clip === "item_sweep" || c.clip === "item_throw"
+          ? "basic_attack"
+          : c.clip;
+      const action = this.actions[assetClip][c.layer];
       if (!action) continue;
       action.time = Math.min(c.time, action.getClip().duration);
       action.weight = c.weight;

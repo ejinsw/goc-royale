@@ -784,3 +784,40 @@ Still not verified: physical multi-client mobile lobby use, physical iOS/Android
 frame pacing, an eight-fighter worst-case effect scene, complete-match/rematch
 heap trend, or human game-feel review of every projectile. No budget exception
 is requested.
+
+## November 11, 2026 — item framework and action presentation
+
+Added authority-owned, bounded randomized item spawns and a single carried-item
+slot, with pickup, use, drop, disconnect/elimination cleanup, and stable
+presentation events. The first catalogue entries are a reusable golden broom
+sweep that knocks rivals, mobile companions, and the Broomball, and a
+single-use damaging GOC flyer. On desktop F picks up or puts down an item and
+E uses it; on touch, a pickup/put-down button and a small item-aim joystick
+use the existing gameKit controls and touch router. Item use begins locally and
+reconciles by input sequence. Reconnects reset their input timeline and reject old transport data.
+See `docs/ITEMS.md` for the extension path. Tuning is provisional.
+
+The existing action graph now supports procedural sweep and throw profiles;
+Tovya's basic uses the sweep. The broom's forward rectangle and held-aim
+preview use the simulation's range and width; confirmed item contacts provide
+feedback. This is an animation foundation, not a completed authored animation
+set for every attack or Super.
+The carried prop uses an approximate attachment and the immediate authoritative
+impact does not yet align precisely with the procedural windup.
+
+Verification on Node 23.10.0: `npm test` passed 129 tests and `npm run build`
+passed (with the existing large-chunk warning). A local browser Broomball match
+confirmed F pickup and put-down and an E-activated rectangular broom sweep. The
+two-client Room/snapshot test covers ownership, use, reconnect, and delta
+round-trips. A simulated reliable link checks item events under 50 ms, 100 ms
+with modeled 1% retransmission, 200 ms with approximately 3%, and a 500 ms
+outage. The existing movement harness reported correction p95 of 0.127, 0.148,
+0.153, and 0.130 world units respectively; this is a model, not a live-network
+or item-latency measurement.
+
+Still required by the performance standard: real two-client gameplay and
+controlled network measurements; physical iOS/Android multi-touch; reduced
+motion and audio checks; animation and impact captures for all actions; and
+before/after frame, heap, resize, teardown, and eight-fighter stress profiles.
+No budget exception is approved, and these checks do not certify performance or
+game feel.

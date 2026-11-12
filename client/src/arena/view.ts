@@ -13,6 +13,7 @@ import {
 import {
   AREAS,
   FIGHTERS,
+  ITEMS,
   MAPS,
   clamp,
   type FighterId,
@@ -35,13 +36,14 @@ import {
   Ball,
   Billboards,
   Effects,
+  Items,
   Markers,
   Projectiles,
   Vans,
   aimArrow,
   type ProjectileView,
 } from "./fx";
-import { aimPreviewFor, type AimIntent } from "./aimPreview";
+import { aimPreviewFor, itemAimPreviewFor, type AimIntent } from "./aimPreview";
 import { cameraFocusId } from "./cameraFocus";
 import { buildArenaMap, type ArenaMap } from "./map";
 import { createArenaMaterials } from "./materials";
@@ -96,7 +98,14 @@ export interface ArenaFrame {
   dt: number;
 }
 
-export type CueKind = "attack" | "cone" | "gaze" | "release" | "super";
+export type CueKind =
+  | "attack"
+  | "cone"
+  | "gaze"
+  | "release"
+  | "super"
+  | "item_sweep"
+  | "melee_sweep";
 
 export interface ArenaView {
   frame(f: ArenaFrame): void;
@@ -171,6 +180,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   const billboards = new Billboards(mats);
   const markers = new Markers(mats);
   const effects = new Effects(mats);
+  const items = new Items(mats);
   const projectiles = new Projectiles(mats);
   const areas = new Areas(mats);
   const ball = new Ball(mats);
@@ -182,6 +192,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     markers.shadows,
     markers.rings,
     effects.group,
+    items.group,
     projectiles.group,
     areas.group,
     ball.mesh,
@@ -342,6 +353,12 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   const shots: ProjectileView[] = [];
   const at = new Vector3();
   const hands = new Vector3();
+  const itemCarrierHands = (id: string, out: Vector3) => {
+    const actor = actors.get(id);
+    if (!actor?.shown) return null;
+    actor.hands(out);
+    return actor.yaw;
+  };
   const ballPos = { x: 0, y: 0, z: 0, ready: false };
   const raycaster = new Raycaster();
   const ndc = new Vector2();
@@ -429,6 +446,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       });
     }
     projectiles.update(shots, time);
+    items.update(s.items, time, ext, itemCarrierHands);
     areas.update(s.areas, f.now, time);
     vans.update(f.now, (owner) => {
       const a = actors.get(owner);
@@ -593,20 +611,33 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     const canGuide = !!me?.alive && !!meActor?.shown && s.phase === "playing";
     if (canGuide) {
       const intent = f.aiming;
+      let heldItem: (typeof s.items)[number] | undefined;
+      if (intent === "item")
+        for (const item of s.items)
+          if (item.id === me!.heldItem) {
+            heldItem = item;
+            break;
+          }
       guide.update(
         meActor!.at,
         f.localAim,
         f.localMove,
-        intent === "super" ? 0xf4c95d : hex(FIGHTERS[me!.fighter].color),
+        intent === "super" || intent === "item"
+          ? 0xf4c95d
+          : hex(FIGHTERS[me!.fighter].color),
         intent,
-        intent
-          ? aimPreviewFor(
-              me!.fighter,
-              intent,
-              s.ball.carrier === me!.id,
-              f.power,
-            )
-          : null,
+        intent === "item"
+          ? heldItem
+            ? itemAimPreviewFor(heldItem.kind)
+            : null
+          : intent
+            ? aimPreviewFor(
+                me!.fighter,
+                intent,
+                s.ball.carrier === me!.id,
+                f.power,
+              )
+            : null,
       );
     } else guide.hide();
     arrow.visible = canGuide && !f.aiming;
@@ -651,6 +682,17 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         case "cone":
           if (owner) {
             const attack = FIGHTERS[owner.fighter].abilities.attack;
+            if (owner.fighter === "tovya") {
+              effects.sweep(
+                e.pos,
+                e.dir,
+                FIGHTERS.tovya.range,
+                color,
+                now,
+                true,
+              );
+              break;
+            }
             effects.cone(
               e.pos,
               e.dir,
@@ -737,7 +779,9 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
           effects.ring(e.pos, 0.08, 0.62, 0x4f7fd1, dur, now, 0.9, 0.08);
           break;
         case "gaze": {
-          const superSpec = owner ? FIGHTERS[owner.fighter].abilities.super : null;
+          const superSpec = owner
+            ? FIGHTERS[owner.fighter].abilities.super
+            : null;
           const range = superSpec?.kind === "frame" ? superSpec.range : 6.5;
           const width = superSpec?.kind === "frame" ? superSpec.width : 4.5;
           effects.rect(
@@ -756,7 +800,17 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
               y: e.pos.y + e.dir.y * range * 0.55,
             };
             const side = { x: -e.dir.y, y: e.dir.x };
-            effects.streak(center, side, 0, width * 0.45, 0.12, 0xfff2a8, dur, now, 0.9);
+            effects.streak(
+              center,
+              side,
+              0,
+              width * 0.45,
+              0.12,
+              0xfff2a8,
+              dur,
+              now,
+              0.9,
+            );
             effects.streak(
               center,
               { x: -side.x, y: -side.y },
@@ -774,6 +828,14 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       }
     },
     cue(kind, from, dir, color, now, shape) {
+      if (kind === "melee_sweep") {
+        effects.sweep(from, dir, FIGHTERS.tovya.range, color, now, true);
+        return;
+      }
+      if (kind === "item_sweep") {
+        effects.sweep(from, dir, ITEMS.golden_broom.range, color, now);
+        return;
+      }
       if (kind === "super") {
         effects.ring(from, 0.7, 1.3, color, 0.25, now);
         return;

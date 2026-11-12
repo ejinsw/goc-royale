@@ -1094,6 +1094,12 @@ input {
   width: min(300px, 38vw);
   translate: -50% 0;
 }
+.hud-items {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: auto;
+}
 .hud-hp {
   width: 100%;
 }
@@ -1176,7 +1182,8 @@ input {
 .ui-control[data-input="stick"][data-active] {
   transition: none;
 }
-.ui-control[data-stick="super"] {
+.ui-control[data-stick="super"],
+.ui-control[data-stick="item"] {
   --r-stick: var(--super-r, 36px);
 }
 .ui-stick-base {
@@ -1219,10 +1226,13 @@ input {
   box-shadow: 0 5px 0 var(--c-blueDeep);
 }
 .ui-control[data-stick="super"],
-.ui-control[data-stick="super"] .ui-stick-base {
+.ui-control[data-stick="super"] .ui-stick-base,
+.ui-control[data-stick="item"],
+.ui-control[data-stick="item"] .ui-stick-base {
   pointer-events: auto;
 }
-.ui-control[data-stick="super"] .ui-stick-base {
+.ui-control[data-stick="super"] .ui-stick-base,
+.ui-control[data-stick="item"] .ui-stick-base {
   border-color: var(--edge);
   background: var(--face);
   opacity: 1;
@@ -1233,7 +1243,8 @@ input {
   position: absolute;
   inset: 0;
 }
-.ui-control[data-stick="super"] .ui-stick-thumb {
+.ui-control[data-stick="super"] .ui-stick-thumb,
+.ui-control[data-stick="item"] .ui-stick-thumb {
   width: calc(var(--r-stick) * 1.2);
   height: calc(var(--r-stick) * 1.2);
   background: transparent;
@@ -1270,7 +1281,9 @@ input {
   white-space: nowrap;
 }
 html:not([data-touch="on"]) .ui-control[data-stick="move"],
-html:not([data-touch="on"]) .ui-control[data-stick="attack"] {
+html:not([data-touch="on"]) .ui-control[data-stick="attack"],
+html:not([data-touch="on"]) .ui-control[data-stick="item"],
+.ui-control[data-stick="item"][aria-disabled] {
   display: none;
 }
 

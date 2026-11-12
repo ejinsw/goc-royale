@@ -906,8 +906,14 @@ test("every fighter can attack and Super in both modes without breaking the matc
       assert.ok(p.charge < 5000, `${id} ${mode} Super was not accepted`);
       assert.ok(rival.hp < FIGHTERS[rival.fighter].hp || !rival.alive, `${id} ${mode} dealt no damage`);
       // The wire copy must survive JSON: no Infinity or NaN anywhere.
-      const snap = JSON.stringify(e.snapshot(p.id));
-      assert.ok(!/null|NaN|Infinity/.test(snap.replace(/"(carrier|last|passer|scorer|winner)":null/g, "")), `${id} ${mode} non-finite wire value`);
+      const snap = e.snapshot(p.id);
+      const finiteNumbers = (value: unknown): boolean => {
+        if (typeof value === "number") return Number.isFinite(value);
+        if (value && typeof value === "object")
+          return Object.values(value).every(finiteNumbers);
+        return true;
+      };
+      assert.ok(finiteNumbers(snap), `${id} ${mode} non-finite wire value`);
       for (const q of e.state.projectiles) assert.ok(Number.isFinite(q.pos.x), id);
     }
 });

@@ -8,7 +8,7 @@ import { Icon } from "../core/icons";
  * thumb transform so no stick movement reaches React.
  */
 export interface StickProps extends ControlBase {
-  role: "move" | "attack" | "super";
+  role: "move" | "attack" | "super" | "item";
   children?: ReactNode;
 }
 

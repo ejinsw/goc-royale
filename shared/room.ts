@@ -40,7 +40,12 @@ export class Room {
       found.leftAt = null;
       m.connected = true;
       const p = this.engine?.state.players.find((x) => x.id === m.id);
-      if (p) p.connected = true;
+      if (p) {
+        // A fresh browser or a replacement transport has a fresh sequence
+        // counter and clock, even when reclaiming the same player identity.
+        this.engine?.resetInput(m.id);
+        p.connected = true;
+      }
       this.send(m.id, {
         type: "welcome",
         id: m.id,

@@ -2,12 +2,14 @@ import {
   AREAS,
   FIGHTERS,
   IDS,
+  ITEMS,
   RULES,
   type FighterId,
+  type ItemKind,
 } from "../../../shared/definitions";
 
 /** Local-only intent shown while an action control is held. */
-export type AimIntent = "attack" | "super";
+export type AimIntent = "attack" | "super" | "item";
 
 /** A stable, data-derived ground footprint. It never participates in gameplay. */
 export type AimShape =
@@ -88,12 +90,30 @@ const superShape = (id: FighterId): AimShape => {
 
 const SHAPES = Object.fromEntries(
   IDS.map((id) => [id, { attack: attackShape(id), super: superShape(id) }]),
-) as Record<FighterId, Record<AimIntent, AimShape>>;
+) as Record<FighterId, Record<Exclude<AimIntent, "item">, AimShape>>;
+
+const ITEM_SHAPES: Record<ItemKind, AimShape> = {
+  golden_broom: {
+    kind: "lane",
+    range: ITEMS.golden_broom.range,
+    width: ITEMS.golden_broom.width,
+  },
+  goc_flyer: {
+    kind: "lane",
+    range: ITEMS.goc_flyer.range,
+    width: (RULES.radius + ITEMS.goc_flyer.width) * 2,
+  },
+};
+
+/** The same authoritative dimensions drive both aim preview and item use. */
+export function itemAimPreviewFor(kind: ItemKind): AimShape {
+  return ITEM_SHAPES[kind];
+}
 
 /** Reuses static fighter shapes; only a charged ball lane varies per frame. */
 export function aimPreviewFor(
   id: FighterId,
-  intent: AimIntent,
+  intent: Exclude<AimIntent, "item">,
   carrying = false,
   power = 0.35,
 ): AimShape {

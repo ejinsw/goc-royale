@@ -34,10 +34,11 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import {
   FIGHTERS,
   IDS,
+  ITEMS,
   type FighterId,
   type Vec,
 } from "../../../shared/definitions";
-import type { Area } from "../../../shared/types";
+import type { Area, Item } from "../../../shared/types";
 import { merge, part } from "../ui/scene/geometry";
 import type { AimIntent, AimShape } from "./aimPreview";
 import type { ArenaMaterials } from "./materials";
@@ -436,7 +437,16 @@ export class Markers {
 
 // ------------------------------------------------------------------ effects
 
-type FxKind = "ring" | "disc" | "cone" | "rect" | "streak";
+type FxKind =
+  | "ring"
+  | "disc"
+  | "cone"
+  | "sweep"
+  | "meleeSweep"
+  | "sweepEdge"
+  | "meleeEdge"
+  | "rect"
+  | "streak";
 interface Fx {
   kind: FxKind;
   mesh: Mesh;
@@ -446,6 +456,8 @@ interface Fx {
   alpha: number;
   r0: number;
   r1: number;
+  x0: number;
+  z0: number;
   active: boolean;
 }
 
@@ -463,6 +475,31 @@ function coneGeometry() {
   return g;
 }
 
+/** Sector used by Tovya's melee attack. */
+function sweepGeometry(half: number) {
+  const points: number[] = [];
+  const steps = 24;
+  for (let i = 0; i < steps; i++) {
+    const a = -half + (i / steps) * (2 * half);
+    const b = -half + ((i + 1) / steps) * (2 * half);
+    points.push(
+      0,
+      0,
+      0,
+      Math.sin(a),
+      0,
+      Math.cos(a),
+      Math.sin(b),
+      0,
+      Math.cos(b),
+    );
+  }
+  const g = new BufferGeometry();
+  g.setAttribute("position", new BufferAttribute(new Float32Array(points), 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 /**
  * Short-lived effect meshes in fixed pools (standard §5.2). A pool that runs
  * dry recycles its oldest effect instead of allocating.
@@ -475,6 +512,18 @@ export class Effects {
       ring: mats.track(new RingGeometry(0.84, 1, 56).rotateX(-Math.PI / 2)),
       disc: mats.track(new CircleGeometry(1, 40).rotateX(-Math.PI / 2)),
       cone: mats.track(coneGeometry()),
+      sweep: mats.track(
+        new PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, 0.5),
+      ),
+      meleeSweep: mats.track(
+        sweepGeometry(
+          (FIGHTERS.tovya.abilities.attack as { halfAngle: number }).halfAngle,
+        ),
+      ),
+      sweepEdge: mats.track(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2)),
+      meleeEdge: mats.track(
+        new PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, 0.5),
+      ),
       rect: mats.track(
         new PlaneGeometry(2, 1).rotateX(-Math.PI / 2).translate(0, 0, 0.5),
       ),
@@ -486,6 +535,10 @@ export class Effects {
       ring: 40,
       disc: 10,
       cone: 8,
+      sweep: 8,
+      meleeSweep: 8,
+      sweepEdge: 8,
+      meleeEdge: 8,
       rect: 8,
       streak: 20,
     };
@@ -513,6 +566,8 @@ export class Effects {
           alpha: 1,
           r0: 1,
           r1: 1,
+          x0: 0,
+          z0: 0,
           active: false,
         });
       }
@@ -590,6 +645,41 @@ export class Effects {
     fx.mesh.scale.set(half, 1, range);
     return fx;
   }
+  /** The sweep footprint uses the same angle and radius as the hit test. */
+  sweep(
+    at: Vec,
+    dir: Vec,
+    range: number,
+    color: number,
+    now: number,
+    melee = false,
+  ) {
+    const half = (FIGHTERS.tovya.abilities.attack as { halfAngle: number })
+      .halfAngle;
+    const fx = this.take(melee ? "meleeSweep" : "sweep", now, 0.32, color, 0.4);
+    fx.mesh.position.set(at.x, 0.08, at.y);
+    fx.mesh.rotation.y = Math.atan2(dir.x, dir.y);
+    fx.mesh.scale.set(melee ? range : ITEMS.golden_broom.width, 1, range);
+    const edge = this.take(
+      melee ? "meleeEdge" : "sweepEdge",
+      now,
+      0.32,
+      0xfff4bf,
+      0.85,
+    );
+    edge.r0 = Math.atan2(dir.x, dir.y);
+    edge.r1 = range;
+    edge.x0 = at.x;
+    edge.z0 = at.y;
+    edge.mesh.position.set(at.x, 0.1, at.y);
+    edge.mesh.rotation.y = melee ? edge.r0 - half : edge.r0;
+    edge.mesh.scale.set(
+      melee ? 0.18 : ITEMS.golden_broom.width,
+      1,
+      melee ? range : 0.18,
+    );
+    return fx;
+  }
   /** Flat rectangle from `at` along `dir`. */
   rect(
     at: Vec,
@@ -643,11 +733,119 @@ export class Effects {
           const r = fx.r0 + (fx.r1 - fx.r0) * out;
           fx.mesh.scale.set(r, 1, r);
           fx.material.opacity = fx.alpha * (1 - k);
+        } else if (fx.kind === "sweepEdge" || fx.kind === "meleeEdge") {
+          if (fx.kind === "meleeEdge") {
+            const half = (
+              FIGHTERS.tovya.abilities.attack as { halfAngle: number }
+            ).halfAngle;
+            fx.mesh.rotation.y = fx.r0 + (2 * out - 1) * half;
+          } else {
+            fx.mesh.position.x = fx.x0 + Math.sin(fx.r0) * fx.r1 * out;
+            fx.mesh.position.z = fx.z0 + Math.cos(fx.r0) * fx.r1 * out;
+          }
+          fx.material.opacity = fx.alpha * (1 - k);
         } else if (fx.kind === "streak") {
           fx.mesh.scale.z = Math.max(0.01, fx.r1 * out);
           fx.material.opacity = fx.alpha * (1 - k);
         } else fx.material.opacity = fx.alpha * (1 - k * k);
       }
+  }
+}
+
+// --------------------------------------------------------------- items
+
+/** One bounded, instanced mesh per item kind. No item objects are built per frame. */
+export class Items {
+  readonly group = new Group();
+  private broom: InstancedMesh;
+  private flyer: InstancedMesh;
+  private hands = new Vector3();
+  constructor(mats: ArenaMaterials) {
+    const broomGeometry = merge([
+      part(
+        new CylinderGeometry(0.045, 0.045, 1.25, 8),
+        "#e3a924",
+        [0, 0, 0],
+        [Math.PI / 2, 0, 0],
+      ),
+      part(
+        new RoundedBoxGeometry(0.52, 0.11, 0.35, 1, 0.04),
+        "#ffd85b",
+        [0, 0, 0.67],
+      ),
+      part(
+        new RoundedBoxGeometry(0.43, 0.12, 0.07, 1, 0.02),
+        "#a96e12",
+        [0, 0.01, 0.52],
+      ),
+    ]);
+    const flyerGeometry = merge([
+      part(new RoundedBoxGeometry(0.52, 0.045, 0.7, 1, 0.02), "#f4f7ff"),
+      part(
+        new RoundedBoxGeometry(0.38, 0.05, 0.1, 1, 0.01),
+        "#387dce",
+        [0, 0.01, -0.2],
+      ),
+      part(
+        new RoundedBoxGeometry(0.3, 0.05, 0.035, 1, 0.01),
+        "#7a92ae",
+        [0, 0.01, 0.04],
+      ),
+    ]);
+    this.broom = new InstancedMesh(mats.track(broomGeometry), mats.toon, 32);
+    this.flyer = new InstancedMesh(mats.track(flyerGeometry), mats.toon, 32);
+    for (const mesh of [this.broom, this.flyer]) {
+      mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      this.group.add(mesh);
+    }
+  }
+  update(
+    items: readonly Item[],
+    time: number,
+    age: number,
+    carrierHands: (id: string, out: Vector3) => number | null,
+  ) {
+    let nb = 0,
+      nf = 0;
+    for (const item of items) {
+      const mesh = item.kind === "golden_broom" ? this.broom : this.flyer;
+      const index = item.kind === "golden_broom" ? nb++ : nf++;
+      if (index >= 32) continue;
+      let x = item.pos.x,
+        y = 0.22,
+        z = item.pos.y;
+      let yaw = Math.atan2(item.dir.x, item.dir.y);
+      if (item.state === "carried") {
+        const carrierYaw = item.carrier
+          ? carrierHands(item.carrier, this.hands)
+          : null;
+        if (carrierYaw === null) {
+          // Hide items whose carrier is concealed or absent from this snapshot.
+          _m.makeScale(0, 0, 0);
+          mesh.setMatrixAt(index, _m);
+          continue;
+        }
+        x = this.hands.x;
+        y = this.hands.y;
+        z = this.hands.z;
+        yaw = carrierYaw;
+      } else if (item.state === "flight") {
+        y = 0.85;
+        const d = Math.min(age * ITEMS.goc_flyer.speed, item.remaining);
+        x += item.dir.x * d;
+        z += item.dir.y * d;
+      } else y += 0.07 * Math.sin(time * 3 + item.id);
+      const spin = item.state === "flight" ? time * 12 : 0;
+      _q.setFromAxisAngle(Y, yaw + spin);
+      _m.compose(_p.set(x, y, z), _q, _s.setScalar(1));
+      mesh.setMatrixAt(index, _m);
+    }
+    this.broom.count = Math.min(nb, 32);
+    this.flyer.count = Math.min(nf, 32);
+    this.broom.instanceMatrix.needsUpdate = true;
+    this.flyer.instanceMatrix.needsUpdate = true;
   }
 }
 
@@ -1302,9 +1500,7 @@ export class AimGuide {
       doubleSided: true,
     });
     const laneGeo = mats.track(
-      new PlaneGeometry(2, 1)
-        .rotateX(-Math.PI / 2)
-        .translate(0, 0, 0.5),
+      new PlaneGeometry(2, 1).rotateX(-Math.PI / 2).translate(0, 0, 0.5),
     );
     this.lane = new Mesh(laneGeo, this.aimMaterial);
     this.core = new Mesh(laneGeo, this.coreMaterial);

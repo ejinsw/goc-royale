@@ -234,14 +234,17 @@ interface SignalRef<T> {
 
 ### 6.1 Touch sticks
 
-- Move, attack, and Super are one `stick` control kind with three variants.
-  One touch router owns all of them, so multi-touch, cancellation, and
-  focus loss are handled in one place.
+- Move, attack, Super, and item use are one `stick` control kind with four
+  variants. One touch router owns all of them, so multi-touch, cancellation,
+  and focus loss are handled in one place. The item stick aims and uses the
+  held item on release; a separate button picks up or puts down an item.
 - Move and attack sticks **float**: each appears where the thumb lands inside
   its half of the screen, clamped so the whole stick stays inside the safe
   area. When released, it returns to a resting position at the bottom corner.
 - Super is fixed above and inside the attack resting position so it can be
-  found without looking. A tap on attack or Super auto-aims; a drag aims.
+  found without looking. The smaller item stick is fixed above attack and
+  appears when an item is held. A tap on attack, Super, or item auto-aims;
+  a drag aims.
 - Stick size scales with the short side of the viewport and is clamped to a
   comfortable thumb size. It is recomputed only on resize, never per frame.
 - Touch input always drives the sticks and mouse/keyboard always drive the

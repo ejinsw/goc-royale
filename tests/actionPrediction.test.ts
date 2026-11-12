@@ -105,3 +105,15 @@ test("predicted attacks match the authority's attack effects one-to-one", () => 
   assert.equal(confirmed, predicted);
   assert.equal(seen.size, predicted, "authority fired exactly the predicted shots");
 });
+
+test("item cue confirmation matches the exact input sequence", () => {
+  const predictor = new ActionPredictor();
+  predictor.predictItem(10);
+  predictor.predictItem(12);
+  assert.equal(predictor.confirmItem(11), false, "a different or rejected action cannot steal a cue");
+  assert.equal(predictor.confirmItem(undefined), false, "an unsequenced event is not guessed");
+  assert.equal(predictor.confirmItem(12), true);
+  assert.equal(predictor.confirmItem(12), false, "the same cue cannot be consumed twice");
+  predictor.acknowledgeItems(10);
+  assert.equal(predictor.confirmItem(10), false, "acknowledged rejected predictions are discarded");
+});

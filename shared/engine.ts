@@ -1,6 +1,7 @@
 import {
   AREAS,
   FIGHTERS,
+  ITEMS,
   MAPS,
   RULES,
   add,
@@ -19,6 +20,7 @@ import {
   type SuperSpec,
   type Vec,
   type Mode,
+  type ItemKind,
 } from "./definitions";
 import type {
   Area,
@@ -30,6 +32,7 @@ import type {
   Effect,
   GameEvent,
   GameEventType,
+  Item,
 } from "./types";
 type SuperOf<K extends SuperSpec["kind"]> = Extract<SuperSpec, { kind: K }>;
 const emptyStats = () => ({
@@ -52,7 +55,14 @@ interface History {
  * charge, thrown burst) or a later volley of a burst attack.
  */
 type Pending =
-  | { kind: "super"; at: number; id: string; pos: Vec; dir: Vec; spec: SuperSpec }
+  | {
+      kind: "super";
+      at: number;
+      id: string;
+      pos: Vec;
+      dir: Vec;
+      spec: SuperSpec;
+    }
   | { kind: "volley"; at: number; id: string; dir: Vec };
 interface Dash {
   id: string;
@@ -71,6 +81,20 @@ interface Leap {
 }
 /** Projectile hit tolerance beyond the target's body when a spec omits it. */
 const SHOT_WIDTH = 0.13;
+/** Factory for authority-owned items; presentation consumes the same state. */
+export function createItem(id: number, kind: ItemKind, pos: Vec): Item {
+  return {
+    id,
+    kind,
+    pos: { ...pos },
+    state: "ground",
+    carrier: null,
+    owner: null,
+    dir: { x: 1, y: 0 },
+    remaining: 0,
+    cooldownUntil: 0,
+  };
+}
 /**
  * A player's timestamped movement timeline on the authority. Segment i is
  * active from segs[i].t until segs[i + 1].t; the last segment is open.
@@ -96,13 +120,19 @@ export class Engine {
   histories = new Map<string, History[]>();
   /** Highest input sequence processed per player, echoed back as ackSeq. */
   lastSeq = new Map<string, number>();
+  /** Sequence of a latched item use, retained while newer movement arrives. */
+  private itemUseSeq = new Map<string, number>();
   /** Timestamped movement timelines, per player (see MoveTrack). */
   tracks = new Map<string, MoveTrack>();
   pending: Pending[] = [];
   dashes: Dash[] = [];
   leaps: Leap[] = [];
   private serial = 0;
-  constructor(mode: Mode, members: Member[]) {
+  constructor(
+    mode: Mode,
+    members: Member[],
+    random: () => number = Math.random,
+  ) {
     const map = MAPS[mode];
     let blue = 0,
       red = 3;
@@ -116,6 +146,7 @@ export class Engine {
         map.spawns[spawnIndex] ?? map.spawns[spawnIndex % map.spawns.length];
       return {
         ...m,
+        heldItem: null,
         pos: { ...spawn },
         aim: { x: m.team === 0 ? 1 : -1, y: 0 },
         hp: f.hp,
@@ -145,6 +176,7 @@ export class Engine {
       phase: "countdown",
       phaseUntil: 3,
       players,
+      items: [],
       projectiles: [],
       areas: [],
       effects: [],
@@ -172,6 +204,40 @@ export class Engine {
       ackSeq: 0,
       ackTime: 0,
     };
+    // Bounded sampling plus a deterministic grid fallback: always terminate,
+    // even with an injected constant random source or a crowded map.
+    const kinds: ItemKind[] = [
+      "golden_broom",
+      "goc_flyer",
+      "goc_flyer",
+      "golden_broom",
+      "goc_flyer",
+      "goc_flyer",
+    ];
+    const available = (pos: Vec) =>
+      this.valid(pos, 0.65) &&
+      map.spawns.every((spawn) => distance(spawn, pos) >= 2) &&
+      (mode !== "broomball" || distance(pos, this.state.ball.pos) >= 2) &&
+      this.state.items.every((item) => distance(item.pos, pos) >= 2);
+    for (const kind of kinds) {
+      let pos: Vec | undefined;
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const candidate = {
+          x: 1 + clamp(random(), 0, 1) * (map.w - 2),
+          y: 1 + clamp(random(), 0, 1) * (map.h - 2),
+        };
+        if (available(candidate)) {
+          pos = candidate;
+          break;
+        }
+      }
+      if (!pos) {
+        for (let y = 1; y < map.h - 1 && !pos; y += 2)
+          for (let x = 1; x < map.w - 1 && !pos; x += 2)
+            if (available({ x, y })) pos = { x, y };
+      }
+      if (pos) this.state.items.push(createItem(++this.serial, kind, pos));
+    }
   }
   get playerList() {
     return this.state.players;
@@ -185,6 +251,18 @@ export class Engine {
     if (!input || !finiteVec(input.move) || !finiteVec(input.aim)) return false;
     const m = length(input.move) > 1 ? unit(input.move) : input.move;
     const previous = this.inputs.get(id);
+    const freshAction =
+      typeof input.seq !== "number" ||
+      !Number.isFinite(input.seq) ||
+      input.seq > (this.lastSeq.get(id) ?? 0);
+    if (
+      freshAction &&
+      input.itemUse === true &&
+      !previous?.itemUse &&
+      typeof input.seq === "number" &&
+      Number.isFinite(input.seq)
+    )
+      this.itemUseSeq.set(id, input.seq);
     // Record the highest processed sequence (monotonic) for acknowledgement.
     if (typeof input.seq === "number" && Number.isFinite(input.seq)) {
       const prevSeq = this.lastSeq.get(id) ?? 0;
@@ -201,13 +279,21 @@ export class Engine {
       }
       const tail = track.segs.at(-1);
       if (!tail || input.t > tail.t) track.segs.push({ t: input.t, move: m });
-      if (track.segs.length > 300) track.segs.splice(0, track.segs.length - 300);
+      if (track.segs.length > 300)
+        track.segs.splice(0, track.segs.length - 300);
     }
     this.inputs.set(id, {
       move: m,
       aim: unit(input.aim),
       attack: input.attack === true || previous?.attack === true,
       super: input.super === true || previous?.super === true,
+      itemPickup:
+        (freshAction && input.itemPickup === true) ||
+        previous?.itemPickup === true,
+      itemDrop:
+        (freshAction && input.itemDrop === true) || previous?.itemDrop === true,
+      itemUse:
+        (freshAction && input.itemUse === true) || previous?.itemUse === true,
       power:
         previous?.attack && !input.attack
           ? previous.power
@@ -231,7 +317,12 @@ export class Engine {
    * - Backlog that banked time cannot recover (a stall longer than bankMax)
    *   is skipped, not replayed, so a long stall never leaves permanent lag.
    */
-  private consumeTimeline(p: Player, track: MoveTrack, dt: number, moves: boolean) {
+  private consumeTimeline(
+    p: Player,
+    track: MoveTrack,
+    dt: number,
+    moves: boolean,
+  ) {
     const segs = track.segs;
     if (!segs.length) return;
     const newest = segs[segs.length - 1].t;
@@ -249,7 +340,10 @@ export class Engine {
       const speed = FIGHTERS[p.fighter].speed * (1 - p.slow);
       for (let i = 0; i < segs.length; i++) {
         const start = Math.max(segs[i].t, track.c);
-        const end = Math.min(i + 1 < segs.length ? segs[i + 1].t : Infinity, target);
+        const end = Math.min(
+          i + 1 < segs.length ? segs[i + 1].t : Infinity,
+          target,
+        );
         if (end > start) this.move(p, mul(segs[i].move, speed * (end - start)));
       }
     }
@@ -381,6 +475,9 @@ export class Engine {
     owner = "",
     dir?: Vec,
     value?: number,
+    itemKind?: ItemKind,
+    inputSeq?: number,
+    target?: string,
   ) {
     this.state.events.push({
       id: ++this.serial,
@@ -390,6 +487,9 @@ export class Engine {
       pos: { ...pos },
       ...(dir ? { dir: { ...dir } } : {}),
       ...(value !== undefined ? { value } : {}),
+      ...(itemKind !== undefined ? { itemKind } : {}),
+      ...(inputSeq !== undefined ? { inputSeq } : {}),
+      ...(target !== undefined ? { target } : {}),
     });
   }
   heal(target: Player, amount: number, source?: Player, charge = true) {
@@ -458,6 +558,7 @@ export class Engine {
     p.placement = this.state.players.filter((x) => x.alive).length + 1;
     if (source && source.id !== p.id) source.stats.kills++;
     this.dropBall(p);
+    this.dropItem(p);
     this.effect("eliminated", p.pos, p.id);
     this.emit("fighter_eliminated", p.pos, p.id, undefined, source?.id ? 1 : 0);
     this.state.notice = `${p.name} eliminated`;
@@ -466,9 +567,17 @@ export class Engine {
     const p = this.state.players.find((x) => x.id === id);
     if (p) {
       p.connected = false;
-      this.inputs.delete(id);
+      this.resetInput(id);
       this.dropBall(p);
+      this.dropItem(p);
     }
+  }
+  /** A new connection starts a new input sequence and movement timeline. */
+  resetInput(id: string) {
+    this.inputs.delete(id);
+    this.itemUseSeq.delete(id);
+    this.lastSeq.delete(id);
+    this.tracks.delete(id);
   }
   knock(p: Player, dir: Vec, n: number) {
     this.dropBall(p);
@@ -484,6 +593,216 @@ export class Engine {
     b.last = p.id;
     b.lockUntil = this.state.time + 0.4;
     this.emit("ball_released", p.pos, p.id, p.aim);
+  }
+  /** Pickups, possessions and uses are decided only by the authority. */
+  private pickupItem(p: Player) {
+    if (p.heldItem !== null) return;
+    const item = this.state.items
+      .filter(
+        (i) =>
+          i.state === "ground" &&
+          distance(i.pos, p.pos) <= 1.2 &&
+          this.lineClear(p.pos, i.pos),
+      )
+      .sort(
+        (a, b) =>
+          distance(a.pos, p.pos) - distance(b.pos, p.pos) || a.id - b.id,
+      )[0];
+    if (!item) return;
+    item.state = "carried";
+    item.carrier = p.id;
+    item.owner = p.id;
+    p.heldItem = item.id;
+    this.emit("item_picked_up", p.pos, p.id, p.aim, undefined, item.kind);
+  }
+  private dropItem(p: Player) {
+    const item = this.state.items.find(
+      (i) => i.id === p.heldItem && i.carrier === p.id,
+    );
+    p.heldItem = null;
+    if (!item) return;
+    item.state = "ground";
+    item.carrier = null;
+    item.owner = null;
+    item.pos = { ...p.pos };
+    this.emit("item_dropped", item.pos, p.id, p.aim, undefined, item.kind);
+  }
+  private useItem(p: Player) {
+    const s = this.state;
+    const item = s.items.find(
+      (i) => i.id === p.heldItem && i.carrier === p.id && i.state === "carried",
+    );
+    if (!item || s.time < item.cooldownUntil) return;
+    const spec = ITEMS[item.kind];
+    p.protectedUntil = 0;
+    p.quietSince = s.time;
+    this.emit(
+      "item_used",
+      p.pos,
+      p.id,
+      p.aim,
+      spec.range,
+      item.kind,
+      this.itemUseSeq.get(p.id),
+    );
+    if (spec.kind === "throw") {
+      p.heldItem = null;
+      item.carrier = null;
+      item.state = "flight";
+      item.pos = { ...p.pos };
+      item.dir = { ...p.aim };
+      item.remaining = spec.range;
+      return;
+    }
+    item.cooldownUntil = s.time + spec.cooldown;
+    const inSweep = (pos: Vec, extra = 0) => {
+      const offset = sub(pos, p.pos);
+      const forward = offset.x * p.aim.x + offset.y * p.aim.y;
+      const lateral = offset.x * -p.aim.y + offset.y * p.aim.x;
+      // Test a circular target against the nearest point of the oriented
+      // rectangle, including its rounded collision corners.
+      const dx = forward - clamp(forward, 0, spec.range);
+      const dy = lateral - clamp(lateral, -spec.width / 2, spec.width / 2);
+      return dx * dx + dy * dy <= extra * extra && this.lineClear(p.pos, pos);
+    };
+    // Carried-ball presentation normally follows the carrier later in the
+    // tick; sample it now so a sweep never tests last tick's position.
+    const heldBallCarrier = s.players.find(
+      (other) => other.id === s.ball.carrier,
+    );
+    if (heldBallCarrier)
+      s.ball.pos = add(heldBallCarrier.pos, mul(heldBallCarrier.aim, 0.58));
+    for (const target of s.players) {
+      if (
+        !target.alive ||
+        this.allies(p, target) ||
+        s.time < target.protectedUntil ||
+        !inSweep(target.pos, RULES.radius)
+      )
+        continue;
+      const hitPos = { ...target.pos };
+      this.knock(target, p.aim, spec.knock);
+      this.emit(
+        "item_hit",
+        hitPos,
+        p.id,
+        p.aim,
+        undefined,
+        item.kind,
+        undefined,
+        target.id,
+      );
+    }
+    // Move mobile enemy entities; stationary zones and barriers have no velocity.
+    for (const area of s.areas) {
+      if (
+        !AREAS[area.kind].chase ||
+        !this.enemyArea(p, area) ||
+        !inSweep(area.pos)
+      )
+        continue;
+      const pos = add(area.pos, mul(p.aim, spec.knock));
+      if (this.valid(pos, 0.3) && this.lineClear(area.pos, pos)) area.pos = pos;
+      this.emit("item_hit", area.pos, p.id, p.aim, undefined, item.kind);
+    }
+    const ball = s.ball;
+    if (
+      s.mode === "broomball" &&
+      ball.state !== "resetting" &&
+      inSweep(ball.pos, 0.32)
+    ) {
+      const carrier = s.players.find((other) => other.id === ball.carrier);
+      if (carrier) this.dropBall(carrier);
+      ball.carrier = null;
+      ball.state = "flight";
+      ball.velocity = mul(p.aim, spec.ballSpeed);
+      ball.last = p.id;
+      ball.lockUntil = s.time + 0.4;
+      ball.scorer = p.id;
+      ball.passer = null;
+      ball.passAt = 0;
+      this.emit("item_hit", ball.pos, p.id, p.aim, undefined, item.kind);
+    }
+  }
+  /** Advance the fixed number of items; thrown items are consumed on impact or expiry. */
+  private updateItems(dt: number) {
+    const s = this.state;
+    const remove = new Set<number>();
+    for (const item of s.items) {
+      if (item.state === "carried") {
+        const carrier = s.players.find((p) => p.id === item.carrier);
+        if (carrier) item.pos = { ...carrier.pos };
+        continue;
+      }
+      if (item.state !== "flight") continue;
+      const spec = ITEMS[item.kind];
+      const owner = s.players.find((p) => p.id === item.owner);
+      if (spec.kind !== "throw" || !owner) {
+        remove.add(item.id);
+        continue;
+      }
+      const travel = Math.min(spec.speed * dt, item.remaining);
+      const steps = Math.max(1, Math.ceil(travel / 0.12));
+      for (let i = 0; i < steps && !remove.has(item.id); i++) {
+        const next = add(item.pos, mul(item.dir, travel / steps));
+        item.remaining -= travel / steps;
+        if (!this.valid(next, spec.width)) {
+          const wall = s.walls.find(
+            (w) =>
+              next.x + spec.width > w.x &&
+              next.x - spec.width < w.x + w.w &&
+              next.y + spec.width > w.y &&
+              next.y - spec.width < w.y + w.h,
+          );
+          if (wall?.hp !== undefined) {
+            wall.hp -= spec.damage;
+            if (wall.hp <= 0) s.walls = s.walls.filter((w) => w.id !== wall.id);
+          }
+          remove.add(item.id);
+          this.emit(
+            "item_hit",
+            item.pos,
+            owner.id,
+            item.dir,
+            undefined,
+            item.kind,
+          );
+          break;
+        }
+        item.pos = next;
+        let hitTarget: string | undefined;
+        const area = s.areas.find((a) => this.blocks(a, owner, item.pos));
+        if (area) {
+          area.hp -= spec.damage;
+          remove.add(item.id);
+        } else {
+          const target = s.players.find(
+            (p) =>
+              p.alive &&
+              !this.allies(owner, p) &&
+              distance(p.pos, item.pos) <= RULES.radius + spec.width,
+          );
+          if (target) {
+            if (this.damage(target, spec.damage, owner)) hitTarget = target.id;
+            remove.add(item.id);
+          }
+        }
+        if (remove.has(item.id))
+          this.emit(
+            "item_hit",
+            item.pos,
+            owner.id,
+            item.dir,
+            undefined,
+            item.kind,
+            undefined,
+            hitTarget,
+          );
+      }
+      if (item.remaining <= 1e-6) remove.add(item.id);
+    }
+    if (remove.size) s.items = s.items.filter((item) => !remove.has(item.id));
+    s.areas = s.areas.filter((a) => a.hp > 0 && a.end > s.time);
   }
   private attack(p: Player) {
     const s = this.state,
@@ -549,7 +868,11 @@ export class Engine {
       );
     };
     for (const t of s.players)
-      if (t.alive && !this.allies(p, t) && inside(t.pos, f.range + RULES.radius))
+      if (
+        t.alive &&
+        !this.allies(p, t) &&
+        inside(t.pos, f.range + RULES.radius)
+      )
         this.damage(t, f.damage, p);
     for (const a of s.areas)
       if (this.enemyArea(p, a) && inside(a.pos, f.range)) a.hp -= f.damage;
@@ -590,7 +913,13 @@ export class Engine {
     const later = (pos: Vec) =>
       this.pending.push({
         kind: "super",
-        at: s.time + ("windup" in spec ? spec.windup : "delay" in spec ? spec.delay ?? 0 : 0),
+        at:
+          s.time +
+          ("windup" in spec
+            ? spec.windup
+            : "delay" in spec
+              ? (spec.delay ?? 0)
+              : 0),
         id: p.id,
         pos,
         dir: { ...p.aim },
@@ -625,13 +954,27 @@ export class Engine {
             return true;
           }
           later({ ...p.pos });
-          this.effect(spec.effect, p.pos, p.id, p.aim, undefined, Math.max(0.35, spec.windup));
+          this.effect(
+            spec.effect,
+            p.pos,
+            p.id,
+            p.aim,
+            undefined,
+            Math.max(0.35, spec.windup),
+          );
           return false;
         };
       case "charge":
         return () => {
           later({ ...p.pos });
-          this.effect("van", p.pos, p.id, p.aim, undefined, Math.max(0.35, spec.windup));
+          this.effect(
+            "van",
+            p.pos,
+            p.id,
+            p.aim,
+            undefined,
+            Math.max(0.35, spec.windup),
+          );
           return false;
         };
       case "rewind": {
@@ -642,7 +985,12 @@ export class Engine {
         return () => {
           const old = { ...p.pos };
           p.pos = { ...past.pos };
-          this.heal(p, Math.min(spec.heal, Math.max(0, past.hp - p.hp)), p, false);
+          this.heal(
+            p,
+            Math.min(spec.heal, Math.max(0, past.hp - p.hp)),
+            p,
+            false,
+          );
           this.effect("glitch", old, p.id, p.aim, undefined, 0.65);
           this.burst(p, old, spec.blast);
           return true;
@@ -679,9 +1027,23 @@ export class Engine {
         if (!to) return null;
         const landing = to;
         return () => {
-          this.leaps.push({ id: p.id, from: { ...p.pos }, to: landing, start: s.time, end: s.time + spec.air, spec });
+          this.leaps.push({
+            id: p.id,
+            from: { ...p.pos },
+            to: landing,
+            start: s.time,
+            end: s.time + spec.air,
+            spec,
+          });
           p.busyUntil = s.time + spec.air;
-          this.effect("leap", landing, p.id, p.aim, spec.landing.radius, spec.air);
+          this.effect(
+            "leap",
+            landing,
+            p.id,
+            p.aim,
+            spec.landing.radius,
+            spec.air,
+          );
           return false;
         };
       }
@@ -725,7 +1087,8 @@ export class Engine {
   /** The visible ring for a burst; `aura` keeps Ethan's original cue. */
   private burstCue(p: Player, at: Vec, b: BurstSpec, kind?: "aura") {
     if (kind === "aura") this.effect("aura", at, p.id, p.aim, undefined, 0.6);
-    else if (Number.isFinite(b.radius)) this.effect("burst", at, p.id, p.aim, b.radius, 0.5);
+    else if (Number.isFinite(b.radius))
+      this.effect("burst", at, p.id, p.aim, b.radius, 0.5);
   }
   /**
    * Resolve a burst centered on `at` for its owner `p`. Teammates inside
@@ -750,14 +1113,20 @@ export class Engine {
           t.shield = Math.max(t.shield, b.shield.amount);
           t.shieldUntil = Math.max(t.shieldUntil, s.time + b.shield.duration);
         }
-        if (b.protect) t.protectedUntil = Math.max(t.protectedUntil, s.time + b.protect);
+        if (b.protect)
+          t.protectedUntil = Math.max(t.protectedUntil, s.time + b.protect);
         continue;
       }
       if (!this.lineClear(at, t.pos)) continue;
       const landed =
         b.damage === undefined
           ? s.time >= t.protectedUntil
-          : this.damage(t, b.damage === "knockout" ? t.hp + t.shield : b.damage, p, true);
+          : this.damage(
+              t,
+              b.damage === "knockout" ? t.hp + t.shield : b.damage,
+              p,
+              true,
+            );
       if (!landed || !t.alive) continue;
       if (b.stun) {
         t.stunUntil = Math.max(t.stunUntil, s.time + b.stun);
@@ -804,7 +1173,8 @@ export class Engine {
           this.dropBall(t);
         }
         if (knock) this.knock(t, dir, knock);
-        if (sideKnock) this.knock(t, lateral >= 0 ? side : mul(side, -1), sideKnock);
+        if (sideKnock)
+          this.knock(t, lateral >= 0 ? side : mul(side, -1), sideKnock);
         if (slow) this.applySlow(t, slow);
       }
     }
@@ -814,11 +1184,16 @@ export class Engine {
     let best: Player | null = null,
       bestD = Infinity;
     for (const t of this.state.players) {
-      if (!t.alive || this.allies(owner, t) || this.concealed(t, owner.pos)) continue;
+      if (!t.alive || this.allies(owner, t) || this.concealed(t, owner.pos))
+        continue;
       const d = sub(t.pos, q.pos),
         len = length(d);
       // Ahead means within ~70 degrees of the current heading.
-      if (len < 1e-6 || len > q.remaining + 1 || (d.x * q.dir.x + d.y * q.dir.y) / len < 0.34)
+      if (
+        len < 1e-6 ||
+        len > q.remaining + 1 ||
+        (d.x * q.dir.x + d.y * q.dir.y) / len < 0.34
+      )
         continue;
       if (len < bestD && this.lineClear(q.pos, t.pos)) {
         best = t;
@@ -841,15 +1216,33 @@ export class Engine {
       const hp = owner.hp;
       this.heal(owner, got, owner, false);
       if (owner.hp > hp) {
-        this.effect("heal", owner.pos, owner.id, owner.aim, Math.round(owner.hp - hp));
-        this.emit("heal_applied", owner.pos, owner.id, owner.aim, Math.round(owner.hp - hp));
+        this.effect(
+          "heal",
+          owner.pos,
+          owner.id,
+          owner.aim,
+          Math.round(owner.hp - hp),
+        );
+        this.emit(
+          "heal_applied",
+          owner.pos,
+          owner.id,
+          owner.aim,
+          Math.round(owner.hp - hp),
+        );
       }
     }
     if (spec.chain) {
       let next: Player | null = null,
         nd = Infinity;
       for (const o of s.players) {
-        if (o === t || !o.alive || this.allies(owner, o) || this.concealed(o, owner.pos)) continue;
+        if (
+          o === t ||
+          !o.alive ||
+          this.allies(owner, o) ||
+          this.concealed(o, owner.pos)
+        )
+          continue;
         const d = distance(o.pos, t.pos);
         if (d <= spec.chain.range && d < nd && this.lineClear(t.pos, o.pos)) {
           next = o;
@@ -857,7 +1250,14 @@ export class Engine {
         }
       }
       if (next) {
-        this.effect("chain", t.pos, owner.id, unit(sub(next.pos, t.pos)), nd, 0.3);
+        this.effect(
+          "chain",
+          t.pos,
+          owner.id,
+          unit(sub(next.pos, t.pos)),
+          nd,
+          0.3,
+        );
         this.damage(next, spec.chain.damage, owner);
       }
     }
@@ -878,7 +1278,12 @@ export class Engine {
     }
   }
   /** A Super shot hit: damage, then stun and an optional place swap. */
-  private superHit(owner: Player, t: Player, q: Projectile, spec: SuperOf<"shot">) {
+  private superHit(
+    owner: Player,
+    t: Player,
+    q: Projectile,
+    spec: SuperOf<"shot">,
+  ) {
     const s = this.state;
     if (!this.damage(t, spec.damage, owner, true)) return;
     if (t.alive && spec.stun) {
@@ -916,11 +1321,13 @@ export class Engine {
       const f = FIGHTERS[q.fighter];
       const attack = f.abilities.attack;
       const spec: ShotSpec = attack.kind === "shot" ? attack : { kind: "shot" };
-      const sup = q.super && f.abilities.super.kind === "shot" ? f.abilities.super : null;
+      const sup =
+        q.super && f.abilities.super.kind === "shot" ? f.abilities.super : null;
       const speed = sup ? sup.speed : f.projectileSpeed;
       const power = sup ? sup.damage : f.damage;
-      const width = sup ? sup.width : spec.width ?? SHOT_WIDTH;
-      if (!sup && spec.homing && !q.back) this.steer(q, owner, spec.homing * dt);
+      const width = sup ? sup.width : (spec.width ?? SHOT_WIDTH);
+      if (!sup && spec.homing && !q.back)
+        this.steer(q, owner, spec.homing * dt);
       let dead = false;
       const dist = Math.min(speed * dt, q.remaining);
       const steps = Math.max(1, Math.ceil(dist / 0.12));
@@ -983,7 +1390,13 @@ export class Engine {
             if (!sup && spec.healAllies && t.hp < FIGHTERS[t.fighter].hp) {
               this.heal(t, spec.healAllies, owner);
               this.effect("heal", t.pos, owner.id, t.aim, spec.healAllies);
-              this.emit("heal_applied", t.pos, owner.id, t.aim, spec.healAllies);
+              this.emit(
+                "heal_applied",
+                t.pos,
+                owner.id,
+                t.aim,
+                spec.healAllies,
+              );
               dead = true;
               break;
             }
@@ -1002,9 +1415,9 @@ export class Engine {
           const centered =
             !!spec.centerBonus &&
             Math.abs(
-              (t.pos.x - q.pos.x) * q.dir.y -
-                (t.pos.y - q.pos.y) * q.dir.x,
-            ) <= RULES.radius + spec.centerBonus.width;
+              (t.pos.x - q.pos.x) * q.dir.y - (t.pos.y - q.pos.y) * q.dir.x,
+            ) <=
+              RULES.radius + spec.centerBonus.width;
           const centerBonus = centered ? spec.centerBonus!.damage : 0;
           const before = t.hp + t.shield;
           if (this.damage(t, power + farBonus + centerBonus, owner)) {
@@ -1045,7 +1458,8 @@ export class Engine {
       let target: Player | null = null,
         best = Infinity;
       for (const t of s.players) {
-        if (!t.alive || this.allies(owner, t) || this.concealed(t, a.pos)) continue;
+        if (!t.alive || this.allies(owner, t) || this.concealed(t, a.pos))
+          continue;
         const d = distance(a.pos, t.pos);
         if (d <= spec.sight && d < best && this.lineClear(a.pos, t.pos)) {
           target = t;
@@ -1062,10 +1476,21 @@ export class Engine {
           this.move(a, mul(a.dir, Math.min(spec.speed * dt, d - stop)), 0.3);
         }
       }
-      if (target && distance(a.pos, target.pos) <= spec.reach && s.time >= (a.next ?? 0)) {
+      if (
+        target &&
+        distance(a.pos, target.pos) <= spec.reach &&
+        s.time >= (a.next ?? 0)
+      ) {
         a.next = s.time + spec.every;
         if (this.damage(target, spec.damage, owner, true))
-          this.effect("panda", target.pos, owner.id, a.dir ?? { x: 1, y: 0 }, undefined, 0.25);
+          this.effect(
+            "panda",
+            target.pos,
+            owner.id,
+            a.dir ?? { x: 1, y: 0 },
+            undefined,
+            0.25,
+          );
       }
     }
   }
@@ -1245,6 +1670,9 @@ export class Engine {
       } else {
         // Inputs sent before play must not become a backlog at "Go".
         for (const t of this.tracks.values()) this.anchorTimeline(t);
+        for (const input of this.inputs.values())
+          input.itemPickup = input.itemDrop = input.itemUse = false;
+        this.itemUseSeq.clear();
         return;
       }
     }
@@ -1255,6 +1683,9 @@ export class Engine {
         s.notice = "Go!";
       } else {
         for (const t of this.tracks.values()) this.anchorTimeline(t);
+        for (const input of this.inputs.values())
+          input.itemPickup = input.itemDrop = input.itemUse = false;
+        this.itemUseSeq.clear();
         return;
       }
     }
@@ -1262,6 +1693,13 @@ export class Engine {
       if (!p.alive) {
         const t = this.tracks.get(p.id);
         if (t) this.anchorTimeline(t);
+        const staleInput = this.inputs.get(p.id);
+        if (staleInput)
+          staleInput.itemPickup =
+            staleInput.itemDrop =
+            staleInput.itemUse =
+              false;
+        this.itemUseSeq.delete(p.id);
         if (s.mode === "broomball" && p.connected && s.time >= p.respawn) {
           const sp = MAPS.broomball.spawns[p.team === 0 ? 0 : 3];
           p.pos = { ...sp };
@@ -1290,7 +1728,10 @@ export class Engine {
         } else if (spec.slow) p.slow = Math.max(p.slow, spec.slow);
       }
       const canAct =
-        !!input && p.connected && s.time >= p.stunUntil && s.time >= p.busyUntil;
+        !!input &&
+        p.connected &&
+        s.time >= p.stunUntil &&
+        s.time >= p.busyUntil;
       const track = this.tracks.get(p.id);
       // Timeline time always advances; it only produces movement when the
       // fighter can act (stun/disconnect consume time without moving).
@@ -1298,12 +1739,17 @@ export class Engine {
       if (input && canAct) {
         p.aim = input.aim;
         if (!track) this.move(p, mul(input.move, f.speed * (1 - p.slow) * dt));
+        if (input.itemDrop) this.dropItem(p);
+        if (input.itemPickup) this.pickupItem(p);
+        if (input.itemUse) this.useItem(p);
         if (input.super) this.activateSuper(p);
         if (input.attack) this.attack(p);
       }
       if (input) {
         input.attack = false;
         input.super = false;
+        input.itemPickup = input.itemDrop = input.itemUse = false;
+        this.itemUseSeq.delete(p.id);
       }
       if (p.ammo < f.ammo) {
         p.reload += dt;
@@ -1327,7 +1773,8 @@ export class Engine {
       if (!p?.alive) continue;
       if (item.kind === "volley") {
         // A stun or a ball pickup interrupts the rest of a burst.
-        if (s.time >= p.stunUntil && s.ball.carrier !== p.id) this.volley(p, item.dir);
+        if (s.time >= p.stunUntil && s.ball.carrier !== p.id)
+          this.volley(p, item.dir);
         continue;
       }
       const spec = item.spec;
@@ -1422,6 +1869,7 @@ export class Engine {
     this.dashes = this.dashes.filter((d) => d.remaining > 0);
     this.companions(dt);
     this.projectiles(dt);
+    this.updateItems(dt);
     this.ball(dt);
     const elapsed = s.time - 3;
     if (s.mode === "showdown") {
@@ -1480,6 +1928,11 @@ export class Engine {
       snap.players = snap.players.filter(
         (p) => p.id === viewer.id || !p.alive || !this.concealed(p, viewer.pos),
       );
+    // A carried item must not expose an otherwise concealed fighter.
+    const visiblePlayers = new Set(snap.players.map((p) => p.id));
+    snap.items = snap.items.filter(
+      (item) => !item.carrier || visiblePlayers.has(item.carrier),
+    );
     // Infinity is not portable across every JSON-based transport.
     snap.aliveCount = s.players.filter((p) => p.alive).length;
     snap.areas.forEach((a) => {
@@ -1518,6 +1971,10 @@ export class Engine {
     for (const q of snap.projectiles) {
       q2(q.pos);
       q2(q.dir);
+    }
+    for (const item of snap.items) {
+      q2(item.pos);
+      q2(item.dir);
     }
     for (const a of snap.areas) {
       q2(a.pos);

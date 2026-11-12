@@ -1,6 +1,8 @@
 import {
   FIGHTERS,
   IDS,
+  ITEMS,
+  type ItemKind,
   clamp,
   distance,
   type FighterId,
@@ -81,8 +83,10 @@ class Arena {
   private predictedEffectIds = new Set<number>();
   /** Client times of predicted local attack animations not yet matched. */
   private predictedAttacks: number[] = [];
+  private predictedCones: number[] = [];
   private predictedSuperAt = -Infinity;
   private predictedReleaseAt = -Infinity;
+  private lastPredictedItem: { id: number; until: number } | null = null;
   private lastMatch: Match | null = null;
   private matchAt = 0;
   private lastFrame = 0;
@@ -132,6 +136,18 @@ class Arena {
       )
         e.preventDefault();
       this.keys.add(e.code);
+      if (
+        !e.repeat &&
+        !this.bridge.paused &&
+        (e.code === "KeyE" || e.code === "KeyF")
+      ) {
+        const me = this.bridge.match?.players.find(
+          (p) => p.id === this.bridge.id,
+        );
+        if (e.code === "KeyE") this.bridge.input.itemUse = true;
+        else if (me?.heldItem != null) this.bridge.input.itemDrop = true;
+        else this.bridge.input.itemPickup = true;
+      }
       if (e.code === "Space" && !e.repeat) {
         this.keySuper = true;
         this.bridge.aiming = "super";
@@ -151,6 +167,9 @@ class Arena {
       this.bridge.input.move = { x: 0, y: 0 };
       this.bridge.input.attack = false;
       this.bridge.input.super = false;
+      this.bridge.input.itemPickup = false;
+      this.bridge.input.itemDrop = false;
+      this.bridge.input.itemUse = false;
       this.mouseDown = 0;
       this.mouseAction = null;
       this.keySuper = false;
@@ -318,6 +337,9 @@ class Arena {
       inputKey === this.lastInputKey &&
       !this.bridge.input.attack &&
       !this.bridge.input.super &&
+      !this.bridge.input.itemPickup &&
+      !this.bridge.input.itemDrop &&
+      !this.bridge.input.itemUse &&
       time - this.lastSend < 1000 / 30
     )
       return;
@@ -348,7 +370,9 @@ class Arena {
       sound("super_cue");
       const superSpec = FIGHTERS[me.fighter].abilities.super;
       this.cue(
-        superSpec.kind === "frame" && superSpec.effect === "gaze" ? "gaze" : "super",
+        superSpec.kind === "frame" && superSpec.effect === "gaze"
+          ? "gaze"
+          : "super",
         me,
         0xf4c95d,
         t,
@@ -359,8 +383,67 @@ class Arena {
       if (this.view?.action(me.id, "super", t)) metrics.anim.predicted++;
       this.predictedSuperAt = t;
     }
+    if (
+      me &&
+      payload.itemUse &&
+      me.alive &&
+      s.phase === "playing" &&
+      s.time >= me.stunUntil &&
+      s.time >= me.busyUntil
+    ) {
+      const item = s.items.find(
+        (candidate) =>
+          candidate.id === me.heldItem && candidate.state === "carried",
+      );
+      if (
+        item &&
+        s.time >= item.cooldownUntil &&
+        (this.lastPredictedItem?.id !== item.id ||
+          t >= this.lastPredictedItem.until)
+      ) {
+        this.itemCue(
+          item.kind,
+          me.id,
+          this.renderPos.get(me.id) ?? me.pos,
+          this.bridge.input.aim,
+          t,
+        );
+        this.actions.predictItem(seq);
+        this.lastPredictedItem = {
+          id: item.id,
+          until:
+            t +
+            (item.kind === "golden_broom" ? ITEMS.golden_broom.cooldown : 1),
+        };
+      }
+    }
     this.bridge.input.attack = false;
     this.bridge.input.super = false;
+    this.bridge.input.itemPickup = false;
+    this.bridge.input.itemDrop = false;
+    this.bridge.input.itemUse = false;
+  }
+
+  private itemCue(
+    kind: ItemKind,
+    owner: string,
+    pos: Vec,
+    dir: Vec,
+    now: number,
+  ) {
+    sound("attack");
+    this.view?.cue(
+      kind === "golden_broom" ? "item_sweep" : "attack",
+      pos,
+      dir,
+      kind === "golden_broom" ? 0xffd45a : 0xf2f5ff,
+      now,
+    );
+    this.view?.action(
+      owner,
+      kind === "golden_broom" ? "item_sweep" : "item_throw",
+      now,
+    );
   }
 
   private cue(
@@ -392,8 +475,9 @@ class Arena {
     sound(fighter.attackSound ?? "attack", IDS.indexOf(me.fighter));
     const attack = fighter.abilities.attack;
     // Cone attacks are instant; shot attacks create authoritative projectiles.
+    if (attack.kind === "cone") this.predictedCones.push(t);
     this.cue(
-      attack.kind === "cone" ? "cone" : "attack",
+      attack.kind === "cone" ? (me.fighter === "tovya" ? "melee_sweep" : "cone") : "attack",
       me,
       col(fighter.color),
       t,
@@ -422,6 +506,16 @@ class Arena {
       ) {
         this.predictedEffectIds.add(e.id);
         continue;
+      }
+      // A cone is emitted in addition to the generic attack effect. Match
+      // it independently so the local sweep does not play twice.
+      if (e.kind === "cone" && e.owner === this.bridge.id) {
+        while (this.predictedCones.length && now - this.predictedCones[0] > PREDICTION_WINDOW)
+          this.predictedCones.shift();
+        if (this.predictedCones.length) {
+          this.predictedCones.shift();
+          continue;
+        }
       }
       // Side Eye's warning was already drawn on the local input frame; only
       // the resolving flash is replayed from authority.
@@ -458,8 +552,11 @@ class Arena {
    * and reduced-motion settings.
    */
   private playEvents(s: Match, now: number) {
-    if (!s.events?.length) return;
-    const focusId = cameraFocusId(s.players, this.bridge.id, this.bridge.spectate);
+    const focusId = cameraFocusId(
+      s.players,
+      this.bridge.id,
+      this.bridge.spectate,
+    );
     const focus = s.players.find((p) => p.id === focusId) ?? null;
     for (const e of s.events) {
       if (this.consumedEvents.has(e.id)) continue;
@@ -474,6 +571,9 @@ class Arena {
       if (impulse > 0)
         this.view?.shake(impulse * 90 + 60, impulse * 0.004 * near, now);
     }
+    // A snapshot acknowledges processed inputs after their events have been
+    // presented above. Rejected predictions cannot match a future event.
+    this.actions.acknowledgeItems(s.ackSeq);
     if (this.consumedEvents.size > 4000)
       this.consumedEvents = new Set(s.events.map((e) => e.id));
   }
@@ -491,6 +591,33 @@ class Arena {
         metrics.anim.authoritative++;
     };
     switch (e.type) {
+      case "item_used": {
+        if (!e.itemKind) return;
+        if (local && this.actions.confirmItem(e.inputSeq))
+          return skip();
+        this.itemCue(e.itemKind, e.owner, e.pos, e.dir ?? { x: 1, y: 0 }, now);
+        return;
+      }
+      case "item_hit": {
+        // A damaging throw already has an attack_hit and hit effect. The
+        // simulation marks that contact with its player target so neither
+        // its sound, flash nor reaction is played a second time.
+        if (e.target && e.itemKind && ITEMS[e.itemKind].kind === "throw") return;
+        sound("hit");
+        view.effect({
+          id: e.id,
+          kind: "hit",
+          pos: e.pos,
+          dir: e.dir ?? { x: 1, y: 0 },
+          owner: e.owner,
+          end: s.time + 0.3,
+        }, s, now);
+        if (e.target) {
+          view.action(e.target, "hit", now);
+          view.hit(e.target, 0.55);
+        }
+        return;
+      }
       case "attack_started": {
         if (local) {
           while (
@@ -571,6 +698,11 @@ function eventImpulse(e: GameEvent): number {
       return 0.85;
     case "super_resolved":
       return 0.7;
+    case "item_hit":
+      // Successful throws already produce an attack_hit impulse.
+      return e.target && e.itemKind && ITEMS[e.itemKind].kind === "throw"
+        ? 0
+        : e.target ? 0.3 : 0.15;
     case "attack_hit":
       // Scale with damage dealt, capped; small hits barely register.
       return clamp((e.value ?? 0) / 1600, 0, 0.5);

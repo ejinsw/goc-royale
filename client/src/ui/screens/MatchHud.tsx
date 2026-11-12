@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FIGHTERS, RULES, type FighterId } from "../../../../shared/definitions";
+import { FIGHTERS, ITEMS, RULES, type FighterId, type ItemKind } from "../../../../shared/definitions";
 import type { Match } from "../../../../shared/types";
 import { uiCue } from "../../audio";
 import type { ArenaHandle, GameBridge } from "../../game";
@@ -33,6 +33,7 @@ interface HudView {
   countdown: number | null;
   notice: string;
   carrying: boolean;
+  item: ItemKind | null;
   ball: "self" | "blue" | "red" | "loose" | null;
   goalKickoff: number | null;
   alive: boolean;
@@ -66,6 +67,7 @@ const deriveHud = (match: Match | null, selfId: string, spectate: string | null)
     countdown,
     notice: match.phase === "countdown" ? "" : match.notice,
     carrying: match.ball.carrier === selfId,
+    item: match.items.find((item) => item.id === self?.heldItem)?.kind ?? null,
     ball:
       match.mode !== "broomball"
         ? null
@@ -321,8 +323,8 @@ export function MatchHud({
               icon="move"
               text={
                 touch
-                  ? "Left thumb moves · Right thumb aims and fires · Tap to auto-aim"
-                  : "WASD move · Mouse aim · Hold and release attack / Super · Hold longer to charge a ball shot"
+                  ? "Left thumb moves · Right thumb aims and fires · Use the item stick to aim and use"
+                  : "WASD move · Mouse aim · Attack / Super · F picks up or puts down · E uses"
               }
             />
           )}
@@ -330,6 +332,20 @@ export function MatchHud({
         {hud.alive ? (
           <>
             <div className="hud-self">
+              <div className="hud-items">
+                <Control
+                  kind="button"
+                  variant="glass"
+                  size="sm"
+                  label={hud.item ? `Put down · ${ITEMS[hud.item].name}` : "Pick up item"}
+                  onPress={() => {
+                    if (bridge.paused) return "deny";
+                    const me = bridge.match?.players.find((p) => p.id === bridge.id);
+                    if (me?.heldItem != null) bridge.input.itemDrop = true;
+                    else bridge.input.itemPickup = true;
+                  }}
+                />
+              </div>
               <Display kind="meter" mode="bar" className="hud-hp" variant="glass" icon="heart" label="Health" signal={signals.hp} reactions={["damage", "heal"]} />
               <Display kind="meter" mode="pips" className="hud-ammo" variant="glass" label="Ammo" max={hud.ammoMax} signal={signals.ammo} />
             </div>
@@ -341,6 +357,15 @@ export function MatchHud({
                 icon={hud.carrying ? "ball" : "aim"}
                 label={hud.carrying ? "Shoot" : "Attack"}
                 hideLabel
+              />
+              <Control
+                kind="stick"
+                role="item"
+                hideLabel
+                variant={hud.item ? "primary" : "glass"}
+                icon={hud.item ? "aim" : "lock"}
+                label={hud.item ? `${ITEMS[hud.item].useLabel} · ${ITEMS[hud.item].name}` : "Use item"}
+                disabled={hud.item ? undefined : "Pick up an item first"}
               />
               <Control
                 kind="stick"

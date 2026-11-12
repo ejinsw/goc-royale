@@ -211,3 +211,53 @@ test("input sequence acknowledgements round-trip to the client snapshot", () => 
   assert.ok(other?.type === "snapshot");
   assert.equal(other.match.ackSeq, 0);
 });
+
+test("reconnecting starts a fresh input sequence and movement clock", () => {
+  const { room, clients } = group(2);
+  clients[0].send({ type: "mode", mode: "broomball" });
+  clients.forEach((client) => client.send({ type: "ready", ready: true }));
+  clients[0].send({ type: "start" });
+  tick(room, 100);
+  const guest = clients[1];
+  const engine = room.engine!;
+  const player = engine.playerList.find((p) => p.id === guest.id)!;
+  guest.send({
+    type: "input",
+    input: { move: { x: 1, y: 0 }, aim: { x: 1, y: 0 }, seq: 100, t: 500 },
+  });
+  tick(room, 2);
+  assert.equal(engine.snapshot(guest.id).ackSeq, 100);
+  assert.ok(engine.snapshot(guest.id).ackTime >= 500);
+  room.disconnect(guest.id);
+  guest.connect(guest.token);
+  const reset = engine.snapshot(guest.id);
+  assert.equal(reset.ackSeq, 0);
+  assert.equal(reset.ackTime, 0);
+  const broom = engine.state.items.find(
+    (item) => item.kind === "golden_broom",
+  )!;
+  for (const item of engine.state.items)
+    if (item.id !== broom.id) item.pos = { x: 30, y: 18 };
+  broom.pos = { ...player.pos };
+  const before = player.pos.x;
+  guest.send({
+    type: "input",
+    input: {
+      move: { x: 1, y: 0 },
+      aim: { x: 1, y: 0 },
+      itemPickup: true,
+      seq: 1,
+      t: 1,
+    },
+  });
+  tick(room);
+  const after = engine.snapshot(guest.id);
+  assert.equal(after.ackSeq, 1);
+  assert.ok(after.ackTime >= 1 && after.ackTime < 2);
+  assert.ok(player.pos.x > before);
+  assert.equal(player.heldItem, broom.id);
+  // Reclaiming an active session also replaces the old input stream.
+  guest.connect(guest.token);
+  assert.equal(engine.snapshot(guest.id).ackSeq, 0);
+  assert.equal(engine.snapshot(guest.id).ackTime, 0);
+});
