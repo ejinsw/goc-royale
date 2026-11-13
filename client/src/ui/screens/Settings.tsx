@@ -53,6 +53,8 @@ export function SettingsSheet({
           { key: "aim", cells: ["Attack", "Hold left click, release", "Right thumb: drag to preview, release"] },
           { key: "super", cells: ["Super", "Hold Space / right click", "Drag Super to preview, release"] },
           { key: "ball", cells: ["Ball shot", "Hold click, release", "Drag farther for power"] },
+          { key: "item-pickup", cells: ["Pick up / put down", "F", "Pick up / put down button"] },
+          { key: "item-use", cells: ["Use item", "E", "Tap item stick to auto-aim, or drag and release"] },
         ]}
       />
       {inMatch && (

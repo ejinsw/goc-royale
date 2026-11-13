@@ -2,7 +2,145 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Room } from "../shared/room";
 import { SnapshotDecoder, SnapshotEncoder } from "../shared/delta";
-import type { HostMessage, Match } from "../shared/types";
+import { GameStore, PresentationEvents } from "../client/src/gameStore";
+import { ActionPredictor } from "../client/src/actionPrediction";
+import type { GameEvent, HostMessage, Match } from "../shared/types";
+
+test("snapshot event queue is ordered, bounded, deduplicated, and reset per match", () => {
+  const stream = new PresentationEvents();
+  const event = (id: number): GameEvent => ({
+    id,
+    tick: id,
+    type: "item_used",
+    owner: "p",
+    pos: { x: 0, y: 0 },
+  });
+  stream.add([event(1), event(2), event(1)]);
+  assert.deepEqual(
+    stream.take().map((e) => e.id),
+    [1, 2],
+  );
+  stream.add([event(2), event(3)]);
+  assert.deepEqual(
+    stream.take().map((e) => e.id),
+    [3],
+  );
+  stream.clear();
+  stream.add([event(1)]);
+  assert.deepEqual(
+    stream.take().map((e) => e.id),
+    [1],
+  );
+  stream.clear();
+  stream.add(
+    Array.from({ length: PresentationEvents.MAX_PENDING + 20 }, (_, i) =>
+      event(i),
+    ),
+  );
+  const bounded = stream.take();
+  assert.equal(bounded.length, PresentationEvents.MAX_PENDING);
+  assert.equal(bounded[0].id, 20);
+  assert.equal(bounded.at(-1)?.id, PresentationEvents.MAX_PENDING + 19);
+  stream.clear();
+  stream.add(
+    Array.from({ length: PresentationEvents.MAX_SEEN + 1 }, (_, i) => event(i)),
+  );
+  stream.take();
+  stream.add([event(0), event(PresentationEvents.MAX_SEEN)]);
+  assert.deepEqual(
+    stream.take().map((e) => e.id),
+    [0],
+    "only old dedupe keys are evicted",
+  );
+
+  const store = new GameStore();
+  const snapshot = { events: [event(1)] } as Match;
+  store.setMatch(snapshot);
+  store.events.take();
+  store.clear();
+  store.setMatch(snapshot);
+  assert.deepEqual(
+    store.events.take().map((e) => e.id),
+    [1],
+    "rematch can reuse event IDs",
+  );
+});
+
+test("500 ms interruption retains events across snapshots received before one frame", () => {
+  let now = 0,
+    guestId = "",
+    lastArrival = 0;
+  const queue: { at: number; msg: HostMessage }[] = [];
+  const room = new Room("BURST", (id, msg) => {
+    if (id !== guestId || msg.type !== "snapshot") return;
+    let at = now + 50; // 100 ms RTT
+    if (at >= 4040 && now < 4540) at = Math.max(at, 4590);
+    at = Math.max(lastArrival, at); // reliable ordered channel
+    lastArrival = at;
+    queue.push({ at, msg: structuredClone(msg) });
+  });
+  const host = room.join("Host"),
+    guest = room.join("Guest");
+  guestId = guest.id;
+  room.command(host.id, { type: "mode", mode: "broomball" });
+  for (const c of [host, guest])
+    room.command(c.id, { type: "ready", ready: true });
+  room.command(host.id, { type: "start" });
+  const engine = room.engine!,
+    player = engine.playerList.find((p) => p.id === host.id)!;
+  const broom = engine.state.items.find((i) => i.kind === "golden_broom")!;
+  broom.pos = { ...player.pos };
+  const store = new GameStore();
+  let ticks = 0,
+    frames = 0,
+    lastSnapshotAt = 0,
+    generated = 0,
+    seen = 0,
+    maxBatch = 0;
+  for (now = 0; now <= 5500; now++) {
+    if (now === 4000)
+      room.command(host.id, {
+        type: "input",
+        input: {
+          move: { x: 0, y: 0 },
+          aim: { x: 1, y: 0 },
+          itemPickup: true,
+          seq: 1,
+        },
+      });
+    if (now >= Math.round(((ticks + 1) * 1000) / 30)) {
+      room.tick();
+      ticks++;
+      generated =
+        engine.state.events.find(
+          (e) => e.type === "item_picked_up" && e.owner === host.id,
+        )?.id ?? generated;
+    }
+    if (now >= lastSnapshotAt + 1000 / 18) {
+      room.snapshots();
+      lastSnapshotAt = now;
+    }
+    if (now >= Math.round((frames * 1000) / 60)) {
+      frames++;
+      let batch = 0;
+      while (queue.length && queue[0].at <= now) {
+        const message = queue.shift()!.msg;
+        if (message.type === "snapshot") store.setMatch(message.match);
+        batch++;
+      }
+      maxBatch = Math.max(maxBatch, batch);
+      for (const e of store.events.take())
+        if (e.type === "item_picked_up" && e.owner === host.id) seen++;
+    }
+  }
+  assert.ok(generated > 0, "the authority emitted the pickup");
+  assert.ok(maxBatch > 1, "recovery delivered multiple snapshots in one frame");
+  assert.equal(
+    seen,
+    1,
+    "the renderer plays the pickup once even if the latest snapshot no longer contains it",
+  );
+});
 
 test("two clients receive item ownership, use, and disconnect through snapshots", () => {
   const messages = new Map<string, HostMessage[]>();
@@ -156,6 +294,11 @@ test("item events survive modeled latency, retransmission, and a brief outage", 
     ]);
     const seen = new Set<number>();
     const counts = new Map<string, number>();
+    const store = new GameStore();
+    const predictor = new ActionPredictor();
+    let predicted = 0,
+      confirmed = 0,
+      replayed = 0;
     let seq = 0;
     for (let tick = 0; tick < 300; tick++) {
       now = (tick * 1000) / 30;
@@ -163,6 +306,11 @@ test("item events survive modeled latency, retransmission, and a brief outage", 
       if (action) {
         upLast = delivery(now, upLast);
         incoming.push({ at: upLast, action, seq: ++seq });
+        if (action === "itemUse") {
+          // The client's cue is shown on the same frame as this send.
+          predictor.predictItem(seq);
+          predicted++;
+        }
       }
       while (incoming.length && incoming[0].at <= now) {
         const next = incoming.shift()!;
@@ -181,16 +329,30 @@ test("item events survive modeled latency, retransmission, and a brief outage", 
       while (outgoing.length && outgoing[0].at <= now) {
         const message = outgoing.shift()!.message;
         if (message.type !== "snapshot") continue;
-        for (const event of message.match.events) {
-          if (seen.has(event.id)) continue;
-          seen.add(event.id);
-          if (event.owner === guest.id)
-            counts.set(event.type, (counts.get(event.type) ?? 0) + 1);
+        store.setMatch(message.match);
+      }
+      // Like the renderer, process after the full arrival batch, before
+      // acknowledging inputs from the newest authoritative snapshot.
+      for (const event of store.events.take()) {
+        assert.equal(seen.has(event.id), false, "event is never played twice");
+        seen.add(event.id);
+        if (event.owner === guest.id) {
+          counts.set(event.type, (counts.get(event.type) ?? 0) + 1);
+          if (event.type === "item_used") {
+            if (predictor.confirmItem(event.inputSeq)) confirmed++;
+            else replayed++;
+          }
         }
       }
+      if (store.match) predictor.acknowledgeItems(store.match.ackSeq);
     }
     for (const type of ["item_picked_up", "item_used", "item_dropped"])
       assert.equal(counts.get(type), 1, `${JSON.stringify(scenario)}: ${type}`);
+    assert.deepEqual(
+      { predicted, confirmed, replayed },
+      { predicted: 1, confirmed: 1, replayed: 0 },
+      JSON.stringify(scenario),
+    );
     assert.equal(player.heldItem, null);
     assert.equal(broom.state, "ground");
   }

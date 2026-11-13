@@ -49,6 +49,9 @@ export interface Result {
    */
   repeatDeliveries: number;
   maxPendingInputs: number;
+  /** Peak modeled queued JSON payload bytes, excluding transport overhead. */
+  maxUpQueuedBytes: number;
+  maxDownQueuedBytes: number;
 }
 
 const percentile = (values: number[], p: number) => {
@@ -71,8 +74,10 @@ function rng(seed: number) {
 
 /** Ordered, reliable link with latency, jitter, retransmission and outages. */
 class Link<T> {
-  private queue: { at: number; msg: T }[] = [];
+  private queue: { at: number; msg: T; bytes: number }[] = [];
   private lastAt = 0;
+  private queuedBytes = 0;
+  maxQueuedBytes = 0;
   constructor(
     private cfg: Scenario,
     private random: () => number,
@@ -85,12 +90,18 @@ class Link<T> {
     if (o && at >= o.start && now < o.end) at = Math.max(at, o.end + oneWay);
     at = Math.max(at, this.lastAt); // ordered delivery: no overtaking
     this.lastAt = at;
-    this.queue.push({ at, msg: structuredClone(msg) });
+    const bytes = Buffer.byteLength(JSON.stringify(msg), "utf8");
+    this.queuedBytes += bytes;
+    this.maxQueuedBytes = Math.max(this.maxQueuedBytes, this.queuedBytes);
+    this.queue.push({ at, msg: structuredClone(msg), bytes });
   }
   take(now: number) {
     const out: T[] = [];
-    while (this.queue.length && this.queue[0].at <= now)
-      out.push(this.queue.shift()!.msg);
+    while (this.queue.length && this.queue[0].at <= now) {
+      const next = this.queue.shift()!;
+      this.queuedBytes -= next.bytes;
+      out.push(next.msg);
+    }
     return out;
   }
 }
@@ -277,5 +288,7 @@ export function runScenario(cfg: Scenario): Result {
     attacksPresented,
     repeatDeliveries,
     maxPendingInputs: maxPending,
+    maxUpQueuedBytes: up.maxQueuedBytes,
+    maxDownQueuedBytes: down.maxQueuedBytes,
   };
 }

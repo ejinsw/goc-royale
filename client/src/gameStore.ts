@@ -1,5 +1,41 @@
 import { useEffect, useRef, useState } from "react";
-import type { Match } from "../../shared/types";
+import type { GameEvent, Match } from "../../shared/types";
+
+/** A bounded, deduplicated presentation stream between snapshots and frames. */
+export class PresentationEvents {
+  private pending: GameEvent[] = [];
+  private seen = new Map<number, true>();
+  /** Limits bursts when a tab remains suspended for a long time. */
+  static readonly MAX_PENDING = 4096;
+  static readonly MAX_SEEN = 8192;
+
+  add(events: readonly GameEvent[]) {
+    for (const event of events) {
+      if (this.seen.has(event.id)) continue;
+      this.seen.set(event.id, true);
+      if (this.seen.size > PresentationEvents.MAX_SEEN) {
+        const oldest = this.seen.keys().next().value;
+        if (oldest !== undefined) this.seen.delete(oldest);
+      }
+      if (this.pending.length === PresentationEvents.MAX_PENDING)
+        this.pending.shift();
+      this.pending.push(event);
+    }
+  }
+
+  /** Transfer ownership of queued events to the presentation frame. */
+  take(): GameEvent[] {
+    if (!this.pending.length) return this.pending;
+    const events = this.pending;
+    this.pending = [];
+    return events;
+  }
+
+  clear() {
+    this.pending.length = 0;
+    this.seen.clear();
+  }
+}
 
 /**
  * Mutable, ref-based gameplay store.
@@ -13,16 +49,20 @@ import type { Match } from "../../shared/types";
 export class GameStore {
   /** Latest authoritative match snapshot, or null when not in a match. */
   match: Match | null = null;
+  /** All unique snapshot events since the last presentation frame. */
+  readonly events = new PresentationEvents();
   private listeners = new Set<() => void>();
 
   /** Called by the network transport on every snapshot. No React state write. */
   setMatch(match: Match | null) {
+    if (match) this.events.add(match.events);
     this.match = match;
     for (const l of this.listeners) l();
   }
 
   /** Clear match state (e.g. returning to lobby). */
   clear() {
+    this.events.clear();
     this.setMatch(null);
   }
 
@@ -69,9 +109,7 @@ export function useGameSelector<T>(
         pendingRef.current = setTimeout(() => {
           pendingRef.current = null;
           lastEmitRef.current =
-            typeof performance !== "undefined"
-              ? performance.now()
-              : Date.now();
+            typeof performance !== "undefined" ? performance.now() : Date.now();
           forceRender((n) => n + 1);
         }, minIntervalMs - elapsed);
       }

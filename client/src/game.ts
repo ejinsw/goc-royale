@@ -18,6 +18,7 @@ import { preloadFighterAssets } from "./arena/fighters";
 import { createArenaView, type ArenaView, type CueKind } from "./arena/view";
 import type { AimIntent } from "./arena/aimPreview";
 import { cameraFocusId } from "./arena/cameraFocus";
+import type { PresentationEvents } from "./gameStore";
 
 /**
  * The match: input, prediction and presentation timing around the 3D arena
@@ -31,6 +32,8 @@ import { cameraFocusId } from "./arena/cameraFocus";
  */
 export interface GameBridge {
   match: Match | null;
+  /** Snapshot events collected independently of the presentation frame rate. */
+  events: PresentationEvents;
   id: string;
   input: Input;
   spectate: string | null;
@@ -78,7 +81,6 @@ class Arena {
   private actions = new ActionPredictor();
   private renderPos = new Map<string, Vec>();
   private consumedEffects = new Set<number>();
-  private consumedEvents = new Set<number>();
   /** Authoritative effects whose cue already played as a prediction. */
   private predictedEffectIds = new Set<number>();
   /** Client times of predicted local attack animations not yet matched. */
@@ -558,9 +560,7 @@ class Arena {
       this.bridge.spectate,
     );
     const focus = s.players.find((p) => p.id === focusId) ?? null;
-    for (const e of s.events) {
-      if (this.consumedEvents.has(e.id)) continue;
-      this.consumedEvents.add(e.id);
+    for (const e of this.bridge.events.take()) {
       this.animate(e, s, now);
       if (!preferences.shake || uiPrefs.reducedMotion) continue;
       // Distance attenuation from the viewed fighter keeps far-off impacts
@@ -574,8 +574,6 @@ class Arena {
     // A snapshot acknowledges processed inputs after their events have been
     // presented above. Rejected predictions cannot match a future event.
     this.actions.acknowledgeItems(s.ackSeq);
-    if (this.consumedEvents.size > 4000)
-      this.consumedEvents = new Set(s.events.map((e) => e.id));
   }
 
   /** One animation cue per event; local actions already played as predictions are skipped. */

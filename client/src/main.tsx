@@ -79,6 +79,7 @@ function App() {
     nameHandle = useRef<ControlHandle>(null),
     bridge = useRef<GameBridge>({
       match: null,
+      events: store.current.events,
       id: "",
       input: initialInput(),
       spectate: null,

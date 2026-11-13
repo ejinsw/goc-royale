@@ -821,3 +821,44 @@ motion and audio checks; animation and impact captures for all actions; and
 before/after frame, heap, resize, teardown, and eight-fighter stress profiles.
 No budget exception is approved, and these checks do not certify performance or
 game feel.
+
+## November 13, 2026 — item release checks
+
+The network check reproduced a presentation bug: after a 500 ms modeled
+interruption, multiple snapshots could arrive before one rendered frame and
+the latest snapshot could omit an earlier item event. A bounded, deduplicated
+event queue now retains snapshot events until the renderer consumes them. A
+regression test exercises that exact arrival burst and verifies one delivery;
+the queue resets between matches. Simulated touch tests exercise concurrent
+move and item-aim pointers, auto-aim, release, cancellation, blur and
+backgrounding. These tests do not replace physical-device checks.
+
+`npm test` passed 132 tests and `npm run build` passed on Node 23.10.0. Modeled
+50 ms/0%, 100 ms/1%, 200 ms/3% and 500 ms interruption cases retained item
+pickup, use and drop events once and matched predicted use to confirmation.
+The modeled movement correction p95 was 0.127, 0.148, 0.153 and 0.130 world
+units respectively; this is not a live-network measurement. Two local browser
+clients started Broomball; the guest saw the host carry a flyer, and the flyer
+disappeared from the carrier after use. A desktop reduced-motion check showed
+the broom's rectangular release cue remained visible; the prior preference
+was restored afterward.
+
+Desktop comparison on an Apple M2 Mac, in-app browser, 1280×720 CSS pixels at
+DPR 2, sampled 300 frames in an idle single-player match. Baseline p50/p95 was
+16.7/17.5 ms and the item build was 16.7/17.6 ms, with zero frames over 33 ms
+in each sample. The item scene used 9 draw calls and 22,848 triangles versus
+7 and 21,056 at baseline. Both p95 results are above the 16.7 ms target. Two
+cycles across landscape, portrait and desktop sizes and one teardown showed no
+browser errors. An isolated CPU-only pool test kept mesh and resource counts
+fixed through 10,000 iterations with eight simultaneous sweeps.
+
+Physical iOS and Android devices were not attached. Real network impairment,
+mobile multi-touch and frame profiling, worst-case eight-fighter rendering,
+complete-match/rematch heap trends, and complete renderer, VFX, accessibility
+and audio reviews remain outstanding. The desktop samples, synthetic touch
+tests and network model do not satisfy those gates.
+
+On November 13, 2026, the user explicitly directed an immediate production push
+despite the outstanding checks and the desktop p95 measurements above. The
+unverified mobile, network, renderer and accessibility gates remain open; this
+decision does not establish that the performance targets were met.

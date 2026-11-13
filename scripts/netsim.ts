@@ -33,6 +33,8 @@ console.log(
     "attacks sent/shown",
     "repeat ids",
     "max pending",
+    "up queue bytes",
+    "down queue bytes",
   ].join(" | "),
 );
 for (const r of rows)
@@ -49,5 +51,7 @@ for (const r of rows)
       `${r.attacksSent}/${r.attacksPresented}`.padStart(18),
       String(r.repeatDeliveries).padStart(10),
       String(r.maxPendingInputs).padStart(11),
+      String(r.maxUpQueuedBytes).padStart(14),
+      String(r.maxDownQueuedBytes).padStart(16),
     ].join(" | "),
   );
