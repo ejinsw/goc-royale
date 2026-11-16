@@ -871,7 +871,7 @@ reference photo for his look and requested the full name. He is placed on the
 Rides team; that placement is an assumption and is one field to change.
 
 The change is data only: a `FIGHTERS` row, a `LOOKS` row, one new hair style
-(`wavyTop`), one feature (`wireGlasses`), one prop (`mealCard`), a card
+(`wavyTop`), one feature (`slimGlasses`), one prop (`mealCard`), a card
 projectile shape and a placeholder SVG portrait. `shared/engine.ts` is
 unchanged and no other fighter's values changed.
 
@@ -896,6 +896,10 @@ and a solo Broomball match; the fan, its trails, the Super ring, the heal
 number and the shield were seen in the arena camera with no console errors.
 His name is ellipsized on the picker tile and shown in full elsewhere. His
 menu model is within the test's 12,000-triangle ceiling.
+
+A second supplied photo then set his current look: a dark navy crew-neck tee,
+slim rectangular black glasses and messy wavy hair over the brow (8,766
+triangles). It replaces the first pass's blazer and round glasses.
 
 Not done: no two-client match, no human playtest, no phone layout or
 physical-device check, no frame profile, and no controlled latency run. The

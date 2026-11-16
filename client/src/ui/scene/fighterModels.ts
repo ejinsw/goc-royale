@@ -73,7 +73,7 @@ export type FeatureName =
   | "bowtie"
   | "jacket"
   | "leatherJacket"
-  | "wireGlasses";
+  | "slimGlasses";
 export type PropName =
   | "clipboard"
   | "keys"
@@ -331,17 +331,17 @@ export const LOOKS: Record<FighterId, FighterLook> = {
     features: ["leatherJacket"],
     prop: "calculator",
   }),
-  // Brandon Nguyen: navy blazer over a white collared shirt, round wire
-  // glasses and dark wavy hair, from a supplied reference photo.
+  // Brandon Nguyen, from a supplied reference photo: a dark navy crew-neck
+  // tee, slim rectangular black glasses and messy wavy hair over the brow.
   brandon_n: look({
-    shirt: "#22335c",
+    shirt: "#1b2238",
     skin: "#e3b48c",
     hair: "#1f1b1e",
-    collar: "#f7f9fc",
-    accent: "#dfe5ef",
+    collar: "#2f3a5c",
+    accent: "#2f3a5c",
     hairStyle: "wavyTop",
     sweep: 0.5,
-    features: ["jacket", "wireGlasses"],
+    features: ["slimGlasses"],
     prop: "mealCard",
   }),
 };
@@ -351,7 +351,6 @@ const PANTS = "#2b313d";
 const SHOE = "#11141a";
 const CREAM = "#fbe8d3";
 const DARK = "#2b3138";
-const WIRE = "#565d6b";
 
 const sphere = (r: number, w = 16, h = 10) => new SphereGeometry(r, w, h);
 /** Open cap: the top `share` of a sphere (0.5 = a hemisphere). */
@@ -728,12 +727,29 @@ const FEATURES: Record<FeatureName, (l: FighterLook) => Pieces> = {
     armL: [part(cylinder(0.082, 0.065), l.accent, [0, -0.25, 0])],
     armR: [part(cylinder(0.082, 0.065), l.accent, [0, -0.25, 0])],
   }),
-  wireGlasses: () => ({
+  // Thin rectangular metal frames: four bars a lens, bridge, hinge tabs.
+  slimGlasses: () => ({
     face: [
-      ...[-1, 1].map((side) =>
-        part(ring(0.098, 0.009), WIRE, [side * 0.15, 0.3, 0.4], [-0.12, 0, 0]),
-      ),
-      part(capsule(0.008, 0.07), WIRE, [0, 0.32, 0.412], [0, 0, HALF]),
+      ...[-1, 1].flatMap((side) => [
+        ...[-1, 1].map((v) =>
+          part(
+            new RoundedBoxGeometry(0.215, 0.014, 0.014, 1, 0.005),
+            INK,
+            [side * 0.15, 0.3 + v * 0.062, 0.402 - v * 0.007],
+            [-0.12, 0, 0],
+          ),
+        ),
+        ...[-1, 1].map((h) =>
+          part(
+            new RoundedBoxGeometry(0.014, 0.135, 0.014, 1, 0.005),
+            INK,
+            [side * 0.15 + h * 0.1, 0.3, 0.402],
+            [-0.12, 0, 0],
+          ),
+        ),
+        part(new RoundedBoxGeometry(0.05, 0.02, 0.014, 1, 0.005), INK, [side * 0.27, 0.34, 0.39]),
+      ]),
+      part(new RoundedBoxGeometry(0.09, 0.014, 0.014, 1, 0.005), INK, [0, 0.33, 0.408]),
     ],
   }),
 };
@@ -925,7 +941,7 @@ const HAIR: Record<
     ...fringe(l, bangs),
     part(sphere(0.17, 14, 8), l.hair, [0, 0.66, -0.3]),
   ],
-  // Short and messy: loose waves piled on the crown, one lock on the brow.
+  // Messy waves piled on the crown, with loose curls falling over the brow.
   wavyTop: (l, bangs) => [
     ...cap(l),
     ...fringe(l, bangs),
@@ -941,7 +957,7 @@ const HAIR: Record<
       ] as const
     ).map(([x, y, z, tilt]) =>
       part(
-        sphere(0.14, 12, 8),
+        sphere(0.14, 10, 6),
         l.hair,
         [x, y, z],
         [0.2, tilt, tilt * 0.6],
@@ -949,15 +965,23 @@ const HAIR: Record<
       ),
     ),
     ...(bangs
-      ? [
+      ? (
+          [
+            [-0.25, 0.49, 0.27, 0.7],
+            [0.21, 0.51, 0.29, -0.6],
+            [0.04, 0.55, 0.335, 0.5],
+            [-0.35, 0.42, 0.16, 0.9],
+            [0.35, 0.43, 0.16, -0.9],
+          ] as const
+        ).map(([x, y, z, curl]) =>
           part(
-            sphere(0.09, 10, 6),
+            sphere(0.085, 8, 5),
             l.hair,
-            [l.sweep * 0.2, 0.53, 0.36],
-            [0.5, 0, l.sweep * 0.7],
-            [1.3, 0.55, 0.7],
+            [x, y, z],
+            [0.4, 0, curl],
+            [1.3, 0.7, 0.7],
           ),
-        ]
+        )
       : []),
   ],
 };
