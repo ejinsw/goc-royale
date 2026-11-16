@@ -68,7 +68,7 @@ Development overlay: press the backtick key during play (or open the app with `?
 - [Deprecated Brandon 3D redaction notice](docs/BRANDON-3D-REDACTED.md): scope and handling of the retired 3D studies.
 - [Performance and gameplay standards](docs/PERFORMANCE-AND-GAMEPLAY-STANDARDS.md): mandatory runtime limits and acceptance gates.
 
-Matches render in 3D (see [the integration brief](docs/ARENA-3D-INTEGRATION-BRIEF.md)). All 18 fighters, including Brandon and David, use the shared procedural `LOOKS` model system. The retired Brandon GLB studies are [redacted and deprecated](docs/BRANDON-3D-REDACTED.md); the live game does not load them. Production character assets remain planned work, and the arena has not been profiled on physical phones.
+Matches render in 3D (see [the integration brief](docs/ARENA-3D-INTEGRATION-BRIEF.md)). All 19 fighters, including Brandon and David, use the shared procedural `LOOKS` model system. The retired Brandon GLB studies are [redacted and deprecated](docs/BRANDON-3D-REDACTED.md); the live game does not load them. Production character assets remain planned work, and the arena has not been profiled on physical phones.
 
 ## Trust and scope
 

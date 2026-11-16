@@ -1079,6 +1079,20 @@ function projectileGeometry(kind: ShotKind): BufferGeometry {
           [Math.PI / 2, 0, 0],
         ),
       ]);
+    case "brandon_n":
+      return merge([
+        part(new RoundedBoxGeometry(0.4, 0.035, 0.26, 1, 0.015), "#2d6fc0"),
+        part(
+          new RoundedBoxGeometry(0.4, 0.045, 0.06, 1, 0.012),
+          "#ffd24a",
+          [0, 0.004, -0.09],
+        ),
+        part(
+          new RoundedBoxGeometry(0.11, 0.045, 0.1, 1, 0.012),
+          "#f4f7fb",
+          [-0.1, 0.004, 0.04],
+        ),
+      ]);
     case "josh":
     case "tovya":
     case "jemuel":
@@ -1157,7 +1171,13 @@ export class Projectiles {
       if (i >= 24) continue;
       const yaw = Math.atan2(q.dir.x, q.dir.y);
       // Spinning throwables tumble; the flash and bug fly nose-first.
-      const spin = ["brandon", "samuel", "joelle", "russell"].includes(
+      const spin = [
+        "brandon",
+        "samuel",
+        "joelle",
+        "russell",
+        "brandon_n",
+      ].includes(
         q.fighter,
       )
         ? time * 14

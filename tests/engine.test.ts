@@ -48,6 +48,7 @@ test("roster: the seven pilot fighters keep their HP, followed by David and the 
     "miriam",
     "jemuel",
     "russell",
+    "brandon_n",
   ]);
   assert.deepEqual(
     IDS.slice(0, 7).map((i) => FIGHTERS[i].hp),
@@ -1169,6 +1170,43 @@ test("Russell's coins refund health; Budget Cuts empties rivals' ammo", () => {
   assert.ok(e.activateSuper(p));
   assert.equal(t.ammo, 0);
   assert.equal(t.hp, FIGHTERS[t.fighter].hp - 760 - 700);
+});
+
+test("Brandon Nguyen's card fan lands all three up close and one at range; Swipe You In feeds nearby teammates only", () => {
+  const near = duel("brandon_n");
+  const [p, t] = near.playerList;
+  p.pos = { x: 10, y: 12 };
+  t.pos = { x: 12, y: 12 };
+  fire(near);
+  advance(near, 0.3);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 3 * 340, "the close swipe");
+  const far = duel("brandon_n");
+  const [q, u] = far.playerList;
+  q.pos = { x: 10, y: 12 };
+  u.pos = { x: 16, y: 12 };
+  fire(far);
+  advance(far, 0.6);
+  assert.equal(u.hp, FIGHTERS[u.fighter].hp - 340, "one thrown card");
+
+  const e = engine("brandon_n", "broomball");
+  const [me, ally, away, rival] = e.playerList;
+  me.pos = { x: 10, y: 10 };
+  ally.pos = { x: 13, y: 10 };
+  away.pos = { x: 16, y: 10 };
+  rival.pos = { x: 10, y: 12 };
+  for (const x of [me, ally, away, rival]) x.hp -= 2000;
+  charged(me);
+  assert.ok(e.activateSuper(me));
+  assert.equal(me.hp, FIGHTERS.brandon_n.hp - 800);
+  assert.equal(ally.hp, FIGHTERS[ally.fighter].hp - 800);
+  assert.equal(ally.shield, 600);
+  assert.equal(away.hp, FIGHTERS[away.fighter].hp - 2000, "out of reach");
+  assert.equal(away.shield, 0);
+  assert.equal(rival.hp, FIGHTERS[rival.fighter].hp - 2000, "rivals get nothing");
+  assert.equal(rival.shield, 0);
+  assert.equal(me.stats.damage, 0, "a pure support Super");
+  advance(e, 4.1);
+  assert.equal(ally.shield, 0, "the shield expires");
 });
 
 test("Aura Pulse still knocks out a shielded rival", () => {

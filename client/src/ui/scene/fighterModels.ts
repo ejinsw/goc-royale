@@ -50,7 +50,8 @@ export type HairStyle =
   | "braids"
   | "ponytail"
   | "long"
-  | "bun";
+  | "bun"
+  | "wavyTop";
 export type FeatureName =
   | "glasses"
   | "sunglasses"
@@ -71,7 +72,8 @@ export type FeatureName =
   | "scarf"
   | "bowtie"
   | "jacket"
-  | "leatherJacket";
+  | "leatherJacket"
+  | "slimGlasses";
 export type PropName =
   | "clipboard"
   | "keys"
@@ -89,7 +91,8 @@ export type PropName =
   | "envelope"
   | "book"
   | "lantern"
-  | "calculator";
+  | "calculator"
+  | "mealCard";
 export type CompanionName = "note" | "dove" | "panda";
 
 export interface FighterLook {
@@ -327,6 +330,19 @@ export const LOOKS: Record<FighterId, FighterLook> = {
     sweep: -0.3,
     features: ["leatherJacket"],
     prop: "calculator",
+  }),
+  // Brandon Nguyen, from a supplied reference photo: a dark navy crew-neck
+  // tee, slim rectangular black glasses and messy wavy hair over the brow.
+  brandon_n: look({
+    shirt: "#1b2238",
+    skin: "#e3b48c",
+    hair: "#1f1b1e",
+    collar: "#2f3a5c",
+    accent: "#2f3a5c",
+    hairStyle: "wavyTop",
+    sweep: 0.5,
+    features: ["slimGlasses"],
+    prop: "mealCard",
   }),
 };
 
@@ -711,6 +727,31 @@ const FEATURES: Record<FeatureName, (l: FighterLook) => Pieces> = {
     armL: [part(cylinder(0.082, 0.065), l.accent, [0, -0.25, 0])],
     armR: [part(cylinder(0.082, 0.065), l.accent, [0, -0.25, 0])],
   }),
+  // Thin rectangular metal frames: four bars a lens, bridge, hinge tabs.
+  slimGlasses: () => ({
+    face: [
+      ...[-1, 1].flatMap((side) => [
+        ...[-1, 1].map((v) =>
+          part(
+            new RoundedBoxGeometry(0.215, 0.014, 0.014, 1, 0.005),
+            INK,
+            [side * 0.15, 0.3 + v * 0.062, 0.402 - v * 0.007],
+            [-0.12, 0, 0],
+          ),
+        ),
+        ...[-1, 1].map((h) =>
+          part(
+            new RoundedBoxGeometry(0.014, 0.135, 0.014, 1, 0.005),
+            INK,
+            [side * 0.15 + h * 0.1, 0.3, 0.402],
+            [-0.12, 0, 0],
+          ),
+        ),
+        part(new RoundedBoxGeometry(0.05, 0.02, 0.014, 1, 0.005), INK, [side * 0.27, 0.34, 0.39]),
+      ]),
+      part(new RoundedBoxGeometry(0.09, 0.014, 0.014, 1, 0.005), INK, [0, 0.33, 0.408]),
+    ],
+  }),
 };
 
 /** Hats that cover the crown; the fringe would poke through them. */
@@ -899,6 +940,49 @@ const HAIR: Record<
     ...cap(l),
     ...fringe(l, bangs),
     part(sphere(0.17, 14, 8), l.hair, [0, 0.66, -0.3]),
+  ],
+  // Messy waves piled on the crown, with loose curls falling over the brow.
+  wavyTop: (l, bangs) => [
+    ...cap(l),
+    ...fringe(l, bangs),
+    ...(
+      [
+        [-0.23, 0.67, 0.12, 0.5],
+        [0.01, 0.74, 0.1, -0.4],
+        [0.24, 0.66, 0.11, 0.45],
+        [-0.31, 0.57, -0.08, -0.5],
+        [0.31, 0.58, -0.09, 0.55],
+        [-0.11, 0.72, -0.15, 0.35],
+        [0.15, 0.7, -0.17, -0.45],
+      ] as const
+    ).map(([x, y, z, tilt]) =>
+      part(
+        sphere(0.14, 10, 6),
+        l.hair,
+        [x, y, z],
+        [0.2, tilt, tilt * 0.6],
+        [1.15, 0.6, 0.85],
+      ),
+    ),
+    ...(bangs
+      ? (
+          [
+            [-0.25, 0.49, 0.27, 0.7],
+            [0.21, 0.51, 0.29, -0.6],
+            [0.04, 0.55, 0.335, 0.5],
+            [-0.35, 0.42, 0.16, 0.9],
+            [0.35, 0.43, 0.16, -0.9],
+          ] as const
+        ).map(([x, y, z, curl]) =>
+          part(
+            sphere(0.085, 8, 5),
+            l.hair,
+            [x, y, z],
+            [0.4, 0, curl],
+            [1.3, 0.7, 0.7],
+          ),
+        )
+      : []),
   ],
 };
 function cap(l: FighterLook) {
@@ -1251,6 +1335,27 @@ const PROPS: Record<
         ],
         [0.04, -0.12, 0.08],
         [0.15, -0.35, 0],
+      ),
+  },
+  // A fanned hand of three meal cards, the front one face out.
+  mealCard: {
+    slot: "armR",
+    build: () =>
+      place(
+        [
+          ...[-1, 0, 1].map((i) =>
+            part(
+              box(0.15, 0.23, 0.012, 0.01),
+              i ? "#f4f7fb" : "#2d6fc0",
+              [i * 0.07, 0.1 - Math.abs(i) * 0.012, i ? -0.014 : 0],
+              [0, 0, -i * 0.38],
+            ),
+          ),
+          part(box(0.15, 0.04, 0.008, 0.004), "#ffd24a", [0, 0.185, 0.008]),
+          part(box(0.06, 0.07, 0.008, 0.004), "#f4f7fb", [-0.03, 0.1, 0.008]),
+        ],
+        [0.03, -0.1, 0.1],
+        [0.2, -0.3, 0],
       ),
   },
 };
