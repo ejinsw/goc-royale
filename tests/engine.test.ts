@@ -1172,21 +1172,21 @@ test("Russell's coins refund health; Budget Cuts empties rivals' ammo", () => {
   assert.equal(t.hp, FIGHTERS[t.fighter].hp - 760 - 700);
 });
 
-test("Brandon Nguyen's card fan lands all three up close and one at range; Swipe You In feeds nearby teammates only", () => {
+test("Brandon Nguyen's tight card fan lands all three near and far; Swipe You In feeds nearby teammates only", () => {
   const near = duel("brandon_n");
   const [p, t] = near.playerList;
   p.pos = { x: 10, y: 12 };
   t.pos = { x: 12, y: 12 };
   fire(near);
   advance(near, 0.3);
-  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 3 * 340, "the close swipe");
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 3 * 240, "the close swipe");
   const far = duel("brandon_n");
   const [q, u] = far.playerList;
   q.pos = { x: 10, y: 12 };
-  u.pos = { x: 16, y: 12 };
+  u.pos = { x: 19, y: 12 };
   fire(far);
   advance(far, 0.6);
-  assert.equal(u.hp, FIGHTERS[u.fighter].hp - 340, "one thrown card");
+  assert.equal(u.hp, FIGHTERS[u.fighter].hp - 3 * 240, "all three at range");
 
   const e = engine("brandon_n", "broomball");
   const [me, ally, away, rival] = e.playerList;

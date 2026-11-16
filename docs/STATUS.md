@@ -905,3 +905,77 @@ Not done: no two-client match, no human playtest, no phone layout or
 physical-device check, no frame profile, and no controlled latency run. The
 verification matrix rows for simulation or balance (two-client) and 3D asset
 (mobile profile, eight-character scene) remain open for this fighter.
+
+## November 16, 2026 — Brandon Nguyen made deliberately overpowered (`brandon-balance-pass`)
+
+User request: tune Brandon Nguyen to win about 90-95% of matches. This is
+an intentional imbalance, asked for by the player the fighter is based on.
+It reverses the first-pass goal recorded above ("Don't make him
+overpowered"), and it is a decision for the maintainer, not a balance fix.
+His in-game description says "Deliberately overtuned" so players see it too.
+
+What changed, all in his own `FIGHTERS` row with existing options:
+
+| | Before | After |
+|---|---|---|
+| Card damage | 3 x 340 | 3 x 240 |
+| Fan spread | ±0.17 rad | ±0.05 rad |
+| Range | 7 | 10 |
+| Projectile speed | 15 | 20 |
+| Homing | none | 1.5 rad/s |
+
+HP (5,400), speed, ammo, reload and Swipe You In are unchanged. No other
+fighter, and nothing in `shared/engine.ts`, changed.
+
+Where the strength comes from: the tight fan means all three cards land at
+any range, so a swipe is 720 at range 10 where it used to be 340 at range 7;
+homing means they rarely miss; and range 10 with speed 20 lets him trade
+with everyone but Rich before they can reach him. Lower per-card damage is
+not a real cost.
+
+New tool: `npm run balance` (`scripts/balance.ts`). Every fighter is driven
+by one shared bot policy on the real engine with seeded randomness: duels
+for every pair in Showdown from both spawn corners, and 3v3 skirmishes in
+the Broomball arena with the ball parked and random teammates and rivals.
+`--set` overrides a number for a what-if run.
+
+Results, 30 duels per pair and 150 skirmishes per fighter:
+
+| Fighter | Duels | 3v3 |
+|---|---:|---:|
+| **Brandon Nguyen (after)** | **94%** | **80%** |
+| Rich | 91% | 66% |
+| Josh | 90% | 91% |
+| Joyce | 84% | 81% |
+| Russell | 62% | 51% |
+| David | 59% | 48% |
+| Isaac | 57% | 50% |
+| Elijah | 55% | 50% |
+| Tovya | 53% | 51% |
+| Ethan | 49% | 49% |
+| Rosalie | 36% | 56% |
+| Jemuel | 34% | 46% |
+| Daniel | 33% | 40% |
+| Susannah | 32% | 43% |
+| Dylan | 29% | 37% |
+| Brandon (Kam) | 27% | 36% |
+| Miriam | 26% | 34% |
+| Samuel | 22% | 40% |
+| Joelle | 18% | 37% |
+
+Before this change he was last: 11% in duels and 34% in 3v3 on the same
+harness. After it, his duel rate against each fighter is 100% against
+twelve of them, Daniel 97%, Jemuel 93%, Tovya 80%, Josh 73% and Rich 52%.
+
+Limits of the evidence, which matter here:
+
+- The bots see through bushes, never use items, do not dodge individual
+  shots and all play one way: hold a preferred range, strafe, lead shots
+  with a small aim error. Long-range fighters do far too well under that
+  policy (Rich, Josh and Joyce sit at 84-91%), so the table is not a
+  statement that the existing roster is unbalanced for people.
+- Homing is stronger against bots, which do not dodge, than it would be
+  against players. His real edge over humans is unknown.
+- No human playtest and no networked match was run. `npm test` passes
+  134 tests (the kit test updated for the new fan, one new test that the
+  harness repeats exactly for a seed) and `npm run build` passes.

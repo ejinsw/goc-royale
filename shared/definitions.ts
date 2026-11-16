@@ -747,18 +747,20 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     speed: 5.2,
     ammo: 3,
     reload: 1.4,
-    damage: 340,
-    range: 7,
-    projectileSpeed: 15,
+    damage: 240,
+    range: 10,
+    projectileSpeed: 20,
     attack: "Card Swipe",
     super: "Swipe You In",
     color: "#2d6fc0",
     description:
-      "Slash with a meal card and fling three like shuriken. All three land up close.",
+      "Fling three homing meal cards in a tight fan, 240 each. Deliberately overtuned.",
     superDescription:
       "All-you-can-eat: heal yourself and nearby teammates 1,200 HP, plus a 600 shield for 4 seconds.",
     abilities: {
-      attack: { kind: "shot", spread: [-0.17, 0, 0.17] },
+      // Boss tuning, on purpose (docs/STATUS.md, November 16 balance pass):
+      // a tight fan that lands all three cards at any range, and homing.
+      attack: { kind: "shot", spread: [-0.05, 0, 0.05], homing: 1.5 },
       super: {
         kind: "burst",
         at: 0,
