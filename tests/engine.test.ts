@@ -903,6 +903,9 @@ test("every fighter can attack and Super in both modes without breaking the matc
       advance(e, 2.2);
       charged(p);
       e.setInput(p.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, attack: true, super: true });
+      // A Super with a cutscene stops the match clock before anything lands.
+      e.step();
+      while (e.state.cutscene) e.step();
       advance(e, 3);
       assert.ok(p.charge < 5000, `${id} ${mode} Super was not accepted`);
       assert.ok(rival.hp < FIGHTERS[rival.fighter].hp || !rival.alive, `${id} ${mode} dealt no damage`);
@@ -1180,6 +1183,8 @@ test("Brandon Nguyen's card fan lands all three up close and one at range; Swipe
   fire(near);
   advance(near, 0.3);
   assert.equal(t.hp, FIGHTERS[t.fighter].hp - 3 * 340, "the close swipe");
+  assert.equal(p.charge, 3 * 340 * 1.2, "his Super charges 20% faster");
+  assert.equal(FIGHTERS.ethan.chargeRate, undefined, "nobody else's changed");
   const far = duel("brandon_n");
   const [q, u] = far.playerList;
   q.pos = { x: 10, y: 12 };
@@ -1197,6 +1202,7 @@ test("Brandon Nguyen's card fan lands all three up close and one at range; Swipe
   for (const x of [me, ally, away, rival]) x.hp -= 2000;
   charged(me);
   assert.ok(e.activateSuper(me));
+  advance(e, 3.9);
   assert.equal(me.hp, FIGHTERS.brandon_n.hp - 800);
   assert.equal(ally.hp, FIGHTERS[ally.fighter].hp - 800);
   assert.equal(ally.shield, 600);
@@ -1207,6 +1213,85 @@ test("Brandon Nguyen's card fan lands all three up close and one at range; Swipe
   assert.equal(me.stats.damage, 0, "a pure support Super");
   advance(e, 4.1);
   assert.equal(ally.shield, 0, "the shield expires");
+});
+
+test("Swipe You In pauses the whole match for its cutscene, then resolves on the tick it was cast", () => {
+  const e = engine("brandon_n", "broomball");
+  const [me, ally, , rival] = e.playerList;
+  me.pos = { x: 10, y: 10 };
+  ally.pos = { x: 12, y: 10 };
+  rival.pos = { x: 20, y: 10 };
+  ally.hp -= 2000;
+  ally.ammo = 1;
+  rival.hp -= 500;
+  // A rival shot is in flight and a rival is walking when the Super lands.
+  fire(e, rival.id, { x: 1, y: 0 });
+  e.step();
+  const shot = { ...e.state.projectiles[0].pos };
+  e.setInput(rival.id, { move: { x: 1, y: 0 }, aim: { x: 1, y: 0 } });
+  charged(me);
+  assert.ok(e.activateSuper(me));
+  assert.equal(e.state.phase, "cutscene");
+  assert.deepEqual(e.state.cutscene, { owner: me.id, left: 3.8, total: 3.8 });
+  assert.equal(me.charge, 0, "the charge is spent when it is cast");
+  const frozen = {
+    time: e.state.time,
+    rival: { ...rival.pos },
+    rivalHp: rival.hp,
+    allyHp: ally.hp,
+    reload: ally.reload,
+  };
+  // Inputs during the pause are dropped, not queued for the resume.
+  e.setInput(rival.id, {
+    move: { x: 1, y: 0 },
+    aim: { x: 1, y: 0 },
+    attack: true,
+  });
+  advance(e, 3.7);
+  assert.equal(e.state.phase, "cutscene");
+  assert.equal(e.state.time, frozen.time, "the match clock is stopped");
+  assert.deepEqual(rival.pos, frozen.rival, "nobody moves");
+  assert.deepEqual(e.state.projectiles[0].pos, shot, "shots hang in the air");
+  assert.equal(rival.hp, frozen.rivalHp, "no damage or regeneration");
+  assert.equal(ally.hp, frozen.allyHp, "the heal has not landed yet");
+  assert.equal(ally.reload, frozen.reload, "reloads do not tick");
+  while (e.state.cutscene) e.step();
+  assert.equal(e.state.phase, "playing");
+  assert.equal(e.state.time, frozen.time, "it resolved on the cast tick");
+  assert.equal(ally.hp, frozen.allyHp + 1200);
+  assert.equal(ally.shield, 600);
+  assert.equal(e.state.projectiles.length, 1, "the queued attack was dropped");
+  e.step();
+  assert.ok(e.state.time > frozen.time, "play resumes");
+});
+
+test("the cutscene is short on a repeat or on request, and only its caster can skip it", () => {
+  const e = engine("brandon_n", "broomball");
+  const [me, , , rival] = e.playerList;
+  const cast = () => {
+    charged(me);
+    assert.ok(e.activateSuper(me));
+    return e.state.cutscene!;
+  };
+  assert.equal(cast().total, 3.8);
+  // A rival cannot skip it; neither can the press that cast it.
+  e.setInput(rival.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, skip: true });
+  e.setInput(me.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, skip: true });
+  advance(e, 0.5);
+  assert.ok(e.state.cutscene!.left > 3.2);
+  e.setInput(me.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, skip: true });
+  advance(e, 0.2);
+  assert.equal(e.state.phase, "playing", "skipped by its caster");
+  assert.equal(me.shield, 600, "a skipped cutscene still resolves the Super");
+  advance(e, 5);
+  assert.equal(cast().total, 1.2, "a repeat within 20 s is the short one");
+  advance(e, 1.3);
+  assert.equal(e.state.phase, "playing");
+  advance(e, 21);
+  assert.equal(cast().total, 3.8, "the full one returns after the window");
+  advance(e, 25);
+  e.setInput(me.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, brief: true });
+  assert.equal(cast().total, 1.2, "the caster asked for the short one");
 });
 
 test("Aura Pulse still knocks out a shielded rival", () => {

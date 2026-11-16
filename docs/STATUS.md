@@ -986,3 +986,106 @@ about 1 frame per second, which is why a virtual clock was used), GPU time,
 physical phones, two networked clients, audio by ear, and the reduced-motion
 path in the browser. The low-health sign was moved above the name plate after
 the capture and not re-captured.
+
+## November 16, 2026 — Swipe You In cutscene (`brandon-ult-cutscene`)
+
+User request: Brandon Nguyen's Super plays a full cinematic, and gameplay
+"must truly pause" while it runs.
+
+**This is a rules change and an exception to the standard, and it needs the
+maintainer's decision before it merges.** Performance standard §6.1 says
+hit-stop must not pause the authoritative simulation, and `AGENTS.md` asks
+for an explicit decision on any such exception. The requester asked for a
+real pause in so many words, so it is built that way here. In a networked
+match a real pause is a pause for every player: each full cutscene stops the
+match for all of them for 3.8 s.
+
+How the pause works (`shared/`):
+
+- A burst Super may carry `cutscene: { seconds, again, window }`. Only
+  Swipe You In has one: 3.8 s, 1.2 s on a repeat, 20 s window. The engine
+  never checks a fighter id.
+- Casting spends the charge, sets `phase: "cutscene"` and
+  `Match.cutscene = { owner, left, total }`, and holds the Super's resolver.
+- While it runs, `step()` advances nothing but `left`. The match clock is
+  stopped, and movement, damage, reloads, cooldowns, shots, areas, the ball,
+  the zone and respawns all run on that clock. Inputs sent meanwhile are
+  dropped, not queued, and movement timelines are re-anchored as they are in
+  a countdown.
+- When `left` reaches zero the Super resolves on the tick it was cast, so
+  its heal, shield, radius and targets are exactly what they were. The buff
+  is active the moment play resumes.
+- A cast within 20 match seconds of that caster's last one, or one sent with
+  `brief` (the new "Short cutscenes" setting), uses the 1.2 s version.
+- Only the caster can skip (`Input.skip`, any key, click or tap), and not
+  within the first 0.3 s, so the press that cast it cannot also skip it.
+
+What plays (`client/src/arena/swiper.ts`, driven by `Match.cutscene`, for
+every viewer, since every viewer is paused):
+
+1. **Trigger (0.0 s)**: the world drains to dimmed grayscale while Brandon
+   stays in color, a "shing" flash, letterbox bars slam in.
+2. **Zoom (0.3 s)**: the camera punches in with a radial blur and speed
+   lines, his glasses flare with "TING", and three slanted panels slide in:
+   his eyes, his grip on the card, a smirk.
+3. **Power-up (1.0 s)**: a light pillar, the raised card going from gold to
+   white, sparkles spiralling in, his orbiting cards spinning up to fourteen,
+   a dining hall silhouette with rotating light rays, a one-second rising
+   whine and shake that builds.
+4. **Name drop (2.0 s)**: "SWIPE YOU IN" slams in with a shockwave ring,
+   screen cracks, a gold burst, color-fringe pulses, a hue-cycling
+   "LEGENDARY" glow, and the subtitle sliding in underneath.
+5. **Swipe (3.0 s)**: the card reader lands, one slow swipe then a fast one
+   trailing seven rainbow bands across the screen, a white flash, and a giant
+   green "APPROVED" stamp with a boom.
+6. **Payoff (3.8 s, play resumes)**: color floods back in a radial wave, the
+   Super resolves, and the existing ring, food rain, auras and banners play
+   with a coin fountain and the five hall names landing around the screen.
+7. **Exit (4.5 s on)**: a receipt reading "+1 SWIPE USED — THANK YOU, COME
+   AGAIN" prints across the bottom, the letterbox slides away and the camera
+   eases back with a small overshoot.
+
+The short version keeps beats 1, 2 (no panels), 4, 5 and 6 in 1.2 s.
+
+Rendering: the grayscale, color wave, blur, fringing and flash are one
+full-screen pass in `client/src/arena/view.ts` (the world into a
+half-float target, a graded quad, then the caster and the show on top). The
+target and shader are built on the first cutscene and the pass runs only
+while one is on screen. The HUD fades out for the pause and the "GO!" banner
+no longer fires when play resumes from one. Reduced motion keeps the pause,
+grayscale, letterbox, title and stamp and drops the flash, blur, fringing,
+zoom, shake, cracks and speed lines.
+
+Verification: `npm test` 135/135 (two new tests: the pause holds the clock,
+positions, a shot in flight, health and reloads, drops queued inputs and
+resolves on the cast tick; repeat, request and skip rules) and
+`npm run build` pass. In a desktop browser at 1024x640, a Broomball match
+with two bot fighters was stepped on a virtual 60 Hz clock:
+
+- A full cast was captured at twelve points across all seven beats.
+- A second cast straight after used the 1.2 s version and resolved.
+- After 20 match seconds the full version returned; a key press at 1.17 s
+  skipped it, play resumed within 0.25 s, and the heal and shield applied.
+- Four casts in a row in one match left no console errors.
+- Stepped CPU per frame (simulation, snapshot and render submission): 2.8 ms
+  before, 6.4 ms during the cutscene, 7.5 ms during the payoff, 2.7 ms after.
+- The HUD returned to full opacity after the pause.
+
+Not verified: real-time frame pacing and GPU cost of the full-screen pass
+(the test browser was throttled to about 1 frame per second), phones, two
+networked clients (a guest sees the pause only through snapshots, which was
+not exercised), audio by ear, the reduced-motion path, the "Short
+cutscenes" toggle in the browser (the engine side is unit-tested), and
+touch skipping. Open questions for the maintainer: whether a match-wide
+pause is acceptable at all in a competitive mode, whether rivals should be
+able to vote-skip, and whether the overtime and match timers should be
+allowed to stand still for it as they do now.
+
+## November 16, 2026 — Brandon Nguyen's Super charges 20% faster
+
+User request, approved with the cutscene by the repository owner per the
+requester. `Fighter` gains an optional `chargeRate` (default 1) applied to the
+Super charge earned from damage and healing; only `brandon_n` sets it, at 1.2,
+so his Super is ready after about 4,170 damage instead of 5,000. His Super
+description says so. The engine reads the field and checks no fighter id.
+`npm test` (135) and `npm run build` pass; no playtest was run.

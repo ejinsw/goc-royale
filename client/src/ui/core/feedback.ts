@@ -33,6 +33,8 @@ export const uiPrefs = {
     typeof matchMedia !== "undefined" &&
     matchMedia("(prefers-reduced-motion: reduce)").matches,
   haptics: true,
+  /** Always ask for the short version of a Super cutscene. */
+  shortCutscenes: false,
 };
 
 export function setReducedMotion(on: boolean) {

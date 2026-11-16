@@ -1,7 +1,12 @@
 import {
   Color,
   DirectionalLight,
+  HalfFloatType,
   HemisphereLight,
+  Mesh,
+  PlaneGeometry,
+  ShaderMaterial,
+  WebGLRenderTarget,
   PerspectiveCamera,
   Plane,
   Raycaster,
@@ -81,6 +86,47 @@ const CAMERA = {
 /** Mouse aim is picked on this plane, about chest height, to avoid parallax. */
 const AIM_HEIGHT = 0.8;
 const LABEL_Y = FIGHTER_HEIGHT + 0.1;
+
+/**
+ * The grading pass for a Super cutscene: the world in grayscale with color
+ * returning in a radial wave, a radial blur, color fringing and a white
+ * flash. It is built on first use and runs only while a cutscene is shown.
+ */
+const POST_VERTEX = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}`;
+const POST_FRAGMENT = /* glsl */ `
+uniform sampler2D map;
+uniform vec2 center;
+uniform float aspect;
+uniform float gray;
+uniform float wave;
+uniform float aberration;
+uniform float blur;
+uniform float flash;
+varying vec2 vUv;
+void main() {
+  vec2 dir = vUv - center;
+  vec3 col = vec3(0.0);
+  for (int i = 0; i < 6; i++) {
+    vec2 uv = center + dir * (1.0 - blur * float(i) / 5.0);
+    col.r += texture2D(map, uv + dir * aberration).r;
+    col.g += texture2D(map, uv).g;
+    col.b += texture2D(map, uv - dir * aberration).b;
+  }
+  col /= 6.0;
+  float d = length(dir * vec2(aspect, 1.0));
+  float colored = 1.0 - smoothstep(wave - 0.14, wave, d);
+  float luma = dot(col, vec3(0.299, 0.587, 0.114));
+  // Dimmed as well as drained, so the caster and the gold read against it.
+  col = mix(col, vec3(luma * 0.5), gray * (1.0 - colored));
+  col += flash;
+  gl_FragColor = vec4(col, 1.0);
+  #include <colorspace_fragment>
+}`;
 
 export interface ArenaFrame {
   match: Match;
@@ -179,6 +225,10 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   const sun = new DirectionalLight(0xfff4e2, 2.2);
   sun.position.set(-0.45, 1, 0.55);
   scene.add(hemi, sun);
+  // Layer 1 holds what a cutscene keeps in full color (see `draw`).
+  hemi.layers.enable(1);
+  sun.layers.enable(1);
+  camera.layers.enable(1);
 
   const billboards = new Billboards(mats);
   const markers = new Markers(mats);
@@ -284,6 +334,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   const showFor = (match: Match) => {
     if (!show && hasSwiper(match)) {
       show = new SwiperShow(mats, camera, effects, shakeBy);
+      show.group.traverse((o) => o.layers.set(1));
       scene.add(show.group);
     }
     return show;
@@ -379,6 +430,85 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   canvas.addEventListener("webglcontextlost", onLost);
   canvas.addEventListener("webglcontextrestored", onRestored);
 
+  let post: {
+    target: WebGLRenderTarget;
+    scene: Scene;
+    material: ShaderMaterial;
+  } | null = null;
+  const bufferSize = new Vector2();
+  const draw = () => {
+    const pass = show?.post;
+    if (!pass?.active) {
+      renderer.render(scene, camera);
+      return;
+    }
+    renderer.getDrawingBufferSize(bufferSize);
+    if (!post) {
+      const material = mats.track(
+        new ShaderMaterial({
+          uniforms: {
+            map: { value: null },
+            center: { value: new Vector2(0.5, 0.5) },
+            aspect: { value: 1 },
+            gray: { value: 0 },
+            wave: { value: 0 },
+            aberration: { value: 0 },
+            blur: { value: 0 },
+            flash: { value: 0 },
+          },
+          vertexShader: POST_VERTEX,
+          fragmentShader: POST_FRAGMENT,
+          depthTest: false,
+          depthWrite: false,
+        }),
+      );
+      const quad = new Mesh(mats.track(new PlaneGeometry(2, 2)), material);
+      quad.frustumCulled = false;
+      const postScene = new Scene();
+      postScene.add(quad);
+      post = {
+        target: mats.track(
+          new WebGLRenderTarget(bufferSize.x, bufferSize.y, {
+            type: HalfFloatType,
+            samples: 4,
+          }),
+        ),
+        scene: postScene,
+        material,
+      };
+    }
+    if (
+      post.target.width !== bufferSize.x ||
+      post.target.height !== bufferSize.y
+    )
+      post.target.setSize(bufferSize.x, bufferSize.y);
+    const u = post.material.uniforms;
+    u.map.value = post.target.texture;
+    u.center.value.set(pass.cx, pass.cy);
+    u.aspect.value = camera.aspect;
+    u.gray.value = pass.gray;
+    u.wave.value = pass.wave;
+    u.aberration.value = pass.aberration;
+    u.blur.value = pass.blur;
+    u.flash.value = pass.flash;
+    // The world, graded; then the caster and the show over it in full color.
+    camera.layers.set(0);
+    renderer.setRenderTarget(post.target);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    renderer.render(post.scene, camera);
+    // A color background forces a clear, which would wipe the graded world.
+    const backdrop = scene.background;
+    scene.background = null;
+    camera.layers.set(1);
+    renderer.autoClear = false;
+    renderer.clearDepth();
+    renderer.render(scene, camera);
+    renderer.autoClear = true;
+    scene.background = backdrop;
+    camera.layers.enable(0);
+  };
+
   // -------------------------------------------------------------- frame
   const numbers: DamageNumber[] = [];
   const shots: ProjectileView[] = [];
@@ -429,7 +559,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         focusId,
         actors,
       });
-      if (!lost) renderer.render(scene, camera);
+      if (!lost) draw();
       return;
     }
     time += f.dt;
@@ -440,6 +570,8 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     for (const p of s.players) {
       present.add(p.id);
       const actor = actorFor(p);
+      // A Super cutscene freezes everyone but its caster mid-pose.
+      if (s.cutscene && s.cutscene.owner !== p.id && actor.shown) continue;
       const pos = f.positions.get(p.id) ?? p.pos;
       const superSpec = FIGHTERS[p.fighter].abilities.super;
       const lift =
@@ -469,12 +601,14 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     // Concealed in a bush (not in this viewer's snapshot): not drawn.
     for (const [id, a] of actors) if (!present.has(id)) a.hide();
 
-    const focusActor = focusId ? actors.get(focusId) : undefined;
-    const focusPlayer = s.players.find((p) => p.id === focusId);
+    // During a cutscene every camera holds on its caster.
+    const followId = showcase?.leadId() ?? focusId;
+    const focusActor = followId ? actors.get(followId) : undefined;
+    const focusPlayer = s.players.find((p) => p.id === followId);
     const focus = focusActor?.shown
       ? focusActor.at
       : focusPlayer
-        ? ((focusId ? f.positions.get(focusId) : undefined) ?? focusPlayer.pos)
+        ? ((followId ? f.positions.get(followId) : undefined) ?? focusPlayer.pos)
         : null;
     map!.update(s, focus, time, f.dt, (pos) => {
       effects.ring(pos, 0.4, 1.5, 0xc99155, 0.45, f.now);
@@ -708,7 +842,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       focusId,
       actors,
     });
-    if (!lost) renderer.render(scene, camera);
+    if (!lost) draw();
     const info = renderer.info;
     metrics.gpu.calls = info.render.calls;
     metrics.gpu.triangles = info.render.triangles;

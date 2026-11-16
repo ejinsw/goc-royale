@@ -138,6 +138,15 @@ const CUES: Record<string, Tone[]> = {
     dur: 0.015,
     gain: 0.15,
   })),
+  swiper_shing: [
+    { wave: "sine", from: 1800, to: 5200, dur: 0.16, gain: 0.4 },
+    { wave: "square", from: 3000, to: 6000, dur: 0.08, gain: 0.12 },
+  ],
+  // The cutscene's charge-up: one second of rising whine.
+  swiper_whine: [
+    { wave: "sawtooth", from: 110, to: 1700, dur: 1, gain: 0.28 },
+    { wave: "sine", from: 220, to: 3400, dur: 1, gain: 0.2 },
+  ],
   swiper_pop: [{ wave: "sine", from: 500, to: 900, dur: 0.05, gain: 0.35 }],
 };
 

@@ -123,6 +123,20 @@ export interface BurstSpec {
   protect?: number;
 }
 
+/**
+ * A cinematic pause before a Super resolves. The match clock stops for
+ * everyone for its length, so nothing in the simulation advances, and the
+ * Super then resolves on the tick it was cast. Presentation fills the pause.
+ */
+export interface CutsceneSpec {
+  /** Full length (s). */
+  seconds: number;
+  /** Shorter length (s) for a repeat, or when the caster asks for brevity. */
+  again: number;
+  /** A cast within this many match seconds of the caster's last one repeats. */
+  window: number;
+}
+
 export type SuperSpec =
   /** Place an area object `distance` units along the aim (see AREAS). */
   | { kind: "zone"; area: AreaKind; distance: number }
@@ -162,6 +176,8 @@ export type SuperSpec =
       delay?: number;
       overWalls?: boolean;
       effect?: "aura";
+      /** Pause the match for a cutscene first (only with `at` 0). */
+      cutscene?: CutsceneSpec;
     } & BurstSpec)
   /** Jump `distance` along the aim over cover, landing with a burst. */
   | { kind: "leap"; distance: number; air: number; landing: BurstSpec }
@@ -240,6 +256,8 @@ export interface Fighter {
   description: string;
   superDescription: string;
   attackSound?: "mixed_voice";
+  /** Super charge gained per point of damage dealt or healing given. Default 1. */
+  chargeRate?: number;
   /** How the attack and Super resolve on the authority. */
   abilities: { attack: AttackSpec; super: SuperSpec };
 }
@@ -756,7 +774,9 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description:
       "Slash with a meal card and fling three like shuriken. All three land up close.",
     superDescription:
-      "All-you-can-eat: heal yourself and nearby teammates 1,200 HP, plus a 600 shield for 4 seconds.",
+      "All-you-can-eat: heal yourself and nearby teammates 1,200 HP, plus a 600 shield for 4 seconds. Charges 20% faster.",
+    // His Super is ready after about 4,170 damage instead of 5,000.
+    chargeRate: 1.2,
     abilities: {
       attack: { kind: "shot", spread: [-0.17, 0, 0.17] },
       super: {
@@ -765,6 +785,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
         radius: 4,
         heal: 1200,
         shield: { amount: 600, duration: 4 },
+        cutscene: { seconds: 3.8, again: 1.2, window: 20 },
       },
     },
   },

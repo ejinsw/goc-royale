@@ -69,6 +69,10 @@ export interface Input {
   itemDrop?: boolean;
   itemUse?: boolean;
   power?: number;
+  /** Ask for the short cutscene when this input casts a Super that has one. */
+  brief?: boolean;
+  /** End the caster's own running cutscene early. */
+  skip?: boolean;
   /**
    * Monotonically increasing per-client input sequence (standard §4.3).
    * Optional for backward compatibility; the authority records the highest
@@ -213,7 +217,12 @@ export interface GameEvent {
 export interface Match {
   mode: Mode;
   time: number;
-  phase: "countdown" | "playing" | "goal" | "finished";
+  phase: "countdown" | "playing" | "cutscene" | "goal" | "finished";
+  /**
+   * A Super's cinematic pause (phase "cutscene"). `time` does not advance
+   * while it runs; `left` counts down from `total` in real seconds.
+   */
+  cutscene: { owner: string; left: number; total: number } | null;
   phaseUntil: number;
   players: Player[];
   items: Item[];

@@ -374,6 +374,11 @@ each movement input for the time it was held, and correction p95 meets the
 - The redacted Brandon v4 archive is not a production runtime asset. Arena
   import validation would reject it (64k triangles exceeds the 25k budget, and
   its clip set is incomplete).
+- One Super (Swipe You In, on the `brandon-ult-cutscene` branch) stops the
+  match clock for every player while its cutscene plays. That is an
+  authoritative pause, which section 6.1 forbids for hit-stop. It was built
+  at a user's explicit request and is recorded in `docs/STATUS.md` as an
+  exception awaiting a maintainer decision; it is not a pattern to copy.
 - Physical-device performance and controlled latency or loss campaigns remain
   incomplete.
 
