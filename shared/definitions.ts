@@ -16,7 +16,8 @@ export type FighterId =
   | "joyce"
   | "miriam"
   | "jemuel"
-  | "russell";
+  | "russell"
+  | "brandon_n";
 export type Mode = "showdown" | "broomball";
 export type Vec = { x: number; y: number };
 
@@ -735,6 +736,36 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     abilities: {
       attack: { kind: "shot", lifesteal: 0.35 },
       super: { kind: "burst", at: 0, radius: 4.5, damage: 700, drain: true },
+    },
+  },
+  brandon_n: {
+    id: "brandon_n",
+    name: "Brandon Nguyen",
+    team: "Rides",
+    role: "UCLA Swiper",
+    hp: 5400,
+    speed: 5.2,
+    ammo: 3,
+    reload: 1.4,
+    damage: 340,
+    range: 7,
+    projectileSpeed: 15,
+    attack: "Card Swipe",
+    super: "Swipe You In",
+    color: "#2d6fc0",
+    description:
+      "Slash with a meal card and fling three like shuriken. All three land up close.",
+    superDescription:
+      "All-you-can-eat: heal yourself and nearby teammates 1,200 HP, plus a 600 shield for 4 seconds.",
+    abilities: {
+      attack: { kind: "shot", spread: [-0.17, 0, 0.17] },
+      super: {
+        kind: "burst",
+        at: 0,
+        radius: 4,
+        heal: 1200,
+        shield: { amount: 600, duration: 4 },
+      },
     },
   },
 };

@@ -862,3 +862,42 @@ On November 13, 2026, the user explicitly directed an immediate production push
 despite the outstanding checks and the desktop p95 measurements above. The
 unverified mobile, network, renderer and accessibility gates remain open; this
 decision does not establish that the performance targets were met.
+
+## November 16, 2026 — Brandon Nguyen, "The UCLA Swiper" (`add-brandon-nguyen`)
+
+Brandon Nguyen is fighter 19 (`brandon_n`), listed with his surname because
+`brandon` is already Brandon Kam. The user asked for this fighter, supplied a
+reference photo for his look and requested the full name. He is placed on the
+Rides team; that placement is an assumption and is one field to change.
+
+The change is data only: a `FIGHTERS` row, a `LOOKS` row, one new hair style
+(`wavyTop`), one feature (`wireGlasses`), one prop (`mealCard`), a card
+projectile shape and a placeholder SVG portrait. `shared/engine.ts` is
+unchanged and no other fighter's values changed.
+
+- **Card Swipe**: three meal cards in a fan (±0.17 rad), 340 each, range 7,
+  reload 1.4. All three land inside about 3 units (1,020), one at range (340).
+  The request named a melee swipe and a ranged throw; fighters have one attack,
+  so the fan expresses both instead of adding a second attack slot.
+- **Swipe You In**: radius 4 around him, 1,200 healing and a 600 shield for
+  4 s to himself and teammates. 5,400 HP, speed 5.2.
+
+Balance is first-pass, set against the other supports: the Super's 1,800
+effective health is local, where Joyce gives 1,800 anywhere plus protection
+and Jemuel gives a 2,000 shield in 4.5. His ranged damage per reload (243) is
+the lowest in the roster and his close damage (729) needs him inside 3 units
+at 5,400 HP.
+
+`npm test` passed 133 tests (one new, covering the fan at both ranges and the
+Super's reach, shield expiry and ally-only effect) and `npm run build` passed
+on Node 24.13.1; the repository pins Node 22. In a desktop browser at
+1024×768 he appeared in the fighter picker, home stage, lobby, results podium
+and a solo Broomball match; the fan, its trails, the Super ring, the heal
+number and the shield were seen in the arena camera with no console errors.
+His name is ellipsized on the picker tile and shown in full elsewhere. His
+menu model is within the test's 12,000-triangle ceiling.
+
+Not done: no two-client match, no human playtest, no phone layout or
+physical-device check, no frame profile, and no controlled latency run. The
+verification matrix rows for simulation or balance (two-client) and 3D asset
+(mobile profile, eight-character scene) remain open for this fighter.

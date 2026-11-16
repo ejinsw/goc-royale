@@ -50,7 +50,8 @@ export type HairStyle =
   | "braids"
   | "ponytail"
   | "long"
-  | "bun";
+  | "bun"
+  | "wavyTop";
 export type FeatureName =
   | "glasses"
   | "sunglasses"
@@ -71,7 +72,8 @@ export type FeatureName =
   | "scarf"
   | "bowtie"
   | "jacket"
-  | "leatherJacket";
+  | "leatherJacket"
+  | "wireGlasses";
 export type PropName =
   | "clipboard"
   | "keys"
@@ -89,7 +91,8 @@ export type PropName =
   | "envelope"
   | "book"
   | "lantern"
-  | "calculator";
+  | "calculator"
+  | "mealCard";
 export type CompanionName = "note" | "dove" | "panda";
 
 export interface FighterLook {
@@ -328,6 +331,19 @@ export const LOOKS: Record<FighterId, FighterLook> = {
     features: ["leatherJacket"],
     prop: "calculator",
   }),
+  // Brandon Nguyen: navy blazer over a white collared shirt, round wire
+  // glasses and dark wavy hair, from a supplied reference photo.
+  brandon_n: look({
+    shirt: "#22335c",
+    skin: "#e3b48c",
+    hair: "#1f1b1e",
+    collar: "#f7f9fc",
+    accent: "#dfe5ef",
+    hairStyle: "wavyTop",
+    sweep: 0.5,
+    features: ["jacket", "wireGlasses"],
+    prop: "mealCard",
+  }),
 };
 
 const INK = "#161a22";
@@ -335,6 +351,7 @@ const PANTS = "#2b313d";
 const SHOE = "#11141a";
 const CREAM = "#fbe8d3";
 const DARK = "#2b3138";
+const WIRE = "#565d6b";
 
 const sphere = (r: number, w = 16, h = 10) => new SphereGeometry(r, w, h);
 /** Open cap: the top `share` of a sphere (0.5 = a hemisphere). */
@@ -711,6 +728,14 @@ const FEATURES: Record<FeatureName, (l: FighterLook) => Pieces> = {
     armL: [part(cylinder(0.082, 0.065), l.accent, [0, -0.25, 0])],
     armR: [part(cylinder(0.082, 0.065), l.accent, [0, -0.25, 0])],
   }),
+  wireGlasses: () => ({
+    face: [
+      ...[-1, 1].map((side) =>
+        part(ring(0.098, 0.009), WIRE, [side * 0.15, 0.3, 0.4], [-0.12, 0, 0]),
+      ),
+      part(capsule(0.008, 0.07), WIRE, [0, 0.32, 0.412], [0, 0, HALF]),
+    ],
+  }),
 };
 
 /** Hats that cover the crown; the fringe would poke through them. */
@@ -899,6 +924,41 @@ const HAIR: Record<
     ...cap(l),
     ...fringe(l, bangs),
     part(sphere(0.17, 14, 8), l.hair, [0, 0.66, -0.3]),
+  ],
+  // Short and messy: loose waves piled on the crown, one lock on the brow.
+  wavyTop: (l, bangs) => [
+    ...cap(l),
+    ...fringe(l, bangs),
+    ...(
+      [
+        [-0.23, 0.67, 0.12, 0.5],
+        [0.01, 0.74, 0.1, -0.4],
+        [0.24, 0.66, 0.11, 0.45],
+        [-0.31, 0.57, -0.08, -0.5],
+        [0.31, 0.58, -0.09, 0.55],
+        [-0.11, 0.72, -0.15, 0.35],
+        [0.15, 0.7, -0.17, -0.45],
+      ] as const
+    ).map(([x, y, z, tilt]) =>
+      part(
+        sphere(0.14, 12, 8),
+        l.hair,
+        [x, y, z],
+        [0.2, tilt, tilt * 0.6],
+        [1.15, 0.6, 0.85],
+      ),
+    ),
+    ...(bangs
+      ? [
+          part(
+            sphere(0.09, 10, 6),
+            l.hair,
+            [l.sweep * 0.2, 0.53, 0.36],
+            [0.5, 0, l.sweep * 0.7],
+            [1.3, 0.55, 0.7],
+          ),
+        ]
+      : []),
   ],
 };
 function cap(l: FighterLook) {
@@ -1251,6 +1311,27 @@ const PROPS: Record<
         ],
         [0.04, -0.12, 0.08],
         [0.15, -0.35, 0],
+      ),
+  },
+  // A fanned hand of three meal cards, the front one face out.
+  mealCard: {
+    slot: "armR",
+    build: () =>
+      place(
+        [
+          ...[-1, 0, 1].map((i) =>
+            part(
+              box(0.15, 0.23, 0.012, 0.01),
+              i ? "#f4f7fb" : "#2d6fc0",
+              [i * 0.07, 0.1 - Math.abs(i) * 0.012, i ? -0.014 : 0],
+              [0, 0, -i * 0.38],
+            ),
+          ),
+          part(box(0.15, 0.04, 0.008, 0.004), "#ffd24a", [0, 0.185, 0.008]),
+          part(box(0.06, 0.07, 0.008, 0.004), "#f4f7fb", [-0.03, 0.1, 0.008]),
+        ],
+        [0.03, -0.1, 0.1],
+        [0.2, -0.3, 0],
       ),
   },
 };
