@@ -764,7 +764,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     hp: 5400,
     speed: 5.2,
     ammo: 3,
-    reload: 1.4,
+    reload: 1.15,
     damage: 340,
     range: 7,
     projectileSpeed: 15,

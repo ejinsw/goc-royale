@@ -1089,3 +1089,7 @@ Super charge earned from damage and healing; only `brandon_n` sets it, at 1.2,
 so his Super is ready after about 4,170 damage instead of 5,000. His Super
 description says so. The engine reads the field and checks no fighter id.
 `npm test` (135) and `npm run build` pass; no playtest was run.
+
+## November 16, 2026 — Brandon Nguyen attacks faster
+
+User request. His reload drops from 1.4 s to 1.15 s per card swipe, the fastest in the roster (Tovya is 1.2 s). Sustained damage rises about 22%: 887 per second of reload up close and 296 at range, from 729 and 243. Nothing else changed. `npm test` and `npm run build` pass; no playtest was run.
