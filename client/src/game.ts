@@ -462,6 +462,7 @@ class Arena {
       color,
       t,
       shape,
+      me,
     );
   }
 

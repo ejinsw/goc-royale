@@ -47,6 +47,7 @@ import { aimPreviewFor, itemAimPreviewFor, type AimIntent } from "./aimPreview";
 import { cameraFocusId } from "./cameraFocus";
 import { buildArenaMap, type ArenaMap } from "./map";
 import { createArenaMaterials } from "./materials";
+import { SwiperShow, hasSwiper } from "./swiper";
 
 /**
  * The live 3D arena renderer (performance standard §3 "Arena presentation",
@@ -119,6 +120,8 @@ export interface ArenaView {
     color: number,
     now: number,
     shape?: { range: number; half: number },
+    /** Whose cue this is, for fighter-specific flourishes. */
+    by?: Player,
   ): void;
   /** Start a one-shot clip on a fighter. False when the graph ignored it. */
   action(id: string, clip: ActionClip, now: number): boolean;
@@ -266,6 +269,26 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   };
   const cam = { x: 0, z: 0, ready: false, gliding: false };
   const shake = { until: 0, dur: 1, amp: 0 };
+  const shakeBy = (ms: number, intensity: number, now: number) => {
+    const amp = intensity * view.halfW * 2;
+    const remaining =
+      now < shake.until ? shake.amp * ((shake.until - now) / shake.dur) : 0;
+    if (amp < remaining) return;
+    shake.dur = ms / 1000;
+    shake.until = now + shake.dur;
+    shake.amp = amp;
+  };
+  // The UCLA Swiper showcase: built only once a match has a Brandon Nguyen,
+  // so every other match pays nothing for it.
+  let show: SwiperShow | null = null;
+  const showFor = (match: Match) => {
+    if (!show && hasSwiper(match)) {
+      show = new SwiperShow(mats, camera, effects, shakeBy);
+      scene.add(show.group);
+    }
+    return show;
+  };
+  let labelPx = 0.02;
   /** Runs on resize and mode change only, never per frame (standard §5.2). */
   const fit = () => {
     if (!mode) return;
@@ -282,7 +305,8 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     view.h = view.dist * Math.sin(CAMERA.pitch);
     view.back = view.dist * Math.cos(CAMERA.pitch);
     view.halfW = view.dist * t * (W / H);
-    billboards.px = (2 * view.dist * t) / H;
+    labelPx = (2 * view.dist * t) / H;
+    billboards.px = labelPx;
     // Overhead labels grow with tall screens but never drop below phone size.
     view.ui = clamp(H / 640, 1, 1.35);
   };
@@ -314,7 +338,14 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       sx = (Math.random() * 2 - 1) * shake.amp * k;
       sz = (Math.random() * 2 - 1) * shake.amp * k;
     }
-    camera.position.set(cam.x + sx, view.h, cam.z + view.back + sz);
+    // A zoom punch moves the camera along its own view line (presentation only).
+    const zoom = show ? show.zoomAt(now) : 1;
+    billboards.px = labelPx * zoom;
+    camera.position.set(
+      cam.x + sx,
+      view.h * zoom,
+      cam.z + view.back * zoom + sz,
+    );
     camera.updateMatrixWorld();
   };
 
@@ -384,9 +415,24 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     const s = f.match;
     useMode(s.mode);
     fit();
-    time += f.dt;
     const local = f.localId;
     const focusId = cameraFocusId(s.players, local, f.spectateId);
+    const showcase = showFor(s);
+    // Hit-stop holds the picture for a few frames. Input, prediction and the
+    // authoritative simulation are untouched (standard section 6.1).
+    if (showcase && f.now < showcase.freezeUntil) {
+      showcase.frame({
+        now: f.now,
+        dt: 0,
+        match: s,
+        localId: local,
+        focusId,
+        actors,
+      });
+      if (!lost) renderer.render(scene, camera);
+      return;
+    }
+    time += f.dt;
     const localAlive = s.players.find((p) => p.id === local)?.alive ?? false;
 
     // Fighters: drawn position, aim, status, then animation.
@@ -413,6 +459,12 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         turn: p.id === local ? 30 : 14,
       });
       if (s.phase === "playing") actor.graph.releaseHeld();
+      if (showcase && p.fighter === "brandon_n") {
+        // Squash and stretch, volume preserved.
+        const tall = showcase.squashOf(p.id, f.now);
+        const wide = 1 / Math.sqrt(tall);
+        actor.group.scale.set(wide, tall, wide);
+      }
     }
     // Concealed in a bush (not in this viewer's snapshot): not drawn.
     for (const [id, a] of actors) if (!present.has(id)) a.hide();
@@ -648,6 +700,14 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
 
     markers.end();
     billboards.end();
+    showcase?.frame({
+      now: f.now,
+      dt: f.dt,
+      match: s,
+      localId: local,
+      focusId,
+      actors,
+    });
     if (!lost) renderer.render(scene, camera);
     const info = renderer.info;
     metrics.gpu.calls = info.render.calls;
@@ -661,6 +721,8 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     effect(e, match, now) {
       const owner = match.players.find((p) => p.id === e.owner);
       const color = owner ? hex(FIGHTERS[owner.fighter].color) : 0xffe3b0;
+      const showcase = showFor(match);
+      const swiper = owner?.fighter === "brandon_n" ? showcase : null;
       const dur = clamp(e.end - match.time, 0.08, 3);
       const muzzle = {
         x: e.pos.x + e.dir.x * 0.55,
@@ -670,10 +732,13 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         case "attack":
           effects.ring(muzzle, 0.2, 0.55, color, 0.2, now, 0.95, 0.8);
           effects.streak(e.pos, e.dir, 0.6, 1.4, 0.16, color, 0.18, now);
+          swiper?.swipe(e.owner, e.pos, e.dir, now);
           break;
         case "hit":
           effects.ring(e.pos, 0.5, 1, 0xffffff, 0.35, now);
-          if (e.value) pushNumber(String(e.value), 0xffffff, e.pos, now);
+          // His damage prints on a receipt instead of the plain number.
+          if (swiper && e.value) swiper.landed(e.owner, e.pos, e.value, now);
+          else if (e.value) pushNumber(String(e.value), 0xffffff, e.pos, now);
           break;
         case "heal":
           effects.ring(e.pos, 0.5, 1.05, 0x9dffc8, 0.45, now);
@@ -732,6 +797,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
           vans.show(e.owner, e.dir, now + dur);
           break;
         case "goal":
+          
           effects.ring(e.pos, 0.5, 6, 0xffe6a5, 1.1, now);
           effects.disc(e.pos, 0.3, 4, 0xffe6a5, 0.8, now, 0.4);
           break;
@@ -742,6 +808,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         case "burst":
           effects.ring(e.pos, 0.5, e.value ?? 3, color, dur, now);
           effects.disc(e.pos, 0.3, e.value ?? 3, color, dur, now, 0.28);
+          swiper?.payoff(e.owner, e.pos, e.value ?? 4, match, now);
           break;
         case "marker":
         case "leap":
@@ -827,7 +894,11 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         }
       }
     },
-    cue(kind, from, dir, color, now, shape) {
+    cue(kind, from, dir, color, now, shape, by) {
+      if (show && by?.fighter === "brandon_n") {
+        if (kind === "attack") show.swipe(by.id, from, dir, now);
+        else if (kind === "super") show.windup(by.id, from, now);
+      }
       if (kind === "melee_sweep") {
         effects.sweep(from, dir, FIGHTERS.tovya.range, color, now, true);
         return;
@@ -894,15 +965,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     hit(id, strength) {
       actors.get(id)?.hit(strength);
     },
-    shake(ms, intensity, now) {
-      const amp = intensity * view.halfW * 2;
-      const remaining =
-        now < shake.until ? shake.amp * ((shake.until - now) / shake.dur) : 0;
-      if (amp < remaining) return;
-      shake.dur = ms / 1000;
-      shake.until = now + shake.dur;
-      shake.amp = amp;
-    },
+    shake: shakeBy,
     aim(clientX, clientY, from) {
       ndc.set(
         ((clientX - rect.left) / rect.width) * 2 - 1,

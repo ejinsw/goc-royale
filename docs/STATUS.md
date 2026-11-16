@@ -905,3 +905,84 @@ Not done: no two-client match, no human playtest, no phone layout or
 physical-device check, no frame profile, and no controlled latency run. The
 verification matrix rows for simulation or balance (two-client) and 3D asset
 (mobile profile, eight-character scene) remain open for this fighter.
+
+## November 16, 2026 — The UCLA Swiper showcase (`brandon-maximum-extra`)
+
+User request: make every Brandon Nguyen action as over the top as the
+presentation systems allow, without changing his balance or anyone else.
+
+This is presentation only. `shared/` is untouched, so damage, timing,
+collision, cooldowns and the snapshot are exactly as on `add-brandon-nguyen`.
+All of it lives in one new arena module, `client/src/arena/swiper.ts`, that
+the view builds only when a match contains a `brandon_n`. Matches without him
+allocate nothing and run the same code path as before.
+
+What plays, and from what signal:
+
+- **Entrance** (the 3 s countdown, when nobody can move): the screen dims to
+  a spotlight, a card reader drops from the sky, a turnstile passes over him,
+  his name and title slam in with a shockwave, confetti and a glasses glint.
+  A respawn plays a short version.
+- **Idle**: cards orbit him, a seven-card fan flourish, a glint, and now and
+  then a "SWIPES LEFT" check.
+- **Movement**: glowing card afterimages, crumbs and sparkles. A "BEEP BEEP
+  BEEP" scan streak plays when something throws him faster than he can run.
+  The game has no dash, so that is the nearest trigger.
+- **Card Swipe**: a tight white arc and a gold streak down each of the three
+  real card paths; rainbow trails and mini-cards behind each card; cards that
+  burst into smaller cards and then sparkles on impact.
+- **A landed swipe**: an "APPROVED" stamp, damage printed on a receipt that
+  unrolls and falls, 45 ms of hit-stop. Every third landed swipe adds a card
+  tornado, a sonic-boom ring and "TRIPLE SWIPE!".
+- **"Critical swipe"**: the game has no critical hits. The cue plays when all
+  three cards of one swipe land on one rival (the existing 1,020 total): an
+  inverted impact frame, a giant card cutting corner to corner, speed lines,
+  a zoom punch and split-color text. It deals no extra damage.
+- **Golden card**: one card in eight is drawn gold with an "UNLIMITED SWIPES"
+  tag. It is the same 340-damage, non-piercing card.
+- **Swipe You In**: light pillar, turnstile, "SWIPE!", a ring with the five
+  dining halls around it, food raining on everyone fed, a gold aura and an
+  "ALL YOU CAN EAT" banner on them for 4 s, and a "+1 SWIPE USED" receipt.
+- **Taking a hit**: "DECLINED", his glasses and cards fly off and return.
+- **Low health** (under a third): a flickering "DINING HALL CLOSING SOON"
+  sign and cracked red cards for everyone; a red heartbeat vignette on his
+  own screen.
+- **Goal for his side, or his knockout**: card fireworks, confetti and
+  "SWIPED IN". **Eliminated**: the card snaps, one card drifts down, the
+  turnstile shuts, "INSUFFICIENT SWIPES".
+
+Decisions that hold the line on the standards:
+
+- **Other players' screens.** World effects are visible to everyone.
+  Anything that takes over the screen (dimming, banners, zoom, hit-stop, the
+  inverted frame, vignette) plays only for the viewer whose camera is on him.
+- **Hit-stop** holds the rendered picture only, 45-120 ms, at most once per
+  0.3 s. Input sampling, sends, prediction and the simulation do not wait.
+- **Accessibility.** Reduced motion drops the flashes, inverted frame, zoom,
+  hit-stop and shake and halves particle bursts; stamps and banners stay.
+  Shake and zoom also follow the shake setting. The inverted frame is a
+  single 80 ms frame and the full-screen "critical" cue is rationed to one
+  per 2.5 s.
+- **Budget.** One 2048x1024 atlas, three instanced draws, three small props,
+  and a fixed pool of 720 particles that recycles when full. No allocation
+  per particle. New sounds are 14 rows in the existing cue table.
+- **Not done as asked, because it would change the rules:** fans of five or
+  more cards, homing or curving cards, a piercing golden card, bonus damage
+  on a combo or a critical hit, and a dash. Each is cosmetic or absent, as
+  listed above. The match-end results screen is a separate menu scene and is
+  unchanged; his victory show plays on goals and knockouts.
+
+Verification: `npm test` 133/133 and `npm run build` pass. In a desktop
+browser at 1024x768, a Broomball match with two bot fighters was stepped on a
+virtual 60 Hz clock and each cue above was captured from the game camera:
+entrance, swipe, landed hit, critical cue with the inverted frame, triple
+finisher, declined, low health, Super payoff with food and banners, defeat,
+goal fireworks and movement trail, with no console errors. Stepped CPU cost
+per frame (simulation, snapshot and render submission together) was 2.5 ms
+idle and 3.9 ms during goal fireworks on that desktop.
+
+Not verified: real-time frame pacing (the test browser was throttled to
+about 1 frame per second, which is why a virtual clock was used), GPU time,
+physical phones, two networked clients, audio by ear, and the reduced-motion
+path in the browser. The low-health sign was moved above the name plate after
+the capture and not re-captured.
