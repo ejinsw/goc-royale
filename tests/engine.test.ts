@@ -1183,6 +1183,8 @@ test("Brandon Nguyen's card fan lands all three up close and one at range; Swipe
   fire(near);
   advance(near, 0.3);
   assert.equal(t.hp, FIGHTERS[t.fighter].hp - 3 * 340, "the close swipe");
+  assert.equal(p.charge, 3 * 340 * 1.2, "his Super charges 20% faster");
+  assert.equal(FIGHTERS.ethan.chargeRate, undefined, "nobody else's changed");
   const far = duel("brandon_n");
   const [q, u] = far.playerList;
   q.pos = { x: 10, y: 12 };

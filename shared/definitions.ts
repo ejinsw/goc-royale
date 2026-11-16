@@ -256,6 +256,8 @@ export interface Fighter {
   description: string;
   superDescription: string;
   attackSound?: "mixed_voice";
+  /** Super charge gained per point of damage dealt or healing given. Default 1. */
+  chargeRate?: number;
   /** How the attack and Super resolve on the authority. */
   abilities: { attack: AttackSpec; super: SuperSpec };
 }
@@ -772,7 +774,9 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description:
       "Slash with a meal card and fling three like shuriken. All three land up close.",
     superDescription:
-      "All-you-can-eat: heal yourself and nearby teammates 1,200 HP, plus a 600 shield for 4 seconds.",
+      "All-you-can-eat: heal yourself and nearby teammates 1,200 HP, plus a 600 shield for 4 seconds. Charges 20% faster.",
+    // His Super is ready after about 4,170 damage instead of 5,000.
+    chargeRate: 1.2,
     abilities: {
       attack: { kind: "shot", spread: [-0.17, 0, 0.17] },
       super: {

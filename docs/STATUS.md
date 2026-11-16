@@ -1080,3 +1080,12 @@ touch skipping. Open questions for the maintainer: whether a match-wide
 pause is acceptable at all in a competitive mode, whether rivals should be
 able to vote-skip, and whether the overtime and match timers should be
 allowed to stand still for it as they do now.
+
+## November 16, 2026 — Brandon Nguyen's Super charges 20% faster
+
+User request, approved with the cutscene by the repository owner per the
+requester. `Fighter` gains an optional `chargeRate` (default 1) applied to the
+Super charge earned from damage and healing; only `brandon_n` sets it, at 1.2,
+so his Super is ready after about 4,170 damage instead of 5,000. His Super
+description says so. The engine reads the field and checks no fighter id.
+`npm test` (135) and `npm run build` pass; no playtest was run.

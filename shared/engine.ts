@@ -514,7 +514,8 @@ export class Engine {
       if (charge && source.id !== target.id)
         source.charge = Math.min(
           RULES.superCharge,
-          source.charge + actual * 0.6,
+          source.charge +
+            actual * 0.6 * (FIGHTERS[source.fighter].chargeRate ?? 1),
         );
     }
   }
@@ -532,7 +533,12 @@ export class Engine {
     target.quietSince = s.time;
     if (source && source.id !== target.id) {
       source.stats.damage += actual;
-      if (!isSuper) source.charge = Math.min(5000, source.charge + actual);
+      if (!isSuper)
+        source.charge = Math.min(
+          5000,
+          source.charge +
+            actual * (FIGHTERS[source.fighter].chargeRate ?? 1),
+        );
     }
     if (actual >= 100)
       this.effect(
