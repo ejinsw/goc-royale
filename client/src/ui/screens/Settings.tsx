@@ -1,3 +1,5 @@
+import { BUILD } from "../../build";
+import { metrics } from "../../metrics";
 import { menuKit } from "../menu/menuKit";
 
 const { Control, Display } = menuKit;
@@ -77,6 +79,7 @@ export function SettingsSheet({
           />
         </div>
       )}
+      <Display kind="label" level="caption" text={`Build ${BUILD}${metrics.showcase ? ` · Swiper effects ${metrics.showcase}` : ""}`} />
       <Control kind="button" variant="primary" size="lg" icon="play" label={inMatch ? "Back to it" : "Done"} onPress={onClose} />
     </Display>
   );

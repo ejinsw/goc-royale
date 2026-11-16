@@ -1093,3 +1093,36 @@ description says so. The engine reads the field and checks no fighter id.
 ## November 16, 2026 — Brandon Nguyen attacks faster
 
 User request. His reload drops from 1.4 s to 1.15 s per card swipe, the fastest in the roster (Tovya is 1.2 s). Sustained damage rises about 22%: 887 per second of reload up close and 296 at range, from 729 and 243. Nothing else changed. `npm test` and `npm run build` pass; no playtest was run.
+
+## November 16, 2026 — Showcase hardening for iPhone (`fix/brandon-effects-ios`)
+
+A player reported that Brandon Nguyen's effects do not appear in Safari on
+an iPhone, after a refresh. The cause on that phone is **not yet known**: the
+live build plays the effects in an emulated Android phone browser, and no
+iPhone was available to test on. This change removes three ways the showcase
+could fail on a phone, and adds a way to see what a device is doing.
+
+- `CanvasRenderingContext2D.roundRect` does not exist before Safari 16. The
+  atlas used it six times, so on iOS 15 and older the showcase could not be
+  built. It now falls back to arcs.
+- Nothing caught a showcase failure. Because the view asked for the showcase
+  every frame, a failure to build it would have thrown every frame and left
+  the arena undrawn for any match containing him. The showcase is now
+  dropped for the rest of the match on its first error and the arena carries
+  on without it.
+- The cutscene's grading pass rendered into a multisampled half-float
+  target, which WebGL2 does not guarantee. It now uses an 8-bit sRGB
+  multisampled target, which is core WebGL2.
+- The Settings sheet ends with the build's commit id and, in a match with
+  him, the showcase state: "Swiper effects on" or "failed: <reason>".
+
+Verification: `npm test` 135/135 and `npm run build` pass. In a desktop
+browser on a virtual clock: with `roundRect` deleted, the full cutscene was
+captured at six points and every card, plate and panel drew correctly; the
+grading pass looked the same on the new target; with the atlas canvas forced
+to fail, the arena ran 300 frames with no frame errors, the Super still
+paused and resolved, and Settings showed the failure reason.
+
+Not verified: any real iPhone or iPad, and whether this fixes the reported
+phone. While the showcase is off, the match still pauses for his Super with
+nothing drawn over it.

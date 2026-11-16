@@ -87,6 +87,16 @@ function buildAtlas() {
   canvas.width = AW;
   canvas.height = AH;
   const g = canvas.getContext("2d")!;
+  // `roundRect` does not exist before Safari 16; arcs draw the same shape.
+  const rounded = (x: number, y: number, w: number, h: number, r: number) => {
+    if (typeof g.roundRect === "function") return g.roundRect(x, y, w, h, r);
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+  };
   const rects = new Map<string, Rect>();
   let x = 2,
     y = 2,
@@ -132,7 +142,7 @@ function buildAtlas() {
         g.lineWidth = px * 0.09;
         g.strokeStyle = "#fff";
         g.beginPath();
-        g.roundRect(px * 0.07, px * 0.07, w - px * 0.14, h - px * 0.14, px * 0.16);
+        rounded(px * 0.07, px * 0.07, w - px * 0.14, h - px * 0.14, px * 0.16);
         g.stroke();
       }
       g.lineWidth = px * 0.13;
@@ -159,11 +169,11 @@ function buildAtlas() {
   const card = (w: number, h: number, body: string, stripe: string) => {
     g.fillStyle = INK;
     g.beginPath();
-    g.roundRect(0, 0, w, h, 9);
+    rounded(0, 0, w, h, 9);
     g.fill();
     g.fillStyle = body;
     g.beginPath();
-    g.roundRect(4, 4, w - 8, h - 8, 6);
+    rounded(4, 4, w - 8, h - 8, 6);
     g.fill();
     g.fillStyle = stripe;
     g.fillRect(4, 12, w - 8, 12);
@@ -465,8 +475,8 @@ function buildAtlas() {
     g.stroke();
     g.lineWidth = 6;
     g.beginPath();
-    g.roundRect(18, 112, 74, 46, 6);
-    g.roundRect(108, 112, 74, 46, 6);
+    rounded(18, 112, 74, 46, 6);
+    rounded(108, 112, 74, 46, 6);
     g.moveTo(92, 128);
     g.lineTo(108, 128);
     g.stroke();
@@ -497,7 +507,7 @@ function buildAtlas() {
     g.strokeStyle = INK;
     g.lineWidth = 7;
     g.beginPath();
-    g.roundRect(44, 132, 118, 84, 30);
+    rounded(44, 132, 118, 84, 30);
     g.fill();
     g.stroke();
     g.beginPath();
