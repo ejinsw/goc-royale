@@ -232,8 +232,12 @@ export function MatchHud({
   useEffect(() => {
     if (countdown !== null) uiCue("ui_count", 1);
   }, [countdown]);
+  const phaseBefore = useRef(phase);
   useEffect(() => {
-    if (phase !== "playing") return;
+    // Play resuming after a Super cutscene is not a kickoff.
+    const from = phaseBefore.current;
+    phaseBefore.current = phase;
+    if (phase !== "playing" || from === "cutscene") return;
     setGo(true);
     uiCue("ui_count", 1.5);
     const id = setTimeout(() => setGo(false), 900);
@@ -256,7 +260,7 @@ export function MatchHud({
   return (
     <>
       <GameView bridge={bridge} />
-      <div className="hud" ref={layer}>
+      <div className="hud" ref={layer} data-cinematic={phase === "cutscene" ? "" : undefined}>
         <Display kind="vignette" variant="secondary" signal={signals.hp} reactions={["hitFlash"]} />
         <Display kind="vignette" variant="primary" signal={signals.zone} reactions={["danger"]} />
         <div className="hud-top">

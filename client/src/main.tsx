@@ -47,6 +47,7 @@ function loadPreferences(): SettingsValues {
     shake: true,
     reducedMotion: uiPrefs.reducedMotion,
     haptics: true,
+    shortCutscenes: false,
   };
   try {
     return { ...fallback, ...JSON.parse(localStorage.getItem("goc.preferences") || "{}") };
@@ -100,6 +101,7 @@ function App() {
     preferences.sound = prefs.sound;
     preferences.shake = prefs.shake;
     uiPrefs.haptics = prefs.haptics;
+    uiPrefs.shortCutscenes = prefs.shortCutscenes;
     setReducedMotion(prefs.reducedMotion);
     setMusic(prefs.music);
     localStorage.setItem("goc.preferences", JSON.stringify(prefs));

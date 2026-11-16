@@ -174,6 +174,7 @@ export class Engine {
       mode,
       time: 0,
       phase: "countdown",
+      cutscene: null,
       phaseUntil: 3,
       players,
       items: [],
@@ -251,6 +252,14 @@ export class Engine {
     if (!input || !finiteVec(input.move) || !finiteVec(input.aim)) return false;
     const m = length(input.move) > 1 ? unit(input.move) : input.move;
     const previous = this.inputs.get(id);
+    // Only the caster can skip, and not with the press that cast it.
+    const scene = this.state.cutscene;
+    if (
+      input.skip === true &&
+      scene?.owner === id &&
+      scene.total - scene.left >= 0.3
+    )
+      scene.left = Math.min(scene.left, 0.15);
     const freshAction =
       typeof input.seq !== "number" ||
       !Number.isFinite(input.seq) ||
@@ -287,6 +296,7 @@ export class Engine {
       aim: unit(input.aim),
       attack: input.attack === true || previous?.attack === true,
       super: input.super === true || previous?.super === true,
+      brief: input.brief === true,
       itemPickup:
         (freshAction && input.itemPickup === true) ||
         previous?.itemPickup === true,
@@ -883,6 +893,8 @@ export class Engine {
     const owner = this.state.players.find((x) => x.id === a.owner);
     return !!owner && !this.allies(p, owner);
   }
+  private lastCutscene = new Map<string, number>();
+  private afterCutscene: (() => boolean) | null = null;
   activateSuper(p: Player) {
     const s = this.state;
     if (
@@ -899,6 +911,20 @@ export class Engine {
     p.charge = 0;
     p.protectedUntil = 0;
     this.emit("super_started", p.pos, p.id, p.aim);
+    const spec = FIGHTERS[p.fighter].abilities.super;
+    const scene = spec.kind === "burst" ? spec.cutscene : undefined;
+    if (scene && s.phase === "playing") {
+      // A repeat inside the window, or a caster who asked, gets the short one.
+      const repeat =
+        s.time - (this.lastCutscene.get(p.id) ?? -Infinity) < scene.window;
+      const total =
+        repeat || this.inputs.get(p.id)?.brief ? scene.again : scene.seconds;
+      this.lastCutscene.set(p.id, s.time);
+      s.phase = "cutscene";
+      s.cutscene = { owner: p.id, left: total, total };
+      this.afterCutscene = resolve;
+      return true;
+    }
     // Instant Supers resolve now; windups, throws, leaps and Super shots
     // emit super_resolved later, when they land.
     if (resolve()) this.emit("super_resolved", p.pos, p.id, p.aim);
@@ -1651,9 +1677,39 @@ export class Engine {
       survivors.forEach((p, i) => (p.placement = i + 1));
     for (const p of survivors) p.stats.survived = Math.max(0, s.time - 3);
   }
+  /**
+   * A Super's cinematic pause. The match clock is stopped, and every rule
+   * runs on that clock, so movement, damage, reloads, cooldowns, shots,
+   * zones, the ball and respawns all hold exactly where they were. Only the
+   * cutscene's own countdown runs. Inputs sent meanwhile are dropped rather
+   * than queued, and the Super resolves on the tick it was cast.
+   */
+  private holdForCutscene(dt: number) {
+    const s = this.state,
+      scene = s.cutscene!;
+    scene.left = Math.max(0, scene.left - dt);
+    for (const t of this.tracks.values()) this.anchorTimeline(t);
+    for (const input of this.inputs.values())
+      input.attack =
+        input.super =
+        input.itemPickup =
+        input.itemDrop =
+        input.itemUse =
+          false;
+    this.itemUseSeq.clear();
+    if (scene.left > 0) return;
+    s.cutscene = null;
+    s.phase = "playing";
+    const resolve = this.afterCutscene;
+    this.afterCutscene = null;
+    const p = s.players.find((x) => x.id === scene.owner);
+    if (p?.alive && resolve?.())
+      this.emit("super_resolved", p.pos, p.id, p.aim);
+  }
   step(dt = 1 / RULES.tick) {
     const s = this.state;
     if (s.phase === "finished") return;
+    if (s.cutscene) return this.holdForCutscene(dt);
     s.time += dt;
     s.tick++;
     s.aliveCount = s.players.filter((p) => p.alive).length;

@@ -123,6 +123,20 @@ export interface BurstSpec {
   protect?: number;
 }
 
+/**
+ * A cinematic pause before a Super resolves. The match clock stops for
+ * everyone for its length, so nothing in the simulation advances, and the
+ * Super then resolves on the tick it was cast. Presentation fills the pause.
+ */
+export interface CutsceneSpec {
+  /** Full length (s). */
+  seconds: number;
+  /** Shorter length (s) for a repeat, or when the caster asks for brevity. */
+  again: number;
+  /** A cast within this many match seconds of the caster's last one repeats. */
+  window: number;
+}
+
 export type SuperSpec =
   /** Place an area object `distance` units along the aim (see AREAS). */
   | { kind: "zone"; area: AreaKind; distance: number }
@@ -162,6 +176,8 @@ export type SuperSpec =
       delay?: number;
       overWalls?: boolean;
       effect?: "aura";
+      /** Pause the match for a cutscene first (only with `at` 0). */
+      cutscene?: CutsceneSpec;
     } & BurstSpec)
   /** Jump `distance` along the aim over cover, landing with a burst. */
   | { kind: "leap"; distance: number; air: number; landing: BurstSpec }
@@ -765,6 +781,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
         radius: 4,
         heal: 1200,
         shield: { amount: 600, duration: 4 },
+        cutscene: { seconds: 3.8, again: 1.2, window: 20 },
       },
     },
   },

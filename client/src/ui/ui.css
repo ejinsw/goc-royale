@@ -1027,8 +1027,13 @@ input {
   inset: 0;
   z-index: 10;
   pointer-events: none;
+  transition: opacity 140ms ease-out;
   --top: max(8px, env(safe-area-inset-top));
   --bottom: max(10px, env(safe-area-inset-bottom));
+}
+/* A Super cutscene owns the screen; the HUD steps aside for it. */
+.hud[data-cinematic] {
+  opacity: 0;
 }
 .hud-safe-probe {
   position: absolute;

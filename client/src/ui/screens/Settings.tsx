@@ -8,6 +8,7 @@ export interface SettingsValues {
   shake: boolean;
   reducedMotion: boolean;
   haptics: boolean;
+  shortCutscenes: boolean;
 }
 
 const percent = (v: number) => `${Math.round(v * 100)}%`;
@@ -40,6 +41,7 @@ export function SettingsSheet({
         <Control kind="toggle" label="Screen shake" value={values.shake} onChange={(shake) => onChange({ shake })} />
         <Control kind="toggle" label="Reduce motion" value={values.reducedMotion} onChange={(reducedMotion) => onChange({ reducedMotion })} />
         <Control kind="toggle" label="Vibration" value={values.haptics} onChange={(haptics) => onChange({ haptics })} />
+        <Control kind="toggle" label="Short cutscenes" value={values.shortCutscenes} onChange={(shortCutscenes) => onChange({ shortCutscenes })} />
         <Control kind="button" variant="dark" icon="expand" label="Toggle full screen" onPress={onFullscreen} />
         <Display kind="label" level="caption" text="Full screen hides browser bars where supported. On iPhone, Add to Home Screen gives the cleanest view." />
       </div>
