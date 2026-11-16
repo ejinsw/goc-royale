@@ -1,7 +1,7 @@
 import {
   Color,
   DirectionalLight,
-  HalfFloatType,
+  SRGBColorSpace,
   HemisphereLight,
   Mesh,
   PlaneGeometry,
@@ -331,12 +331,35 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   // The UCLA Swiper showcase: built only once a match has a Brandon Nguyen,
   // so every other match pays nothing for it.
   let show: SwiperShow | null = null;
-  const showFor = (match: Match) => {
-    if (!show && hasSwiper(match)) {
-      show = new SwiperShow(mats, camera, effects, shakeBy);
-      show.group.traverse((o) => o.layers.set(1));
-      scene.add(show.group);
+  let showOff = false;
+  /**
+   * The show is decoration. If it cannot start or ever throws on some
+   * device, it is dropped for the rest of the match and the arena carries
+   * on without it, rather than failing every frame with it.
+   */
+  const dropShow = (error: unknown) => {
+    console.warn("UCLA Swiper showcase disabled:", error);
+    if (show) scene.remove(show.group);
+    show = null;
+    showOff = true;
+    metrics.showcase = "failed: " + String(error).slice(0, 90);
+  };
+  const safely = (run: () => void) => {
+    try {
+      run();
+    } catch (error) {
+      dropShow(error);
     }
+  };
+  const showFor = (match: Match) => {
+    if (!show && !showOff && hasSwiper(match))
+      safely(() => {
+        const made = new SwiperShow(mats, camera, effects, shakeBy);
+        made.group.traverse((o) => o.layers.set(1));
+        scene.add(made.group);
+        show = made;
+        metrics.showcase = "on";
+      });
     return show;
   };
   let labelPx = 0.02;
@@ -467,9 +490,11 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       const postScene = new Scene();
       postScene.add(quad);
       post = {
+        // 8-bit sRGB with multisampling is core WebGL2, so every phone has
+        // it; a multisampled float target is optional and some GPUs lack it.
         target: mats.track(
           new WebGLRenderTarget(bufferSize.x, bufferSize.y, {
-            type: HalfFloatType,
+            colorSpace: SRGBColorSpace,
             samples: 4,
           }),
         ),
@@ -551,14 +576,16 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     // Hit-stop holds the picture for a few frames. Input, prediction and the
     // authoritative simulation are untouched (standard section 6.1).
     if (showcase && f.now < showcase.freezeUntil) {
-      showcase.frame({
-        now: f.now,
-        dt: 0,
-        match: s,
-        localId: local,
-        focusId,
-        actors,
-      });
+      safely(() =>
+        showcase.frame({
+          now: f.now,
+          dt: 0,
+          match: s,
+          localId: local,
+          focusId,
+          actors,
+        }),
+      );
       if (!lost) draw();
       return;
     }
@@ -834,14 +861,17 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
 
     markers.end();
     billboards.end();
-    showcase?.frame({
-      now: f.now,
-      dt: f.dt,
-      match: s,
-      localId: local,
-      focusId,
-      actors,
-    });
+    if (showcase)
+      safely(() =>
+        showcase.frame({
+          now: f.now,
+          dt: f.dt,
+          match: s,
+          localId: local,
+          focusId,
+          actors,
+        }),
+      );
     if (!lost) draw();
     const info = renderer.info;
     metrics.gpu.calls = info.render.calls;
@@ -866,12 +896,13 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         case "attack":
           effects.ring(muzzle, 0.2, 0.55, color, 0.2, now, 0.95, 0.8);
           effects.streak(e.pos, e.dir, 0.6, 1.4, 0.16, color, 0.18, now);
-          swiper?.swipe(e.owner, e.pos, e.dir, now);
+          safely(() => swiper?.swipe(e.owner, e.pos, e.dir, now));
           break;
         case "hit":
           effects.ring(e.pos, 0.5, 1, 0xffffff, 0.35, now);
           // His damage prints on a receipt instead of the plain number.
-          if (swiper && e.value) swiper.landed(e.owner, e.pos, e.value, now);
+          if (swiper && e.value)
+            safely(() => swiper.landed(e.owner, e.pos, e.value!, now));
           else if (e.value) pushNumber(String(e.value), 0xffffff, e.pos, now);
           break;
         case "heal":
@@ -942,7 +973,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         case "burst":
           effects.ring(e.pos, 0.5, e.value ?? 3, color, dur, now);
           effects.disc(e.pos, 0.3, e.value ?? 3, color, dur, now, 0.28);
-          swiper?.payoff(e.owner, e.pos, e.value ?? 4, match, now);
+          safely(() => swiper?.payoff(e.owner, e.pos, e.value ?? 4, match, now));
           break;
         case "marker":
         case "leap":
@@ -1030,8 +1061,11 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     },
     cue(kind, from, dir, color, now, shape, by) {
       if (show && by?.fighter === "brandon_n") {
-        if (kind === "attack") show.swipe(by.id, from, dir, now);
-        else if (kind === "super") show.windup(by.id, from, now);
+        const live = show;
+        safely(() => {
+          if (kind === "attack") live.swipe(by.id, from, dir, now);
+          else if (kind === "super") live.windup(by.id, from, now);
+        });
       }
       if (kind === "melee_sweep") {
         effects.sweep(from, dir, FIGHTERS.tovya.range, color, now, true);

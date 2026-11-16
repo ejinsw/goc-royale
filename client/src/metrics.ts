@@ -83,6 +83,8 @@ export const metrics = {
    * authoritative cues that did start a local one-shot (mispredictions).
    */
   anim: { predicted: 0, skipped: 0, authoritative: 0 },
+  /** The UCLA Swiper showcase this match: "", "on", or "failed: <why>". */
+  showcase: "",
   private: { lastRtt: NaN },
 
   recordFrame(deltaMs: number) {
