@@ -1203,7 +1203,11 @@ export class Projectiles {
           _s.set(q.fighter === "rich" ? 0.16 : 0.22, 1, len),
         );
         this.trails.setMatrixAt(this.nt, _m);
-        this.trails.setColorAt(this.nt++, _c.set(FIGHTERS[q.fighter].color));
+        // The UCLA Swiper throws cards that leave rainbow light trails.
+        if (q.fighter === "brandon_n")
+          _c.setHSL((time * 0.9 + this.nt * 0.17) % 1, 1, 0.6);
+        else _c.set(FIGHTERS[q.fighter].color);
+        this.trails.setColorAt(this.nt++, _c);
       }
     }
     for (const [k, mesh] of this.meshes) {

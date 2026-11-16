@@ -76,6 +76,69 @@ const CUES: Record<string, Tone[]> = {
   ],
   ui_pop: [{ wave: "sine", from: 420, to: 760, dur: 0.07, gain: 0.5 }],
   ui_count: [{ wave: "triangle", from: 880, to: 860, dur: 0.09, gain: 0.7 }],
+  // The UCLA Swiper showcase (client/src/arena/swiper.ts): card-reader
+  // beeps, a register ka-ching, and the rest of his fanfare.
+  swiper_beep: [{ wave: "square", from: 1760, to: 1760, dur: 0.05, gain: 0.3 }],
+  swiper_beep3: [0, 0.09, 0.18].map((at) => ({
+    wave: "square" as const,
+    from: 1760,
+    to: 1760,
+    at,
+    dur: 0.045,
+    gain: 0.3,
+  })),
+  swiper_slash: [
+    { wave: "sawtooth", from: 1500, to: 320, dur: 0.07, gain: 0.3 },
+    { wave: "sine", from: 2600, to: 1200, dur: 0.05, gain: 0.25 },
+  ],
+  swiper_stamp: [
+    { wave: "triangle", from: 230, to: 90, dur: 0.07, gain: 0.9 },
+    { wave: "square", from: 880, to: 880, at: 0.03, dur: 0.04, gain: 0.2 },
+  ],
+  swiper_boom: [
+    { wave: "sine", from: 140, to: 38, dur: 0.32, gain: 1.3 },
+    { wave: "triangle", from: 90, to: 40, dur: 0.25, gain: 0.8 },
+  ],
+  swiper_kaching: [
+    { wave: "square", from: 1318, to: 1318, dur: 0.05, gain: 0.28 },
+    { wave: "sine", from: 1976, to: 1976, at: 0.07, dur: 0.18, gain: 0.5 },
+    { wave: "sine", from: 2637, to: 2637, at: 0.07, dur: 0.22, gain: 0.3 },
+  ],
+  swiper_ting: [
+    { wave: "sine", from: 3136, to: 3136, dur: 0.22, gain: 0.35 },
+    { wave: "sine", from: 4186, to: 4186, at: 0.03, dur: 0.2, gain: 0.2 },
+  ],
+  swiper_declined: [
+    { wave: "square", from: 196, to: 185, dur: 0.11, gain: 0.4 },
+    { wave: "square", from: 147, to: 139, at: 0.13, dur: 0.16, gain: 0.4 },
+  ],
+  swiper_heart: [
+    { wave: "sine", from: 70, to: 45, dur: 0.09, gain: 1.1 },
+    { wave: "sine", from: 62, to: 40, at: 0.2, dur: 0.09, gain: 0.8 },
+  ],
+  swiper_fanfare: [523, 659, 784, 1047].map((hz, i) => ({
+    wave: "triangle" as const,
+    from: hz,
+    to: hz,
+    at: i * 0.09,
+    dur: i === 3 ? 0.32 : 0.09,
+    gain: 0.6,
+  })),
+  swiper_sad: [
+    { wave: "triangle", from: 392, to: 370, dur: 0.22, gain: 0.6 },
+    { wave: "triangle", from: 349, to: 330, at: 0.25, dur: 0.22, gain: 0.6 },
+    { wave: "triangle", from: 311, to: 233, at: 0.5, dur: 0.45, gain: 0.6 },
+  ],
+  swiper_charge: [{ wave: "sawtooth", from: 180, to: 1400, dur: 0.45, gain: 0.3 }],
+  swiper_print: [0, 0.05, 0.1, 0.15, 0.2].map((at) => ({
+    wave: "square" as const,
+    from: 2200,
+    to: 2200,
+    at,
+    dur: 0.015,
+    gain: 0.15,
+  })),
+  swiper_pop: [{ wave: "sine", from: 500, to: 900, dur: 0.05, gain: 0.35 }],
 };
 
 function play(tones: Tone[], pitch: number) {
