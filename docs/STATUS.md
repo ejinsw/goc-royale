@@ -1162,3 +1162,22 @@ touch taps were fired every 0.1 s through a full cast: 0.53 s remained at
 
 Not verified: any real phone, and whether this is the whole of the iPhone
 report. The Settings line added on November 16 is still the way to tell.
+
+## November 16, 2026 — "Short cutscenes" request could be dropped (`fix/short-cutscene-request`)
+
+Found while answering a player's question about the setting. The client
+sends `brief` with the input that casts the Super, and the engine latched
+the Super press but not `brief`. If any other input from that player
+arrived before the tick that processed the cast, `brief` was overwritten
+and the full 3.8 s cutscene played despite the setting. Clients send input
+at 30 Hz and on every movement change, so this happened often over a real
+connection. `brief` is now kept for as long as the Super press it came with
+is pending, and does not carry over to the next cast.
+
+The setting never hid the cutscene: on, it plays the 1.2 s version (trigger,
+zoom, title, swipe, stamp, payoff), which was captured in a browser.
+
+Verification: `npm test` 136/136 with one new test for the case above, and
+`npm run build` passes. The dropped request was reproduced in a browser on
+the live build's code before the fix; the fix itself is covered by the unit
+test only.

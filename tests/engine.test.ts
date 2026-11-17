@@ -1307,6 +1307,26 @@ test("the cutscene cannot be skipped; it is short on a repeat or on request", ()
   assert.equal(cast().total, 1.2, "the caster asked for the short one");
 });
 
+test("a short-cutscene request survives a later input that arrives before the tick", () => {
+  const e = engine("brandon_n", "broomball");
+  const [me] = e.playerList;
+  const still = { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 } };
+  const total = () => e.state.cutscene?.total;
+  charged(me);
+  // The cast and its request, then an ordinary input, all inside one tick.
+  e.setInput(me.id, { ...still, super: true, brief: true });
+  e.setInput(me.id, still);
+  e.step();
+  assert.equal(total(), 1.2, "the request was kept");
+  while (e.state.cutscene) e.step();
+  // It belongs to that one cast: the next, outside the repeat window, is full.
+  advance(e, 21);
+  charged(me);
+  e.setInput(me.id, { ...still, super: true });
+  e.step();
+  assert.equal(total(), 3.8);
+});
+
 test("Aura Pulse still knocks out a shielded rival", () => {
   const e = engine("ethan");
   const [p, t] = e.playerList;
