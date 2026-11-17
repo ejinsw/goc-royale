@@ -288,7 +288,11 @@ export class Engine {
       aim: unit(input.aim),
       attack: input.attack === true || previous?.attack === true,
       super: input.super === true || previous?.super === true,
-      brief: input.brief === true,
+      // The short-cutscene request rides with the Super press it came with,
+      // so a later input that arrives before the tick cannot drop it.
+      brief:
+        input.brief === true ||
+        (previous?.super === true && previous.brief === true),
       itemPickup:
         (freshAction && input.itemPickup === true) ||
         previous?.itemPickup === true,
