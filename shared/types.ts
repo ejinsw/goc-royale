@@ -71,8 +71,6 @@ export interface Input {
   power?: number;
   /** Ask for the short cutscene when this input casts a Super that has one. */
   brief?: boolean;
-  /** End the caster's own running cutscene early. */
-  skip?: boolean;
   /**
    * Monotonically increasing per-client input sequence (standard §4.3).
    * Optional for backward compatibility; the authority records the highest

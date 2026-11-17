@@ -252,14 +252,6 @@ export class Engine {
     if (!input || !finiteVec(input.move) || !finiteVec(input.aim)) return false;
     const m = length(input.move) > 1 ? unit(input.move) : input.move;
     const previous = this.inputs.get(id);
-    // Only the caster can skip, and not with the press that cast it.
-    const scene = this.state.cutscene;
-    if (
-      input.skip === true &&
-      scene?.owner === id &&
-      scene.total - scene.left >= 0.3
-    )
-      scene.left = Math.min(scene.left, 0.15);
     const freshAction =
       typeof input.seq !== "number" ||
       !Number.isFinite(input.seq) ||
@@ -1687,8 +1679,9 @@ export class Engine {
    * A Super's cinematic pause. The match clock is stopped, and every rule
    * runs on that clock, so movement, damage, reloads, cooldowns, shots,
    * zones, the ball and respawns all hold exactly where they were. Only the
-   * cutscene's own countdown runs. Inputs sent meanwhile are dropped rather
-   * than queued, and the Super resolves on the tick it was cast.
+   * cutscene's own countdown runs, and no input can shorten it. Inputs sent
+   * meanwhile are dropped rather than queued, and the Super resolves on the
+   * tick it was cast.
    */
   private holdForCutscene(dt: number) {
     const s = this.state,

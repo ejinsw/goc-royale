@@ -1126,3 +1126,39 @@ paused and resolved, and Settings showed the failure reason.
 Not verified: any real iPhone or iPad, and whether this fixes the reported
 phone. While the showcase is off, the match still pauses for his Super with
 nothing drawn over it.
+
+## November 16, 2026 — The Swipe You In cutscene cannot be skipped (`fix/cutscene-unskippable`)
+
+User request, after reporting that the Super's animation did not show.
+
+The cutscene shipped as skippable by "any key, click or tap" from its caster,
+ignored only for its first 0.3 s. In a real match the caster is always
+pressing something, so a movement key, an attack tap or a re-gripped thumb
+ended it almost as soon as it began. It had only been checked on a stepped
+clock with no other input, which is how that was missed. On a phone, where
+every action is a tap, it would have been cut short on nearly every cast.
+
+Skipping is now removed outright rather than made harder:
+
+- `Input.skip` and the engine rule that honored it are gone. Nothing a
+  player sends shortens the pause. An older client that still sends the flag
+  is ignored.
+- The client no longer listens for a skip key or tap, and the on-screen
+  "ANY KEY TO SKIP" hint and the showcase's skip handling are removed.
+- Unchanged: 3.8 s in full, 1.2 s for a cast within 20 match seconds of the
+  caster's last one, and the "Short cutscenes" setting, which asks for the
+  1.2 s version every time.
+
+This lengthens the worst case for other players: every full cast now stops
+the match for the whole 3.8 s, with no way for anyone to end it early. That
+is the exception to standard section 6.1 recorded above, made firmer.
+
+Verification: `npm test` 135/135 and `npm run build` pass. The repeat test
+now mashes attack, Super and the retired skip flag from both players for
+100 ticks and checks the countdown is exactly on schedule. In a desktop
+browser on a virtual clock, W, A, D, Enter, Space, Escape, mouse clicks and
+touch taps were fired every 0.1 s through a full cast: 0.53 s remained at
+3.3 s, all beats were captured through the payoff, and the Super resolved.
+
+Not verified: any real phone, and whether this is the whole of the iPhone
+report. The Settings line added on November 16 is still the way to tell.
