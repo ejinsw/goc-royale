@@ -206,7 +206,7 @@ function buildAtlas() {
   text("ultsub", "— BRANDON NGUYEN, THE UCLA SWIPER —", 50);
   text("legend", "★ LEGENDARY ★", 44);
   text("thanks", "+1 SWIPE USED — THANK YOU, COME AGAIN", 44);
-  text("skip", "ANY KEY TO SKIP", 34);
+  
   HALLS.forEach((hall, i) => text("hall" + i, hall, 54));
   for (const ch of "0123456789+") text("d" + ch, ch, 60);
   const emoji: [string, string][] = [
@@ -727,8 +727,6 @@ interface Particle {
   home: string | null;
   homeAt: number;
   die: Die;
-  /** Made by the cutscene; removed if it is skipped. */
-  cine: boolean;
 }
 
 const blank = (rect: Rect): Particle => ({
@@ -781,7 +779,6 @@ const blank = (rect: Rect): Particle => ({
   home: null,
   homeAt: 0,
   die: Die.None,
-  cine: false,
 });
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -822,7 +819,6 @@ interface Cut {
   beats: Timed[];
   /** When the authority resumed play; Infinity while paused. */
   resumedAt: number;
-  skipped: boolean;
 }
 const FULL_CUT: CutKeys = {
   zoom: 0.3,
@@ -1106,7 +1102,6 @@ export class SwiperShow {
     this.cursor = (this.cursor + 1) % CAP;
     Object.assign(p, this.defaults);
     p.rect = this.rect(name);
-    p.cine = this.cineMode;
     p.on = true;
     p.x = x;
     p.y = y;
@@ -1790,8 +1785,8 @@ export class SwiperShow {
   /**
    * Swipe You In's cutscene. The authority has stopped the match clock
    * (`Match.cutscene`); this fills the pause for every viewer, then plays
-   * the exit over resumed play. It decides nothing: when the pause ends, how
-   * long it is and whether it was skipped all come from the snapshot.
+   * the exit over resumed play. It decides nothing: when the pause ends and
+   * how long it is come from the snapshot. It cannot be skipped.
    */
   readonly post = {
     active: false,
@@ -1807,7 +1802,6 @@ export class SwiperShow {
     flash: 0,
   };
   private cut: Cut | null = null;
-  private cineMode = false;
 
   /** The fighter every camera holds on while a cutscene owns the view. */
   leadId() {
@@ -1847,7 +1841,6 @@ export class SwiperShow {
       keys: short ? SHORT_CUT : FULL_CUT,
       beats: [],
       resumedAt: Infinity,
-      skipped: false,
     };
     this.script(this.cut);
     // The caster draws after the grading pass, so he alone keeps his color.
@@ -2031,14 +2024,7 @@ export class SwiperShow {
     });
   }
 
-  /** The caster skipped: drop everything still queued and on screen. */
-  private skip(cut: Cut) {
-    cut.beats.length = 0;
-    for (const p of this.pool) if (p.cine) p.on = false;
-    this.reader.end = this.pillar.end = 0;
-    this.lines.end = 0;
-    this.sound("beep", 60);
-  }
+  
 
   /** The payoff's extras once color returns: coins, a slot-machine landing. */
   private jackpot(id: string, at: Vec) {
@@ -2103,14 +2089,12 @@ export class SwiperShow {
     const now = f.now,
       t = now - cut.start,
       k = cut.keys;
-    if (!scene && cut.resumedAt === Infinity) cut.resumedAt = now;
-    if (scene && !cut.skipped && scene.left <= 0.16 && t < cut.total - 0.5) {
-      cut.skipped = true;
-      this.skip(cut);
+    if (!scene && cut.resumedAt === Infinity) {
+      cut.resumedAt = now;
+      // Play is back: any beat that had not started yet belongs to the pause.
+      cut.beats.length = 0;
     }
-    this.cineMode = true;
     while (cut.beats.length && cut.beats[0].at <= t) cut.beats.shift()!.run();
-    this.cineMode = false;
     const since = now - cut.resumedAt;
     if (since > 1.5) {
       this.finish(cut);
@@ -2129,7 +2113,7 @@ export class SwiperShow {
     // Color floods back from him in a radial wave once play resumes.
     post.gray = since > 0.6 ? 0 : sat(t / 0.12);
     post.wave = since > 0 ? (since / 0.6) * 1.9 : 0;
-    const loud = this.calm || cut.skipped ? 0 : 1;
+    const loud = this.calm ? 0 : 1;
     post.flash = loud * (0.5 * pulse(0, 16) + 1.15 * pulse(k.flash, 9));
     post.aberration =
       loud *
@@ -2141,7 +2125,7 @@ export class SwiperShow {
     post.blur = loud * (0.16 * pulse(k.zoom, 5) + 0.1 * pulse(k.swipe + 0.25, 8));
   }
 
-  /** The cutscene's steady layers: letterbox, dining hall, glow, skip hint. */
+  /** The cutscene's steady layers: letterbox, dining hall and title glow. */
   private cineDraw(now: number) {
     const cut = this.cut;
     if (!cut) return;
@@ -2151,7 +2135,7 @@ export class SwiperShow {
       aspect = this.camera.aspect;
     const power = this.powerOf(cut.owner, now);
     const who = this.actors.get(cut.owner);
-    if (!cut.short && !cut.skipped && t > k.power && t < k.swipe) {
+    if (!cut.short && t > k.power && t < k.swipe) {
       // A glowing dining hall rises behind him, light bursting through it.
       const a = sat((t - k.power - 0.15) / 0.4) * sat((k.swipe - t) / 0.3);
       this.screenQuad("rays", this.post.cx * 2 - 1, this.post.cy * 2 - 1, 2.8, GOLD, 0.26 * a, true, 2.8, t * 0.5);
@@ -2164,7 +2148,7 @@ export class SwiperShow {
         this.quad("card", who.at.x, 3.3, who.at.y, 0.7, Math.sin(t * 5) * 0.2, 0xffffff, 1, false);
       }
     }
-    if (!cut.skipped && t >= k.name && t < k.swipe) {
+    if (t >= k.name && t < k.swipe) {
       // Legendary glow: a hue-cycling halo behind the title.
       const h = Math.min(0.24, (0.94 * aspect) / this.rect("ult").aspect) * 1.07;
       _c.setHSL((t * 0.7) % 1, 1, 0.6);
@@ -2179,8 +2163,7 @@ export class SwiperShow {
       this.screenQuad("px", 0, 1 - bar, bar, 0x000000, 1, false, 2 * aspect);
       this.screenQuad("px", 0, bar - 1, bar, 0x000000, 1, false, 2 * aspect);
     }
-    if (cut.owner === this.local && since < 0 && t > 0.45 && !cut.skipped)
-      this.screenQuad("skip", 0.7, -0.89, 0.034, 0xffffff, 0.7, false);
+    
   }
 
   private star(p: Player, a: ShowActor): Star {

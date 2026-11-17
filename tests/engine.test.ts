@@ -1265,7 +1265,7 @@ test("Swipe You In pauses the whole match for its cutscene, then resolves on the
   assert.ok(e.state.time > frozen.time, "play resumes");
 });
 
-test("the cutscene is short on a repeat or on request, and only its caster can skip it", () => {
+test("the cutscene cannot be skipped; it is short on a repeat or on request", () => {
   const e = engine("brandon_n", "broomball");
   const [me, , , rival] = e.playerList;
   const cast = () => {
@@ -1274,15 +1274,28 @@ test("the cutscene is short on a repeat or on request, and only its caster can s
     return e.state.cutscene!;
   };
   assert.equal(cast().total, 3.8);
-  // A rival cannot skip it; neither can the press that cast it.
-  e.setInput(rival.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, skip: true });
-  e.setInput(me.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, skip: true });
-  advance(e, 0.5);
-  assert.ok(e.state.cutscene!.left > 3.2);
-  e.setInput(me.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, skip: true });
-  advance(e, 0.2);
-  assert.equal(e.state.phase, "playing", "skipped by its caster");
-  assert.equal(me.shield, 600, "a skipped cutscene still resolves the Super");
+  // Nothing either player sends ends it early: not mashing attack and
+  // Super, and not the retired skip flag an older client may still send.
+  const mash = {
+    move: { x: 0, y: 0 },
+    aim: { x: 1, y: 0 },
+    attack: true,
+    super: true,
+    skip: true,
+  };
+  for (let tick = 0; tick < 100; tick++) {
+    e.setInput(me.id, mash);
+    e.setInput(rival.id, mash);
+    e.step();
+  }
+  assert.equal(e.state.phase, "cutscene");
+  assert.ok(
+    Math.abs(e.state.cutscene!.left - (3.8 - 100 / 30)) < 1e-6,
+    "it is running its full length",
+  );
+  advance(e, 0.6);
+  assert.equal(e.state.phase, "playing");
+  assert.equal(me.shield, 600, "the Super resolves when it ends");
   advance(e, 5);
   assert.equal(cast().total, 1.2, "a repeat within 20 s is the short one");
   advance(e, 1.3);

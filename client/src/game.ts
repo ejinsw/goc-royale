@@ -131,7 +131,6 @@ class Arena {
   private listen() {
     this.on(window, "keydown", (e) => {
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
-      if (!e.repeat) this.trySkip();
       if (
         ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
           e.code,
@@ -195,7 +194,6 @@ class Arena {
       "pointerdown",
       (e) => {
         if (e.pointerType !== "mouse") this.mouse = null;
-        this.trySkip();
       },
       { capture: true, passive: true },
     );
@@ -228,13 +226,6 @@ class Arena {
       this.bridge.aiming = null;
     });
     this.on(this.parent, "contextmenu", (e) => e.preventDefault());
-  }
-
-  /** Any key, click or tap ends the local caster's own cutscene early. */
-  private trySkip() {
-    const scene = this.bridge.match?.cutscene;
-    if (scene && scene.owner === this.bridge.id && !this.bridge.paused)
-      this.bridge.input.skip = true;
   }
 
   private frame = (nowMs: number) => {
@@ -351,7 +342,6 @@ class Arena {
       !this.bridge.input.itemPickup &&
       !this.bridge.input.itemDrop &&
       !this.bridge.input.itemUse &&
-      !this.bridge.input.skip &&
       time - this.lastSend < 1000 / 30
     )
       return;
@@ -435,7 +425,6 @@ class Arena {
     this.bridge.input.itemPickup = false;
     this.bridge.input.itemDrop = false;
     this.bridge.input.itemUse = false;
-    this.bridge.input.skip = false;
   }
 
   private itemCue(
