@@ -25,7 +25,11 @@ import {
   type PerspectiveCamera,
 } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { FIGHTERS, type Vec } from "../../../shared/definitions";
+import {
+  FIGHTERS,
+  type FighterId,
+  type Vec,
+} from "../../../shared/definitions";
 import type { Match, Player } from "../../../shared/types";
 import type { ActionClip } from "./fighters";
 import { preferences, uiCue } from "../audio";
@@ -205,6 +209,11 @@ function buildAtlas() {
   text("ult", "SWIPE YOU IN", 150);
   text("ultsub", "— BRANDON NGUYEN, THE UCLA SWIPER —", 50);
   text("legend", "★ LEGENDARY ★", 44);
+  // Ethan's Aura Pulse cutscene.
+  text("aura", "AURA PULSE", 150);
+  text("aurasub", "— ETHAN HA, MUSIC TEAM —", 50);
+  text("micdrop", "MIC DROP ♪", 72, true);
+  text("note", "♪", 120);
   text("thanks", "+1 SWIPE USED — THANK YOU, COME AGAIN", 44);
   
   HALLS.forEach((hall, i) => text("hall" + i, hall, 54));
@@ -809,8 +818,46 @@ interface CutKeys {
   flash: number;
   stamp: number;
 }
+/** What a fighter's cutscene says and shows; the beats are shared. */
+interface CutTheme {
+  title: string;
+  sub: string;
+  stamp: string;
+  stampColor: number;
+  color: number;
+  /** The sprite that sweeps the screen and is raised in the power-up. */
+  card: string;
+  panels: boolean;
+  hall: boolean;
+  reader: boolean;
+}
+const CUT_THEMES: Partial<Record<FighterId, CutTheme>> = {
+  brandon_n: {
+    title: "ult",
+    sub: "ultsub",
+    stamp: "approved",
+    stampColor: GREEN,
+    color: GOLD,
+    card: "card",
+    panels: true,
+    hall: true,
+    reader: true,
+  },
+  ethan: {
+    title: "aura",
+    sub: "aurasub",
+    stamp: "micdrop",
+    stampColor: 0xff8fe0,
+    color: 0xdf83c8,
+    card: "note",
+    panels: false,
+    hall: false,
+    reader: false,
+  },
+};
 interface Cut {
   owner: string;
+  theme: CutTheme;
   /** Presentation clock value at cutscene time 0. */
   start: number;
   total: number;
@@ -1831,10 +1878,16 @@ export class SwiperShow {
     return z;
   }
 
-  private begin(owner: string, total: number, elapsed: number) {
+  private begin(
+    owner: string,
+    theme: CutTheme,
+    total: number,
+    elapsed: number,
+  ) {
     const short = total < 2;
     this.cut = {
       owner,
+      theme,
       start: this.now - elapsed,
       total,
       short,
@@ -1854,7 +1907,8 @@ export class SwiperShow {
 
   private script(cut: Cut) {
     const k = cut.keys,
-      id = cut.owner;
+      id = cut.owner,
+      th = cut.theme;
     const at = (t: number, run: () => void) => cut.beats.push({ at: t, run });
     const here = () => {
       const a = this.actors.get(id);
@@ -1897,7 +1951,7 @@ export class SwiperShow {
       flash.grow = 0.2;
       flare(0.12, 0.09, 3.2, 0.45);
     });
-    if (!cut.short)
+    if (!cut.short && th.panels)
       ["eyes", "hand", "smirk"].forEach((name, i) =>
         at(k.zoom + 0.16 + i * 0.09, () => {
           const p = this.size(this.spawn(name, (i - 1) * 0.58, 0, 0), 0.62);
@@ -1941,7 +1995,7 @@ export class SwiperShow {
       this.sound("boom", 100);
       this.sound("kaching", 100);
       this.shake(360, 0.014);
-      const title = this.slam("ult", 0, 0.3, 0.24, k.swipe - k.name + 0.15, GOLD);
+      const title = this.slam(th.title, 0, 0.3, 0.24, k.swipe - k.name + 0.15, th.color);
       title.fade = 0.88;
       const ring = this.size(this.spawn("ringS", 0, 0.3, 0), 0.3);
       ring.screen = true;
@@ -1956,11 +2010,11 @@ export class SwiperShow {
         crack.life = 0.7;
         crack.fade = 0.25;
       }
-      const tag = this.slam("legend", 0, 0.56, 0.06, k.swipe - k.name, GOLD, false);
+      const tag = this.slam("legend", 0, 0.56, 0.06, k.swipe - k.name, th.color, false);
       tag.flicker = true;
       for (let i = 0; i < this.count(46); i++) {
         const bit = this.size(this.spawn(i % 3 ? "dot" : "star", 0, 0.3, 0), rand(0.02, 0.05));
-        this.color(bit, GOLD);
+        this.color(bit, th.color);
         bit.screen = true;
         bit.add = true;
         const a = rand(0, Math.PI * 2),
@@ -1973,7 +2027,7 @@ export class SwiperShow {
       }
     });
     at(k.name + (cut.short ? 0.1 : 0.25), () => {
-      const sub = this.slam("ultsub", 0, 0.08, 0.055, k.swipe - k.name - 0.1, 0xffffff, false);
+      const sub = this.slam(th.sub, 0, 0.08, 0.055, k.swipe - k.name - 0.1, 0xffffff, false);
       sub.pop = 0;
       sub.slide = 0.25;
       sub.sx = -2.2;
@@ -1984,8 +2038,8 @@ export class SwiperShow {
       this.sound("beep", 60);
       act("basic_attack");
       const c = here();
-      this.showProp(this.reader, c.x + 1.5, c.y - 0.5, cut.total - k.swipe + 1.6, -0.35);
-      const slow = this.size(this.spawn("card", -0.82, -0.08, 0), 0.36);
+      if (th.reader) this.showProp(this.reader, c.x + 1.5, c.y - 0.5, cut.total - k.swipe + 1.6, -0.35);
+      const slow = this.size(this.spawn(th.card, -0.82, -0.08, 0), 0.36);
       slow.screen = true;
       slow.roll = -0.25;
       slow.vx = 0.55;
@@ -1995,7 +2049,7 @@ export class SwiperShow {
     at(k.swipe + 0.25, () => {
       this.sound("slash", 40, 0.8);
       lines(0.3);
-      const fast = this.size(this.spawn("card", -0.68, -0.08, 0), 0.36);
+      const fast = this.size(this.spawn(th.card, -0.68, -0.08, 0), 0.36);
       fast.screen = true;
       fast.roll = -0.25;
       fast.spin = -5;
@@ -2019,7 +2073,7 @@ export class SwiperShow {
       this.sound("boom", 60);
       this.sound("beep3", 60);
       this.shake(400, 0.017);
-      const stamp = this.slam("approved", 0, 0, 0.3, cut.total - k.stamp + 0.9, GREEN);
+      const stamp = this.slam(th.stamp, 0, 0, 0.3, cut.total - k.stamp + 0.9, th.stampColor);
       stamp.roll = -0.1;
     });
   }
@@ -2076,13 +2130,46 @@ export class SwiperShow {
     });
   }
 
+  /** The burst of notes and rings when a themed cutscene hands back play. */
+  private encore(cut: Cut) {
+    const who = this.actors.get(cut.owner);
+    if (!who) return;
+    const at = { x: who.at.x, y: who.at.y },
+      th = cut.theme;
+    who.trigger("victory", this.now);
+    this.sound("boom", 100);
+    this.sound("fanfare", 300);
+    this.shake(360, 0.014);
+    this.fx.ring(at, 0.5, 6, th.color, 0.6, this.now);
+    this.fx.ring(at, 0.3, 4.5, 0xffffff, 0.45, this.now);
+    this.fx.disc(at, 0.3, 4, th.color, 0.5, this.now, 0.3);
+    for (let i = 0; i < this.count(44); i++) {
+      const note = this.size(this.spawn(th.card, at.x, 1.3, at.y), rand(0.3, 0.55));
+      this.hue(note, 0.82 + rand(-0.12, 0.12), 0.7);
+      const a = rand(0, Math.PI * 2);
+      note.vx = Math.cos(a) * rand(2, 7);
+      note.vz = Math.sin(a) * rand(2, 7);
+      note.vy = rand(3, 8);
+      note.gravity = -9;
+      note.drag = 1.2;
+      note.spin = rand(-5, 5);
+      note.life = rand(0.9, 1.5);
+    }
+  }
+
   private direct(f: ShowFrame) {
     const scene = f.match.cutscene;
     let cut = this.cut;
     // A new cast, including one straight after another.
     if (scene && (!cut || cut.owner !== scene.owner || cut.resumedAt < Infinity)) {
       if (cut) this.finish(cut);
-      this.begin(scene.owner, scene.total, scene.total - scene.left);
+      const caster = f.match.players.find((p) => p.id === scene.owner);
+      this.begin(
+        scene.owner,
+        (caster && CUT_THEMES[caster.fighter]) ?? CUT_THEMES.brandon_n!,
+        scene.total,
+        scene.total - scene.left,
+      );
       cut = this.cut;
     }
     if (!cut) return;
@@ -2093,6 +2180,8 @@ export class SwiperShow {
       cut.resumedAt = now;
       // Play is back: any beat that had not started yet belongs to the pause.
       cut.beats.length = 0;
+      // Brandon's payoff comes with his burst; other casters get an encore.
+      if (!cut.theme.reader) this.encore(cut);
     }
     while (cut.beats.length && cut.beats[0].at <= t) cut.beats.shift()!.run();
     const since = now - cut.resumedAt;
@@ -2129,6 +2218,7 @@ export class SwiperShow {
   private cineDraw(now: number) {
     const cut = this.cut;
     if (!cut) return;
+    const th = cut.theme;
     const t = now - cut.start,
       k = cut.keys,
       since = now - cut.resumedAt,
@@ -2138,21 +2228,21 @@ export class SwiperShow {
     if (!cut.short && t > k.power && t < k.swipe) {
       // A glowing dining hall rises behind him, light bursting through it.
       const a = sat((t - k.power - 0.15) / 0.4) * sat((k.swipe - t) / 0.3);
-      this.screenQuad("rays", this.post.cx * 2 - 1, this.post.cy * 2 - 1, 2.8, GOLD, 0.26 * a, true, 2.8, t * 0.5);
-      this.screenQuad("hall", 0, 0.34, 0.62, GOLD, 0.5 * a, true);
+      this.screenQuad("rays", this.post.cx * 2 - 1, this.post.cy * 2 - 1, 2.8, th.color, 0.26 * a, true, 2.8, t * 0.5);
+      if (th.hall) this.screenQuad("hall", 0, 0.34, 0.62, th.color, 0.5 * a, true);
       if (who) {
         // The raised card: gold, then brighter, then blinding.
-        _c.setHex(GOLD).lerp(_white, power);
+        _c.setHex(th.color).lerp(_white, power);
         this.quad("dot", who.at.x, 3.3, who.at.y, 1.2 + 5.5 * power, 0, _c.getHex(), 0.45 + 0.55 * power, true);
         this.quad("star", who.at.x, 3.3, who.at.y, 1 + 3 * power, t * 3, 0xffffff, 0.9, true);
-        this.quad("card", who.at.x, 3.3, who.at.y, 0.7, Math.sin(t * 5) * 0.2, 0xffffff, 1, false);
+        this.quad(th.card, who.at.x, 3.3, who.at.y, 0.7, Math.sin(t * 5) * 0.2, 0xffffff, 1, false);
       }
     }
     if (t >= k.name && t < k.swipe) {
       // Legendary glow: a hue-cycling halo behind the title.
-      const h = Math.min(0.24, (0.94 * aspect) / this.rect("ult").aspect) * 1.07;
+      const h = Math.min(0.24, (0.94 * aspect) / this.rect(th.title).aspect) * 1.07;
       _c.setHSL((t * 0.7) % 1, 1, 0.6);
-      this.screenQuad("ult", 0, 0.3, h, _c.getHex(), 0.4 + 0.2 * Math.sin(t * 11), true);
+      this.screenQuad(th.title, 0, 0.3, h, _c.getHex(), 0.4 + 0.2 * Math.sin(t * 11), true);
     }
     // Letterbox: slams in at the trigger, slides away on the exit.
     const bar =
@@ -2732,4 +2822,4 @@ export class SwiperShow {
 
 /** True when a match has a fighter the show is for. */
 export const hasSwiper = (match: Match) =>
-  match.players.some((p) => p.fighter === SWIPER);
+  match.players.some((p) => p.fighter === SWIPER || !!CUT_THEMES[p.fighter]);

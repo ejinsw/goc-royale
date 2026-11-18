@@ -1208,7 +1208,7 @@ export class Engine {
     }
   }
   /** Turn a homing shot toward the nearest rival ahead that its owner can see. */
-  private steer(q: Projectile, owner: Player, maxTurn: number) {
+  private steer(q: Projectile, owner: Player, maxTurn: number, anywhere = false) {
     let best: Player | null = null,
       bestD = Infinity;
     for (const t of this.state.players) {
@@ -1220,7 +1220,7 @@ export class Engine {
       if (
         len < 1e-6 ||
         len > q.remaining + 1 ||
-        (d.x * q.dir.x + d.y * q.dir.y) / len < 0.34
+        (!anywhere && (d.x * q.dir.x + d.y * q.dir.y) / len < 0.34)
       )
         continue;
       if (len < bestD && this.lineClear(q.pos, t.pos)) {
@@ -1354,7 +1354,8 @@ export class Engine {
       const speed = sup ? sup.speed : f.projectileSpeed;
       const power = sup ? sup.damage : f.damage;
       const width = sup ? sup.width : (spec.width ?? SHOT_WIDTH);
-      if (!sup && spec.homing && !q.back)
+      if (!sup && spec.seek) this.steer(q, owner, Math.PI, true);
+      else if (!sup && spec.homing && !q.back)
         this.steer(q, owner, spec.homing * dt);
       let dead = false;
       const dist = Math.min(speed * dt, q.remaining);

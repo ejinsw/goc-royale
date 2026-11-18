@@ -1181,3 +1181,48 @@ Verification: `npm test` 136/136 with one new test for the case above, and
 `npm run build` passes. The dropped request was reproduced in a browser on
 the live build's code before the fix; the fix itself is covered by the unit
 test only.
+
+## November 17, 2026 — Aimbot cards, 2,000-damage Rizz, an Aura Pulse cutscene (`brandon-aimbot-ethan-cutscene`)
+
+User requests. These are deliberate balance changes, not fixes, and they
+make two fighters far stronger than the rest of the roster. They were not
+reviewed by the repository owner before being written.
+
+**Brandon Nguyen**
+
+- Card Swipe gains a new shot option, `seek`: each step a card turns
+  straight at the nearest visible rival in reach, whichever way it was
+  fired. All three cards converge, so a swipe is 1,020 at any distance and
+  any aim. Cover, range and spawn protection still stop it, and it cannot
+  target a rival hidden in a bush.
+- Range 7 to 11, now level with Rich for the longest in the game.
+
+**Ethan**
+
+- Rizz deals 2,000 per note, up from 420. Both notes land together, so one
+  shot is 4,000: it removes most fighters in two shots and fills his Super
+  in two.
+- Aura Pulse now plays a cutscene with the same match-wide pause as Swipe
+  You In (3.8 s, 1.2 s on a repeat within 20 s, unskippable). Its rule is
+  unchanged: it still knocks out every rival within 4 units when it
+  resolves.
+
+The cutscene beats are shared and themed per fighter in
+`client/src/arena/swiper.ts` (`CUT_THEMES`): Ethan's is pink, titled "AURA
+PULSE", sweeps a music note across the screen, stamps "MIC DROP" and ends
+with a burst of notes. He has no panels, dining hall or card reader. The
+showcase is now built for a match containing either fighter.
+
+Two Supers now stop the match clock, and Ethan's is a knockout, so the
+section 6.1 exception recorded above is wider than it was.
+
+Verification: `npm test` 136/136 and `npm run build` pass. Tests cover a
+swipe fired directly away from a rival 10 units off landing all three
+cards, cover blocking it, Rizz dealing 4,000, and Aura Pulse resolving after
+its pause. In a desktop browser on a virtual clock, Ethan's cutscene was
+captured at six points and knocked out the rival on resume; Brandon's
+cutscene was re-captured after the refactor; a swipe aimed away from a rival
+9 units off dealt 1,020. No frame errors.
+
+Not verified: any phone, two networked clients, a human playtest, or the
+bot balance report (`npm run balance` lives on the unmerged PR 4 branch).

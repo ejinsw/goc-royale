@@ -609,8 +609,8 @@ test("Ethan Rizz spends one ammo for two damaging notes", () => {
   assert.equal(p.ammo, 2);
   assert.equal(e.state.projectiles.length, 2);
   advance(e, 0.25);
-  assert.equal(target.hp, hp - 840);
-  assert.equal(p.charge, 840);
+  assert.equal(target.hp, hp - 4000);
+  assert.equal(p.charge, 4000);
 });
 test("Ethan Aura Pulse knocks out rivals, spares allies, respects range and does not recharge", () => {
   const e = engine("ethan", "broomball");
@@ -626,6 +626,8 @@ test("Ethan Aura Pulse knocks out rivals, spares allies, respects range and does
     farHp = far.hp;
   p.charge = 5000;
   assert.equal(e.activateSuper(p), true);
+  // Aura Pulse now plays a cutscene: the match holds, then it resolves.
+  while (e.state.cutscene) e.step();
   assert.equal(p.hp, 3900);
   assert.equal(ally.hp, FIGHTERS[ally.fighter].hp - 500);
   assert.equal(far.hp, farHp);
@@ -647,6 +649,8 @@ test("Aura Pulse cannot pass through walls or activate while carrying the ball",
   assert.equal(p.charge, 5000);
   e.state.ball.carrier = null;
   assert.equal(e.activateSuper(p), true);
+  // Aura Pulse now plays a cutscene: the match holds, then it resolves.
+  while (e.state.cutscene) e.step();
   assert.equal(enemy.hp, hp);
 });
 
@@ -660,6 +664,8 @@ test("Aura Pulse respects spawn protection and knocks out multiple opponents", (
   shielded.protectedUntil = e.state.time + 1.5;
   p.charge = 5000;
   e.activateSuper(p);
+  // Aura Pulse now plays a cutscene: the match holds, then it resolves.
+  while (e.state.cutscene) e.step();
   assert.equal(a.alive, false);
   assert.equal(b.alive, false);
   assert.equal(shielded.hp, FIGHTERS[shielded.fighter].hp);
@@ -1188,10 +1194,19 @@ test("Brandon Nguyen's card fan lands all three up close and one at range; Swipe
   const far = duel("brandon_n");
   const [q, u] = far.playerList;
   q.pos = { x: 10, y: 12 };
-  u.pos = { x: 16, y: 12 };
-  fire(far);
-  advance(far, 0.6);
-  assert.equal(u.hp, FIGHTERS[u.fighter].hp - 340, "one thrown card");
+  u.pos = { x: 20, y: 12 };
+  // Fired the wrong way entirely: the cards turn and all three still land.
+  fire(far, "p0", { x: -1, y: 0 });
+  advance(far, 1);
+  assert.equal(u.hp, FIGHTERS[u.fighter].hp - 3 * 340, "they do not miss");
+  const blocked = duel("brandon_n");
+  const [w, hidden] = blocked.playerList;
+  w.pos = { x: 10, y: 12 };
+  hidden.pos = { x: 16, y: 12 };
+  blocked.state.walls = [{ id: "cover", x: 13, y: 10, w: 0.5, h: 4 }];
+  fire(blocked);
+  advance(blocked, 1);
+  assert.equal(hidden.hp, FIGHTERS[hidden.fighter].hp, "cover still stops them");
 
   const e = engine("brandon_n", "broomball");
   const [me, ally, away, rival] = e.playerList;
@@ -1336,6 +1351,8 @@ test("Aura Pulse still knocks out a shielded rival", () => {
   t.shieldUntil = e.state.time + 5;
   charged(p);
   e.activateSuper(p);
+  // Aura Pulse now plays a cutscene: the match holds, then it resolves.
+  while (e.state.cutscene) e.step();
   assert.equal(t.alive, false);
 });
 
