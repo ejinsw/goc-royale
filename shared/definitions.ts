@@ -75,6 +75,12 @@ export interface ShotSpec {
   returns?: boolean;
   /** Turns toward the nearest visible rival ahead, up to this rate (rad/s). */
   homing?: number;
+  /**
+   * Aimbot: every step it turns straight at the nearest visible rival in
+   * reach, whichever way it was fired. Cover, range and spawn protection
+   * still stop it, and it cannot see a rival hidden in a bush.
+   */
+  seek?: boolean;
   /** Seconds a hit rival stays visible inside bushes. */
   reveal?: number;
   /** Heals an injured teammate it touches by this much. */
@@ -438,13 +444,13 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     speed: 5.2,
     ammo: 3,
     reload: 1.4,
-    damage: 420,
+    damage: 2000,
     range: 8,
     projectileSpeed: 14,
     attack: "Rizz",
     super: "Aura Pulse",
     color: "#df83c8",
-    description: "Strum two notes, each dealing 420 damage.",
+    description: "Strum two notes, each dealing 2,000 damage.",
     superDescription:
       "Instantly knock out rivals within 4 units. Walls and spawn protection block it.",
     abilities: {
@@ -455,6 +461,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
         radius: 4,
         damage: "knockout",
         effect: "aura",
+        cutscene: { seconds: 3.8, again: 1.2, window: 20 },
       },
     },
   },
@@ -766,19 +773,19 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     ammo: 3,
     reload: 1.15,
     damage: 340,
-    range: 7,
+    range: 11,
     projectileSpeed: 15,
     attack: "Card Swipe",
     super: "Swipe You In",
     color: "#2d6fc0",
     description:
-      "Slash with a meal card and fling three like shuriken. All three land up close.",
+      "Fling three meal cards that lock onto the nearest rival in reach. They do not miss.",
     superDescription:
       "All-you-can-eat: heal yourself and nearby teammates 1,200 HP, plus a 600 shield for 4 seconds. Charges 20% faster.",
     // His Super is ready after about 4,170 damage instead of 5,000.
     chargeRate: 1.2,
     abilities: {
-      attack: { kind: "shot", spread: [-0.17, 0, 0.17] },
+      attack: { kind: "shot", spread: [-0.17, 0, 0.17], seek: true },
       super: {
         kind: "burst",
         at: 0,
