@@ -106,10 +106,10 @@ Super, as in the pilot rules.
 | Joyce | Care | Support | 5,300 | 5.2 | **Care Note**: 700, range 8.5. It curves up to 2.6 rad/s toward visible rivals ahead. | **Christmas Grams**: 1,800 healing to herself and every teammate anywhere, plus 1 s of protection. |
 | Miriam | Prayer | Peacekeeper | 5,200 | 5.2 | **Peace Dove**: 680, slows 30% for 1.5 s (the strongest slow applies, slows never stack). The dove glides in a gentle arc (0.45 at most), alternating sides. | **Be Still**: radius 3.5 around her, 400 damage and a 1.25 s stun. |
 | Jemuel | Prayer | Guardian | 6,800 | 5.2 | **Morning Light**: a ring of light around him, range 2.8, 900 to every rival in it. | **Prayer Covering**: a 2,000 shield for 6 s on himself and teammates within 4.5. Shields absorb damage first. Absorbed damage still counts as dealt. |
-| Russell | Finance | Disruptor | 5,500 | 5.2 | **Reimbursement**: 760, refunds 35% of the damage dealt as health. | **Budget Cuts**: radius 4.5 around him, 700 damage, and rivals' ammo is emptied. |
+| Russell | Finance | Disruptor | 5,500 | 5.2 | **Reimbursement**: a coin pouch lobbed over cover to the held distance (range 7.5); radius 1.1 splash, 700 to each rival in it, and 35% of all splash damage refunded as health. (November 20, 2026; was a 760 straight shot.) | **Budget Cuts**: radius 4.5 around him, 700 damage, and rivals' ammo is emptied. |
 
-Aura Pulse (Ethan) still knocks out a shielded rival: "knockout" removes the
-shield as well.
+Aura Pulse (Ethan) is no longer a knockout (November 20, 2026): 1,200 damage
+and a 1.5 shove within 3.5 units, which a shield absorbs first.
 
 ## How it is built
 

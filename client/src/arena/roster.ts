@@ -84,6 +84,7 @@ const THEMES: Record<RosterId, Theme> = {
       super: "WELCOME!",
       win: "NEW FRIEND!",
     },
+    extra: { followup: "FOLLOW-UP!" },
     voice: { attack: "whoosh", hit: "pop", super: "chime", pitch: 1 },
   },
   daniel: {
@@ -1012,7 +1013,12 @@ export class RosterShow extends SpriteShow {
     s.combo++;
     if (this.now - s.hitWordAt > 0.45) {
       s.hitWordAt = this.now;
-      const key = s.fighter === "rich" && value >= 1500 ? "far" : "hit";
+      const key =
+        s.fighter === "rich" && value >= 1500
+          ? "far"
+          : s.fighter === "brandon" && value >= FIGHTERS.brandon.damage + 300
+            ? "followup"
+            : "hit";
       this.stamp(this.word(s, key), at, TARGET_Y, big ? 0.6 : 0.48, th.color, 0.85, rand(-0.18, 0.18));
     }
     if (value >= 300) this.freeze(big ? 70 : 40, s.id);
@@ -1356,8 +1362,8 @@ export class RosterShow extends SpriteShow {
         }
         return;
       case "splash":
-        // Samuel's bag bursts: snacks everywhere.
-        this.voice(s, "crunch", 60);
+        // A lob bursts: the thrower's own things everywhere.
+        this.voice(s, s.theme.voice.hit, 60);
         this.spray(this.icon(s, 1), e.pos.x, 0.6, e.pos.y, 8, { speed: 3.5, up: [3, 5], bounce: 0.45, size: [0.2, 0.3] });
         this.spray(this.icon(s, 0), e.pos.x, 0.6, e.pos.y, 3, { speed: 2.5, up: [3, 4.5], bounce: 0.45, size: [0.26, 0.32] });
         return;

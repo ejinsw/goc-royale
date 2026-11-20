@@ -72,8 +72,6 @@ const attackShape = (id: FighterId): AimShape => {
       return { kind: "circle", distance: fighter.range, radius: attack.radius + RULES.radius };
     case "shot": {
       const w = reach(attack.width);
-      // Aimbot cards turn to any rival in reach, whichever way they fly.
-      if (attack.seek) return { kind: "circle", distance: 0, radius: fighter.range + w };
       const spread = attack.spread ?? [0];
       if (attack.weave) {
         // Spread shots bend away from the aim; an alternating shot may bend

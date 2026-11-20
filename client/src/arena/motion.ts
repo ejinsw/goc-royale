@@ -306,17 +306,6 @@ const ATTACK: Record<string, ClipFn> = {
     p[SQUASH] = 0.05 * flare - 0.04 * (lift - flare);
     p[B.head * 3] = -0.3 * lift;
   },
-  /** Thumb-flick a coin, then point after it. */
-  flip(t, p, hold, d) {
-    const n = t / d;
-    const flick = bump(n, 0.25, 0.32, 0.5);
-    const point = bump(n, 0.42, 0.55, 1);
-    const on = Math.max(seg(n, 0, 0.2) * (1 - seg(n, 0.42, 0.55)), point);
-    armR(p, hold, -1.0 - 0.6 * flick - 0.65 * point, 0.15, on);
-    p[B.head * 3] = -0.3 * flick;
-    p[B.torso * 3 + 1] = -0.25 * point;
-    p[SQUASH] = 0.04 * flick;
-  },
 };
 
 // ------------------------------------------------------------------- supers
@@ -1007,7 +996,7 @@ export const MOTION: Record<FighterId, Record<StyledClip, Pick>> = {
     victory: [WIN.flex, 1.6],
   },
   russell: {
-    basic_attack: [ATTACK.flip, 0.36],
+    basic_attack: [ATTACK.underhand, 0.42],
     super: [SUPER.cuts, 0.75],
     hit: [HIT.crumple, 0.3],
     eliminated: [DOWN.kneel, 1],

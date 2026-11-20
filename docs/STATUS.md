@@ -1327,3 +1327,74 @@ Not verified: any phone, two networked clients, real-time frame pacing or
 GPU time, audio by ear, a human playtest, or balance beyond the numbers
 above. The new sounds are synthesized cues in the existing table. Emoji
 icons fall back to colored badges on devices that cannot draw emoji.
+
+## November 20, 2026 — Attack item models and a Brandon buff (`feature/attack-models-brandon-buff`)
+
+User requests: better 3D models for the attack items, and a buff for
+Brandon (Welcome & Follow-Up).
+
+**Models** (`client/src/arena/attackModels.ts`): every thrown object and
+both pickup items are rebuilt from painted primitives and extruded
+silhouettes in one asset factory, replacing the inline primitives in
+`fx.ts`: a red "HELLO" name sticker (Brandon), a key ring with two cut keys
+and a fob (Daniel), a crimped snack bag with cookie labels (Samuel), a
+beetle-shaped bug with glitch spots and red error eyes (Elijah), an eighth
+note (Ethan), layered gold and blue sound arcs (David), a barbed hook with a
+lure fish (Dylan), a chunky staple (Isaac), a welcome crest with hearts
+(Rosalie), a steering wheel (Joelle), a social post (Susannah), a folded
+paper plane (Joyce), a dove with an olive branch (Miriam), a dollar coin
+(Russell), a UCLA meal card (Brandon Nguyen), a golden broom with a fanned
+head, and a tri-fold GOC flyer. Draws are unchanged (one instanced mesh per
+type, the shared toon material); models are 132 to 1,160 triangles, under
+a 1,500 budget enforced by `tests/attackModels.test.ts`.
+
+**Brandon buff** (a requested balance change, not reviewed by the owner):
+
+| | Was | Now |
+|---|---:|---:|
+| HP | 5,700 | 6,200 |
+| Nametag damage | 700 | 850 |
+| Reload | 1.3 s | 1.1 s |
+| Nametag speed | 12 | 15 |
+| Hit width | 0.13 | 0.2 |
+| Mark (reveal) | 4 s | 5 s |
+| Follow-Up (new) | — | +350 on a rival still marked |
+| Welcome Committee radius | 3.5 | 4.5 |
+| Duration | 5 s | 7 s |
+| Ally heal | 220/s | 400/s |
+| Rival slow | 30% | 40% |
+
+Follow-Up is a new shot option, `followUp`: bonus damage against a rival
+still marked (revealed) when the shot lands, so a second nametag within
+5 s deals 1,200. The roster show stamps "FOLLOW-UP!" on it.
+
+Verification: `npm test` (148) and `npm run build` pass, including the aim
+preview accuracy check with the wider nametag. In the desktop game-camera
+harness: a close-up sheet of every model with the arena material and
+lighting, all projectiles captured in flight, the follow-up hit and the
+larger Welcome circle, with no frame errors.
+
+Not verified: any phone, two networked clients, a playtest of the buff.
+
+**Same branch, follow-up request: nerf Ethan hard, make someone a lobber
+like Susannah, and stop Brandon Nguyen's cards homing.** Balance changes,
+requested explicitly:
+
+- **Ethan**: Rizz 2,000 to 380 per note (760 per strum, below his original
+  840). Aura Pulse is no longer a knockout: 1,200 damage and a 1.5 shove,
+  radius 4 to 3.5, which shields absorb. Its cutscene is unchanged. The
+  burst `"knockout"` damage option had no other user and was removed.
+- **Russell** becomes a lobber: Reimbursement is a coin pouch thrown over
+  cover to the held distance (range 7.5, speed 11), radius 1.1 splash, 700
+  to each rival in it, and 35% of all the splash damage refunded (new
+  `lifesteal` option on `lob`). New pouch model, an underhand toss clip,
+  and the generic lob aim circle, prediction and touch auto-distance.
+- **Brandon Nguyen**: the cards no longer home. Three cards fan out
+  0.17 rad apart; up close all three land, at range usually one. Range 11,
+  340 per card and reload 1.15 s are unchanged. The `seek` option had no
+  other user and was removed; his aim preview is the three-lane fan again.
+
+Verification: `npm test` (148) and `npm run build` pass; engine tests cover
+each change and the aim accuracy test covers Russell's and Brandon
+Nguyen's new footprints. Russell's lob was captured in the game camera
+(aim circle, arc, landing). Not verified: phones, two clients, a playtest.
