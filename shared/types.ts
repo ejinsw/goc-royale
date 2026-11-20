@@ -13,6 +13,8 @@ export interface Member {
   team: 0 | 1;
   ready: boolean;
   connected: boolean;
+  /** Played by the room's bot brain (shared/bot.ts), not a connection. */
+  bot?: boolean;
 }
 export interface Lobby {
   code: string;
@@ -279,7 +281,10 @@ export interface Match {
   ackTime: number;
 }
 export type Command =
-  | { type: "select"; fighter: FighterId }
+  /** Pick a fighter; the host may pick for a bot by passing its `id`. */
+  | { type: "select"; fighter: FighterId; id?: string }
+  /** Host: add a bot, optionally as a given fighter. */
+  | { type: "bot"; fighter?: FighterId }
   | { type: "ready"; ready: boolean }
   | { type: "mode"; mode: Mode }
   | { type: "team"; id: string; team: 0 | 1 }

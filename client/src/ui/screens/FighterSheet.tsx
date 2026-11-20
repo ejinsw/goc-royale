@@ -1,5 +1,7 @@
 import { FIGHTERS, IDS, type FighterId } from "../../../../shared/definitions";
 import { fighterArt } from "../../art";
+import type { PressResult } from "../core/control";
+import type { IconName } from "../core/icons";
 import { menuKit } from "../menu/menuKit";
 
 const { Control, Display } = menuKit;
@@ -13,16 +15,22 @@ const MAX_RANGE = Math.max(...IDS.map((id) => FIGHTERS[id].range));
  */
 export function FighterSheet({
   value,
+  title,
+  actions,
   onPick,
   onClose,
 }: {
   value: FighterId;
+  /** Whose fighter this is, when the host picks for a bot. */
+  title?: string;
+  /** Extra host actions for that bot (team, remove), above Done. */
+  actions?: { key: string; label: string; icon: IconName; onPress: () => PressResult }[];
   onPick: (id: FighterId) => void;
   onClose: () => void;
 }) {
   const f = FIGHTERS[value];
   return (
-    <Display kind="sheet" title="Fighters" icon="users" onClose={onClose}>
+    <Display kind="sheet" title={title ?? "Fighters"} icon={title ? "bot" : "users"} onClose={onClose}>
       <div className="picker-strip" role="group" aria-label="Choose a fighter">
         {IDS.map((id) => (
           <Control
@@ -76,6 +84,13 @@ export function FighterSheet({
           <p>{f.superDescription}</p>
         </div>
       </Display>
+      {!!actions?.length && (
+        <div className="picker-actions">
+          {actions.map((a) => (
+            <Control key={a.key} kind="button" variant="dark" icon={a.icon} label={a.label} onPress={a.onPress} />
+          ))}
+        </div>
+      )}
       <Control kind="button" variant="primary" size="lg" icon="check" label="Done" onPress={onClose} />
     </Display>
   );

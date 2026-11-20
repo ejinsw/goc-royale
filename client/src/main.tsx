@@ -71,6 +71,8 @@ function App() {
     [code, setCode] = useState(new URLSearchParams(location.search).get("room")?.toUpperCase() || ""),
     [chosen, setChosen] = useState<FighterId>("brandon"),
     [picker, setPicker] = useState(false),
+    // The host can open the picker for a bot; null means for yourself.
+    [pickerFor, setPickerFor] = useState<string | null>(null),
     [settings, setSettings] = useState(false),
     [spectate, setSpectate] = useState<string | null>(null),
     [prefs, setPrefs] = useState<SettingsValues>(loadPreferences);
@@ -244,6 +246,7 @@ function App() {
     setLobby(null);
     setMatchPhase(null);
     setPicker(false);
+    setPickerFor(null);
     store.current.clear();
     bridge.current.match = null;
     bridge.current.input = initialInput();
@@ -264,6 +267,11 @@ function App() {
     }
   };
   const openPicker = () => {
+    setPickerFor(null);
+    setPicker(true);
+  };
+  const pickForBot = (id: string) => {
+    setPickerFor(id);
     setPicker(true);
   };
   const openSettings = () => {
@@ -289,20 +297,37 @@ function App() {
       throw new Error("Fullscreen unavailable");
     }
   };
+  const pickerBot = pickerFor ? lobby?.members.find((m) => m.id === pickerFor && m.bot) : undefined;
+  // A bot removed while its picker is open closes the picker.
+  useEffect(() => {
+    if (pickerFor && !pickerBot) {
+      setPickerFor(null);
+      setPicker(false);
+    }
+  }, [pickerFor, pickerBot]);
   const pickFighter = (id: FighterId) => {
+    if (pickerBot) {
+      command({ type: "select", fighter: id, id: pickerBot.id });
+      return;
+    }
     setChosen(id);
     if (lobbyView) command({ type: "select", fighter: id });
   };
 
   const screen: StageScreen = picker ? "picker" : finished ? "results" : lobbyView ? "lobby" : "home";
   const frame = stageFrame(screen, portrait);
-  const pickerFighter = lobbyView && me ? me.fighter : chosen;
+  const pickerFighter = pickerBot ? pickerBot.fighter : lobbyView && me ? me.fighter : chosen;
   const view = useMemo(() => {
-    if (picker) return homeStage(pickerFighter, frame, openPicker, lobbyView ? selfId : "self");
+    if (picker)
+      return homeStage(pickerFighter, frame, openPicker, pickerBot ? pickerBot.id : lobbyView ? selfId : "self");
     if (finished) return resultsStage(finished, selfId, frame);
     if (lobby && lobbyView)
       return lobbyStage(lobby, selfId, frame, {
         openPicker,
+        pickFor: (id) => {
+          pickForBot(id);
+          return "confirm";
+        },
         setTeam: (id, team) => {
           command({ type: "team", id, team });
           return "confirm";
@@ -313,7 +338,7 @@ function App() {
         },
       });
     return homeStage(chosen, frame, openPicker, "self");
-  }, [picker, pickerFighter, finished, lobby, lobbyView, selfId, chosen, frame]);
+  }, [picker, pickerFighter, pickerBot?.id, finished, lobby, lobbyView, selfId, chosen, frame]);
 
   return (
     <div className={inGame ? "app playing" : "app"}>
@@ -345,7 +370,45 @@ function App() {
           onSettings={openSettings}
         />
       )}
-      {picker && <FighterSheet value={pickerFighter} onPick={pickFighter} onClose={() => setPicker(false)} />}
+      {picker && (
+        <FighterSheet
+          value={pickerFighter}
+          title={pickerBot ? pickerBot.name : undefined}
+          actions={
+            pickerBot
+              ? [
+                  ...(lobby?.mode === "broomball"
+                    ? [
+                        {
+                          key: "team",
+                          label: `Move to ${pickerBot.team === 0 ? "Red" : "Blue"}`,
+                          icon: "swap" as const,
+                          onPress: (): PressResult => {
+                            command({ type: "team", id: pickerBot.id, team: pickerBot.team === 0 ? 1 : 0 });
+                            return "confirm";
+                          },
+                        },
+                      ]
+                    : []),
+                  {
+                    key: "remove",
+                    label: "Remove bot",
+                    icon: "close" as const,
+                    onPress: (): PressResult => {
+                      command({ type: "kick", id: pickerBot.id });
+                      return "confirm";
+                    },
+                  },
+                ]
+              : undefined
+          }
+          onPick={pickFighter}
+          onClose={() => {
+            setPicker(false);
+            setPickerFor(null);
+          }}
+        />
+      )}
       {inGame && (
         <MatchHud
           store={store.current}

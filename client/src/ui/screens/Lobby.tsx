@@ -39,6 +39,8 @@ export function LobbyScreen({ lobby, selfId, command, onCopy, onLeave, onFighter
   const ready = lobby.members.filter((m) => m.ready).length;
   const blocked = startBlocked(lobby);
   const count = lobby.members.length;
+  const capacity = MODES[lobby.mode].capacity;
+  const full = count >= capacity;
   return (
     <main className="screen lobby">
       <header className="bar">
@@ -82,6 +84,19 @@ export function LobbyScreen({ lobby, selfId, command, onCopy, onLeave, onFighter
             sub={me ? FIGHTERS[me.fighter].name : ""}
             onPress={onFighters}
           />
+          {host && (
+            <Control
+              kind="button"
+              variant="dark"
+              icon="bot"
+              label="Add bot"
+              disabled={full ? `The room holds ${capacity}` : undefined}
+              onPress={() => {
+                command({ type: "bot" });
+                return "confirm";
+              }}
+            />
+          )}
           {host && lobby.mode === "broomball" && (
             <Control
               kind="button"
