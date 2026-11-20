@@ -188,7 +188,10 @@ Every pressable control plays, through the shared feedback engine:
   October 31, 2026). Fighters keep their own colors on their models and
   portraits; interface chrome does not borrow them.
 - Team identity in the interface uses shape and text (`▲ BLUE`, `◆ RED`), not
-  a second accent color.
+  a second accent color. In-world team markers in the arena (ground rings and,
+  in team modes, fighter name labels) use the arena's two team colors, always
+  together with the ▲ / ◆ shape (user decision, November 20, 2026); interface
+  chrome still does not.
 - All colors, sizes, depths, and timings come from `ui/core/tokens.ts`.
 
 ### 5.3 Motion and accessibility

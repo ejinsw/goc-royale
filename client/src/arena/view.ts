@@ -200,6 +200,12 @@ interface DamageNumber {
 
 const hex = (c: string) => parseInt(c.slice(1), 16);
 const TEAM_COLOR = [0x418bdd, 0xe45e6c] as const;
+/**
+ * Team tints for fighter names in team modes (Fish and Fishers, Broomball's
+ * blue and red): the ring colors, lightened so names stay readable on their
+ * dark outline. Always paired with the name's ▲ / ◆, never color alone.
+ */
+const TEAM_NAME = [0x9ccfff, 0xff96a2] as const;
 
 export function createArenaView(container: HTMLElement): ArenaView | null {
   const canvas = document.createElement("canvas");
@@ -806,7 +812,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
           0.95,
         );
       const name = `${teams ? (p.team === 0 ? "▲ " : "◆ ") : ""}${p.name}${p.connected ? "" : " · offline"}`;
-      billboards.label(at, 27 * ui, billboards.text(p.id, name), 12.5 * ui);
+      billboards.label(at, 27 * ui, billboards.text(p.id, name), 12.5 * ui, teams ? TEAM_NAME[p.team] : 0xffffff);
       if (p.stunUntil > s.time)
         for (let k = 0; k < 2; k++) {
           const ang = time * 5 + k * Math.PI;
