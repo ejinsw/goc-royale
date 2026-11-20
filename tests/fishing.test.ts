@@ -153,6 +153,25 @@ test("fishing: a knocked-out Fisher comes back as a Fisher; Fish never come back
   assert.equal(far(fisher.pos), Math.max(...bear.map(far)));
 });
 
+test("fishing: a Fisher never respawns on top of a fighter standing at the Bear", () => {
+  const e = match(6);
+  spread(e);
+  const [fish] = fishOf(e);
+  const [down, standing] = fishersOf(e);
+  const far = (p: { x: number; y: number }) =>
+    Math.min(...fishOf(e).map((f) => distance(f.pos, p)));
+  // Another Fisher stands on the point that would otherwise be chosen.
+  const best = bear.reduce((a, b) => (far(b) > far(a) ? b : a));
+  standing.pos = { ...best };
+  e.damage(down, 1e6, fish);
+  advance(e, MODES.fishing.respawn! + 0.1);
+  assert.ok(down.alive && atBear(down));
+  assert.ok(distance(down.pos, standing.pos) > 0.84, "respawned on a free point");
+  // The farthest free point from living Fish is used.
+  const free = bear.filter((b) => distance(b, standing.pos) > 0.84);
+  assert.equal(far(down.pos), Math.max(...free.map(far)));
+});
+
 test("fishing: the Fishers win when every Fish is caught, with placements by how long each stayed free", () => {
   const e = match(5);
   spread(e);

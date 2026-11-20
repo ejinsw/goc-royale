@@ -26,7 +26,7 @@ roster.
 | Sides | Team 0 = Fish (still free), team 1 = Fishers. Each side is a team of allies: no friendly fire, and heals and shields help teammates. |
 | Start | Fishers around the Bruin Bear in the middle; Fish on the map's spawn points around the edge. |
 | Catching | A Fish eliminated by anything joins the Fishers at once. Its catcher gets a catch. Its projectiles, placed areas, thrown items and pending Super windups are withdrawn so they cannot change sides. |
-| Respawn | Fishers (including newly caught Fish) come back after 2 s at the point by the Bruin Bear farthest from living Fish, with the normal 1.5 s spawn protection. Fish never come back as Fish. |
+| Respawn | Fishers (including newly caught Fish) come back after 2 s at the point by the Bruin Bear farthest from living Fish that no one is standing on, with the normal 1.5 s spawn protection. Fish never come back as Fish. |
 | Speed | Fishers move 10% faster (`MODES.fishing.teamSpeed`). |
 | Vision | Bushes hide rivals unless the viewer or a living teammate is within 2.5 units. The last Fish cannot hide. |
 | Win | Fishers: every Fish caught. Fish: at least one free when 2:30 runs out. |
@@ -61,8 +61,9 @@ one-player Showdown.
 - HUD: `▲ N FISH` / `M FISHERS ◆` beside the clock, a role badge
   (`▲ YOU'RE A FISH · STAY FREE` or `◆ YOU'RE A FISHER · CATCH THEM`), and
   "Back in N · At the Bruin Bear, as a Fisher" while respawning. Team rings and
-  name glyphs use the Broomball blue/red treatment, so a caught Fish visibly
-  switches sides. Results lead with "N fish got away!" or "Everyone got
+  name glyphs use the Broomball blue/red treatment, and names are tinted by
+  side (light blue Fish, red Fishers), so a caught Fish visibly switches
+  sides. Results lead with "N fish got away!" or "Everyone got
   caught!", and the top catcher is starred.
 
 ## Bruin Plaza
@@ -127,6 +128,11 @@ Fishers' respawn points around the Bear, `s` Fish spawn.)
   unit south of its north face (`sightLimit` in `client/src/arena/map.ts`),
   which sight lines clear even at the top of the screen. There are no trees
   or canopies inside the field.
+- **No faces fighting for depth.** Ground layers (paths, road, pavers,
+  rings) sit on a fixed ladder 0.002 apart below the fighters' shadows, caps
+  stand proud of what they cap, and facade details step out from the wall.
+  `tests/mapArt.test.ts` fails if any two visible faces of different color
+  share a plane and overlap.
 - **Fish start at least 8 units from the Bear** on ten spawns around the
   edge; nobody starts in a bush. Sixteen bushes (planting beds) give the Fish
   places to hide.

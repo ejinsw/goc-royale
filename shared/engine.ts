@@ -683,9 +683,16 @@ export class Engine {
       ? map.respawns[p.team]
       : map.spawns;
     const rivals = s.players.filter((r) => r.alive && !this.allies(p, r));
+    // Never stack on a fighter already standing on a point while another is free.
+    const free = points.filter(
+      (point) =>
+        !s.players.some(
+          (o) => o.id !== p.id && o.alive && distance(o.pos, point) < 2 * RULES.radius,
+        ),
+    );
     let best = points[0],
       bestD = -1;
-    for (const point of points) {
+    for (const point of free.length ? free : points) {
       const d = Math.min(
         Infinity,
         ...rivals.map((r) => distance(r.pos, point)),

@@ -178,6 +178,23 @@ const PLAZA = { x: 22, y: 14, w: 16, h: 12 };
 const BRICK = "#b0644b";
 const STONE = "#e8dcc2";
 const PAVING = "#cfc9bb";
+/**
+ * Heights of the campus ground layers. Overlapping layers are at least 0.002
+ * apart so the depth buffer always separates them, and the top one stays under
+ * the fighters' shadows (0.02) and every ground effect above them.
+ */
+const GROUND = {
+  checker: 0.002,
+  paving: 0.004,
+  walk: 0.006,
+  road: 0.008,
+  lines: 0.01,
+  brick: 0.012,
+  joints: 0.014,
+  rings: 0.016,
+};
+/** Depth between stacked details on a south face (window, mullion, banner). */
+const FACE = 0.008;
 
 interface BuildingStyle {
   body: string;
@@ -216,7 +233,7 @@ function windows(st: Pick<BuildingStyle, "windows" | "glass" | "trim">, x0: numb
   const parts: BufferGeometry[] = [];
   if (st.windows === "bands") {
     for (let y = 0.55; y + 0.4 < top - 0.2; y += 0.8) parts.push(pane(st.glass, (x0 + x1) / 2, y + 0.19, x1 - x0 - 0.6, 0.38, z));
-    for (let x = x0 + 0.6; x < x1 - 0.4; x += 1.1) parts.push(pane(st.trim, x, (top - 0.1) / 2 + 0.2, 0.06, top - 0.7, z + 0.002));
+    for (let x = x0 + 0.6; x < x1 - 0.4; x += 1.1) parts.push(pane(st.trim, x, (top - 0.1) / 2 + 0.2, 0.06, top - 0.7, z + FACE));
   } else
     for (let y = st.windows === "arches" ? 0.5 : 0.45; y + (st.windows === "arches" ? 0.95 : 0.5) < top - 0.2; y += st.windows === "arches" ? 1.05 : 0.8)
       for (let x = x0 + 0.65; x < x1 - 0.45; x += 1)
@@ -233,25 +250,28 @@ function windows(st: Pick<BuildingStyle, "windows" | "glass" | "trim">, x0: numb
 function building(w: Wall, st: BuildingStyle): BufferGeometry[] {
   const { x, y } = w,
     south = y + w.h,
-    face = south + 0.012,
+    face = south + FACE,
     fd = 1,
-    fh = Math.min(st.facade, sightLimit(w.h - fd));
+    fh = Math.min(st.facade, sightLimit(w.h - fd)) - 0.06,
+    roofTop = CAMPUS_BODY + 0.06;
   const parts = [
-    flat(PAVING, x - 0.8, y - 0.8, w.w + 1.6, w.h + 1.6, 0.006),
+    flat(PAVING, x - 0.8, y - 0.8, w.w + 1.6, w.h + 1.6, GROUND.paving),
     block(st.body, x, y, w.w, w.h, CAMPUS_BODY),
-    block(st.trim, x - 0.04, y - 0.04, w.w + 0.08, w.h + 0.08, 0.08, CAMPUS_BODY - 0.08),
-    block(st.roof, x + 0.12, y + 0.12, w.w - 0.24, w.h - 0.24, 0.04, CAMPUS_BODY),
+    // Cornice proud of the walls and the roof proud of the cornice: no two
+    // tops share a plane.
+    block(st.trim, x - 0.04, y - 0.04, w.w + 0.08, w.h + 0.08, 0.1, CAMPUS_BODY - 0.07),
+    block(st.roof, x + 0.12, y + 0.12, w.w - 0.24, w.h - 0.24, roofTop - CAMPUS_BODY, CAMPUS_BODY),
     block(st.body, x, south - fd, w.w, fd, fh),
-    block(st.trim, x - 0.05, south - fd - 0.05, w.w + 0.1, fd + 0.1, 0.1, fh - 0.1),
-    block(st.trim, x - 0.03, south - 0.05, w.w + 0.06, 0.08, 0.22),
+    block(st.trim, x - 0.05, south - fd - 0.05, w.w + 0.1, fd + 0.1, 0.12, fh - 0.06),
+    block(st.trim, x - 0.03, south - 0.05, w.w + 0.06, 0.08 + 2 * FACE, 0.22),
     ...windows(st, x, x + w.w, fh, face),
-    pane("#2f3a46", x + w.w / 2, 0.5, 1.4, 1, face + 0.004),
+    pane("#2f3a46", x + w.w / 2, 0.5, 1.4, 1, face + 2 * FACE),
     // Rooftop plant near the north face, under the sight-line limit there.
     block("#a3a8ad", x + w.w * 0.2, y + 0.8, 1, 0.7, 0.32, CAMPUS_BODY),
     block("#a3a8ad", x + w.w * 0.62, y + 1.2, 0.8, 0.8, 0.28, CAMPUS_BODY),
   ];
-  if (st.stripe) parts.push(pane(st.stripe, x + w.w / 2, fh - 0.42, w.w, 0.16, face + 0.004));
-  if (st.skylight) parts.push(flat("#8fb4cc", x + 1.5, y + 2.2, w.w - 3, 1.2, CAMPUS_BODY + 0.045));
+  if (st.stripe) parts.push(pane(st.stripe, x + w.w / 2, fh - 0.42, w.w, 0.16, face + 2 * FACE));
+  if (st.skylight) parts.push(flat("#8fb4cc", x + 1.5, y + 2.2, w.w - 3, 1.2, roofTop + 0.004));
   if (st.tower) {
     const tw = 1.8,
       tx = x + w.w / 2 - tw / 2,
@@ -259,15 +279,15 @@ function building(w: Wall, st: BuildingStyle): BufferGeometry[] {
       th = Math.min(st.tower, sightLimit(w.h - tw));
     parts.push(
       block(st.body, tx, tz, tw, tw, th),
-      block(st.trim, tx - 0.06, tz - 0.06, tw + 0.12, tw + 0.12, 0.12, th - 0.12),
+      block(st.trim, tx - 0.06, tz - 0.06, tw + 0.12, tw + 0.12, 0.12, th - 0.06),
       ...[
         [tx, tz],
         [tx + tw - 0.4, tz],
         [tx, tz + tw - 0.4],
         [tx + tw - 0.4, tz + tw - 0.4],
-      ].map(([cx, cz]) => block(st.trim, cx, cz, 0.4, 0.4, 0.28, th)),
-      pane(st.glass, tx + tw / 2, th - 0.75, 0.4, 0.7, face + 0.004),
-      part(new PlaneGeometry(0.28, 0.28), st.glass, [tx + tw / 2, th - 0.4, face + 0.004], [0, 0, Math.PI / 4]),
+      ].map(([cx, cz]) => block(st.trim, cx, cz, 0.4, 0.4, 0.28, th + 0.06)),
+      pane(st.glass, tx + tw / 2, th - 0.75, 0.4, 0.7, face + FACE),
+      part(new PlaneGeometry(0.28, 0.28), st.glass, [tx + tw / 2, th - 0.4, face + FACE], [0, 0, Math.PI / 4]),
     );
   }
   if (st.dome) {
@@ -276,7 +296,7 @@ function building(w: Wall, st: BuildingStyle): BufferGeometry[] {
       dh = Math.min(st.dome, sightLimit(i));
     parts.push(
       block(st.roof, x + i, y + i, w.w - 2 * i, dd, dh),
-      block(st.trim, x + i - 0.05, y + i - 0.05, w.w - 2 * i + 0.1, dd + 0.1, 0.12, dh - 0.12),
+      block(st.trim, x + i - 0.05, y + i - 0.05, w.w - 2 * i + 0.1, dd + 0.1, 0.12, dh - 0.06),
       block(st.roof, x + i + 0.7, y + i + 0.7, w.w - 2 * i - 1.4, dd - 1.4, Math.min(dh + 0.3, sightLimit(i + 0.7))),
     );
   }
@@ -349,7 +369,7 @@ function planter(w: Wall, i: number): BufferGeometry[] {
   const parts = [
     block(BRICK, w.x, w.y, w.w, w.h, 0.5),
     block(STONE, w.x - 0.04, w.y - 0.04, w.w + 0.08, w.h + 0.08, 0.08, 0.5),
-    block("#6b4e36", w.x + 0.12, w.y + 0.12, w.w - 0.24, w.h - 0.24, 0.02, 0.56),
+    block("#6b4e36", w.x + 0.12, w.y + 0.12, w.w - 0.24, w.h - 0.24, 0.03, 0.56),
     part(new CylinderGeometry(0.05, 0.07, 2.2, 6), "#3b4148", [w.x + 0.3, 1.6, w.y + 0.3]),
     part(new IcosahedronGeometry(0.16, 0), "#fff3c4", [w.x + 0.3, 2.75, w.y + 0.3]),
   ];
@@ -394,7 +414,7 @@ function stairs(
       h = (k + 1) * rise;
     parts.push(
       block("#d7d0c3", x, z0, run, width, h),
-      flat("#c58066", dir > 0 ? x : x + run - 0.12, z0, 0.12, width, h + 0.003),
+      flat("#c58066", dir > 0 ? x : x + run - 0.12, z0, 0.12, width, h + GROUND.lines),
       block(BRICK, x, z0 - 0.5, run, 0.5, h + 0.35),
       block(BRICK, x, z0 + width, run, 0.5, h + 0.35),
     );
@@ -403,7 +423,7 @@ function stairs(
     top = steps * rise;
   const x = dir > 0 ? edge : edge - 60,
     [t0, t1] = terrace;
-  parts.push(block("#6b9450", x, t0, 60, t1 - t0, top), flat("#7fae63", x, t0, 60, t1 - t0, top + 0.002));
+  parts.push(block("#6b9450", x, t0, 60, t1 - t0, top), flat("#7fae63", x, t0, 60, t1 - t0, top + GROUND.walk));
   return { parts, edge, top };
 }
 
@@ -411,7 +431,7 @@ function stairs(
 function royce(x: number, z: number, base: number): BufferGeometry[] {
   const w = 15,
     d = 7,
-    face = z + d + 0.012,
+    face = z + d + FACE,
     roof = "#8c4f3c",
     glass = "#4b5d70";
   const parts = [
@@ -448,8 +468,8 @@ function backdrop(x: number, z: number, w: number, d: number, h: number, base = 
   return [
     block(BRICK, x, z, w, d, h, base),
     block(STONE, x - 0.06, z - 0.06, w + 0.12, d + 0.12, 0.14, base + h - 0.1),
-    block("#8a8f94", x + 0.2, z + 0.2, w - 0.4, d - 0.4, 0.05, base + h),
-    ...windows(st, x, x + w, h, z + d + 0.012).map((g) => g.translate(0, base, 0)),
+    block("#8a8f94", x + 0.2, z + 0.2, w - 0.4, d - 0.4, 0.1, base + h),
+    ...windows(st, x, x + w, h, z + d + FACE).map((g) => g.translate(0, base, 0)),
   ];
 }
 
@@ -460,36 +480,41 @@ function campusArt(m: Arena): BufferGeometry {
     flat("#83b66a", 0, 0, m.w, m.h, 0),
   ];
   for (let x = 0; x < m.w; x += 2)
-    for (let y = 0; y < m.h; y += 2) if ((x + y) % 4 === 0) parts.push(flat("#7aab61", x, y, 2, 2, 0.004));
+    for (let y = 0; y < m.h; y += 2) if ((x + y) % 4 === 0) parts.push(flat("#7aab61", x, y, 2, 2, GROUND.checker));
   // Bruin Walk, with brick edges and paving joints, running on to both stairs.
   const [w0, w1] = WALK,
     [r0, r1] = ROAD;
   parts.push(
-    flat("#dcd5c7", -8, w0, m.w + 16, w1 - w0, 0.008),
-    flat("#b07763", -8, w0, m.w + 16, 0.3, 0.01),
-    flat("#b07763", -8, w1 - 0.3, m.w + 16, 0.3, 0.01),
+    flat("#dcd5c7", -8, w0, m.w + 16, w1 - w0, GROUND.walk),
+    flat("#b07763", -8, w0, m.w + 16, 0.3, GROUND.lines),
+    flat("#b07763", -8, w1 - 0.3, m.w + 16, 0.3, GROUND.lines),
   );
-  for (let x = -8; x < m.w + 8; x += 2) parts.push(flat("#cbc3b3", x, w0 + 0.3, 0.06, w1 - w0 - 0.6, 0.009));
+  for (let x = -8; x < m.w + 8; x += 2)
+    if (x + 0.06 < r0 || x > r1) parts.push(flat("#cbc3b3", x, w0 + 0.3, 0.06, w1 - w0 - 0.6, GROUND.lines));
   // Westwood Plaza: asphalt, curbs and a dashed center line outside the plaza.
   parts.push(
-    flat("#61656c", r0, -40, r1 - r0, m.h + 80, 0.0095),
-    flat("#c9c4ba", r0 - 0.2, -40, 0.2, m.h + 80, 0.0097),
-    flat("#c9c4ba", r1, -40, 0.2, m.h + 80, 0.0097),
+    flat("#61656c", r0, -40, r1 - r0, m.h + 80, GROUND.road),
   );
+  // Curbs stop at the plaza, where Bruin Walk's brick edging crosses.
+  for (const [z0, z1] of [
+    [-40, PLAZA.y],
+    [PLAZA.y + PLAZA.h, m.h + 40],
+  ])
+    parts.push(flat("#c9c4ba", r0 - 0.2, z0, 0.2, z1 - z0, GROUND.lines), flat("#c9c4ba", r1, z0, 0.2, z1 - z0, GROUND.lines));
   for (let y = -40; y < m.h + 40; y += 2.4)
-    if (y + 1.2 < PLAZA.y || y > PLAZA.y + PLAZA.h) parts.push(flat("#f2c65d", (r0 + r1) / 2 - 0.07, y, 0.14, 1.2, 0.012));
+    if (y + 1.2 < PLAZA.y || y > PLAZA.y + PLAZA.h) parts.push(flat("#f2c65d", (r0 + r1) / 2 - 0.07, y, 0.14, 1.2, GROUND.lines));
   // Bruin Plaza: brick pavers, rings around the Bear, and the Janss landing.
   const cx = PLAZA.x + PLAZA.w / 2,
     cz = PLAZA.y + PLAZA.h / 2;
   parts.push(
-    flat("#c58066", PLAZA.x, PLAZA.y, PLAZA.w, PLAZA.h, 0.011),
-    disc("#b7b1a6", cx, cz, 1.9, 0.013),
-    ring("#e0b39e", cx, cz, 3, 3.25, 0.014),
-    ring("#e0b39e", cx, cz, 5, 5.2, 0.014),
-    flat("#c58066", m.w - 4, w0 - 2, 12, w1 - w0 + 4, 0.0105),
+    flat("#c58066", PLAZA.x, PLAZA.y, PLAZA.w, PLAZA.h, GROUND.brick),
+    ring("#e0b39e", cx, cz, 3, 3.25, GROUND.rings),
+    ring("#e0b39e", cx, cz, 5, 5.2, GROUND.rings),
+    flat("#c58066", m.w - 4, w0 - 2, 12, w1 - w0 + 4, GROUND.brick),
   );
-  for (let x = PLAZA.x + 1; x < PLAZA.x + PLAZA.w; x += 1) parts.push(flat("#d39a82", x, PLAZA.y, 0.05, PLAZA.h, 0.012));
-  for (let z = PLAZA.y + 1; z < PLAZA.y + PLAZA.h; z += 1) parts.push(flat("#d39a82", PLAZA.x, z, PLAZA.w, 0.05, 0.012));
+  // Paver joints, on the brick and under the rings (they cross, never stack).
+  for (let x = PLAZA.x + 1; x < PLAZA.x + PLAZA.w; x += 1) parts.push(flat("#d39a82", x, PLAZA.y, 0.05, PLAZA.h, GROUND.joints));
+  for (let z = PLAZA.y + 1; z < PLAZA.y + PLAZA.h; z += 1) parts.push(flat("#d39a82", PLAZA.x, z, PLAZA.w, 0.05, GROUND.joints));
   // Field pieces: buildings and props by wall id, plain cover otherwise.
   m.walls.forEach((w, i) => {
     if (w.hp !== undefined) return;

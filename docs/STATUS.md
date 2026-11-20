@@ -1495,3 +1495,35 @@ by ear, and any human playtest. The catch has no authored animation clip
 (standard §10). Starting share, respawn delay, Fisher speed, match length
 and Bruin Plaza's layout are first-pass values. On a field this size there
 is no minimap, and 2:30 may be short for the Fishers.
+
+**Follow-up: names show the side.** User request: a clearer indicator of who
+is a Fisher. In team modes, fighter names in the arena are now tinted by
+team (`TEAM_NAME` in `client/src/arena/view.ts`): light blue for Fish (and
+Broomball's blue team), red for Fishers (and the red team), next to the
+existing ▲ / ◆ and ground ring, so it is never color alone. The tint is a
+per-instance billboard color, so it adds no draw calls or atlas redraws.
+`docs/CODE-PRACTICES.md` §5.2 now records that in-world team markers use the
+arena's team colors while interface chrome does not. Verified with three
+WebRTC clients on Bruin Plaza: from the Fisher's view the Fish's `▲` name
+is blue, from the Fish's view the Fisher's `◆` name is red, 0 console
+errors. Not verified: colorblind simulation, phones.
+
+**Follow-up: Bruin Plaza clipping and flicker.** User report: clipping and
+weird 3D on the new map. An audit of the merged map geometry found 520
+pairs of visible faces of different color sharing a plane and overlapping
+(z-fighting): the paths, road, curbs, plaza pavers and rings were stacked
+0.0002-0.001 apart, and cornices, facade caps, Kerckhoff's tower cap,
+Pauley's roof band and the planter soil shared their top face with the
+block under them. Fixed: ground layers on a fixed ladder 0.002 apart under
+the fighters' shadows (`GROUND` in `client/src/arena/map.ts`), caps proud
+of what they cap, facade details stepped out from the wall, curbs stopped
+at the plaza; 0 pairs remain. `tests/mapArt.test.ts` now runs the audit on
+Central Lawn (0) and Bruin Plaza (0). Broomball Night still has 63 such
+pairs in its rink markings; not changed. Two planting beds that touched
+Ackerman's and the Wooden Center's walls (leaves poking into them) are
+0.4 narrower. Respawning Fishers no longer land on a fighter already
+standing at a Bear point while another point is free (Broomball unchanged:
+one point per team); covered by a new test. 166 tests and the build pass;
+three WebRTC clients on Bruin Plaza: views of the plaza, Bruin Walk,
+Ackerman, Kerckhoff and Pauley correct, frame p50 16.7 ms, p95 17.5 ms, no
+frames over 33 ms, 0 console errors.
