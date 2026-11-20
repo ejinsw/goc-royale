@@ -1399,6 +1399,103 @@ each change and the aim accuracy test covers Russell's and Brandon
 Nguyen's new footprints. Russell's lob was captured in the game camera
 (aim circle, arc, landing). Not verified: phones, two clients, a playtest.
 
+## November 20, 2026 — Fishers of Men (`feature/fishers-of-men`)
+
+User requests: a new GOC-themed mode, chosen from a brainstorm as "Fishers of
+Men" (infection); a functionality pass first, then a slightly bigger map;
+then a much bigger map based on UCLA's campus around Ackerman Union, which
+replaced the slightly bigger one (a lakeside field, 42 x 28) as the mode's
+map.
+This is the one mode added beyond the pilot specification (§2.2), by user
+decision. Design brief and rules: `docs/FISHERS-OF-MEN.md`.
+
+**Rules (new mode only).** A quarter of the party (at least one) starts as
+Fishers around the Bruin Bear in the middle; everyone else is a Fish. A Fish
+eliminated by anything joins the Fishers and comes back at the Bear after
+2 s. Fishers
+move 10% faster. Bushes hide rivals unless the viewer or a living teammate
+is close; the last Fish cannot hide. The Fishers win when every Fish is
+caught; the Fish win if any is free when 2:30 runs out. No zone.
+
+**Showdown and Broomball are unchanged.** Per-mode rules moved into one
+`MODES` table (name, capacity, length, allies, respawn delay, team speed),
+read by the engine, room, lobby, HUD, arena and touch aim in place of
+`mode === "broomball"` checks, with each existing mode's previous values.
+All 146 earlier tests pass; only the item-spawn test changed, to also cover
+the new mode. Concealment is now team-aware, which is the old rule when a
+viewer's only teammate is itself.
+
+**Bruin Plaza**, the mode's map: 60 x 40, 2.8x Central Lawn's area,
+UCLA's central campus as an original low-poly interpretation. Bruin Walk and
+Westwood Plaza cross at the Bruin Bear; Ackerman Union and Kerckhoff Hall to
+the south-east, Pauley Pavilion south-west, the Wooden and JD Morgan centers
+north-west and the Student Activities Center north-east; Janss Steps and
+Royce Hall beyond the east edge, stairs to the Hill beyond the west. The
+same under a half turn, so footprints pair up (Ackerman with the Wooden
+Center, and so on). Wall ids name the art, so footprints still come only
+from `MAPS`. `Arena.frame` makes the camera fit Central Lawn's 36 x 24, so
+fighters are the same size on screen.
+
+**Buildings never hide fighters.** The camera always looks north, so each
+building is a body at cover height whose tall part is its south facade, the
+side the camera sees; nothing on it rises more than 0.6 per unit south of its
+north face (`sightLimit`), which sight lines clear even at the top of the
+screen. No trees or canopies stand inside the field.
+
+Verification:
+
+- `npm test` (161 tests) and `npm run build` pass.
+- `tests/fishing.test.ts` (11): starting split and spawns, allies, catch
+  conversion and credit, withdrawn projectiles, respawn at the Bear point
+  farthest from Fish, both win conditions with placements, a one-player
+  match, team vision and the last-Fish reveal, Fisher speed matching client
+  prediction, the room (capacity, unknown modes rejected), and every
+  fighter's attack and Super as a Fisher producing finite wire values.
+- `tests/maps.test.ts` (4) checks every map: half-turn symmetry, wall gaps
+  wider than a fighter, no cover overlapping a bush, every spawn and respawn
+  a free standing spot, and every open spot reachable. Bruin Plaza also:
+  2.5-3x Central Lawn's area in the same proportions, the camera frame, Fish
+  spawns at least 8 units from the Bear, and nobody starting in a bush.
+- Three real WebRTC clients over the Vite dev server (headless Chromium on an
+  Apple M2 via ANGLE/Metal, 960x540, DPR 1, ordinary keyboard and mouse
+  input), one full match on Bruin Plaza:
+  - The mode reached the guests; HUDs showed each role and
+    `▲ 2 FISH 1 FISHERS ◆`.
+  - A Fish walked from its corner round the Wooden Center to the plaza and
+    the Fisher by the Bear caught it after 18 shots. The caught player saw
+    `BACK IN 2 · ◆ At the Bruin Bear, as a Fisher`; all three saw
+    `RICH IS THE LAST FISH!` and `▲ 1 FISH 2 FISHERS ◆`; it came back at
+    the Bear as a Fisher.
+  - The Fisher then walked Bruin Walk to Janss Steps, round Kerckhoff to the
+    south of Ackerman, and on to Pauley; captures show each landmark and no
+    fighter hidden by a building.
+  - At the final whistle: `A FISH GOT AWAY!`. Places: the free Fish #1, the
+    caught Fish #2 (free 0:14), the starting Fisher #3 with 1 catch and the
+    MVP star. The lobby chip reads `FISHERS` (the full name was cut off).
+  - 0 console errors on any client. A second, two-client run checked the
+    views of Royce Hall and the Hill stairs.
+  - The same flow ran earlier on the lakeside map (a catch after 40 shots,
+    the same HUD texts and results).
+- Host frame time on that machine over the last 300 frames: p50 16.7 ms,
+  p95 17.4-17.7 ms, no frames over 33 ms. Renderer: 16-17 draw calls and
+  about 33k triangles mid-match with three fighters. Snapshots in at 18 Hz,
+  simulation at 30 Hz.
+- Static map art: Bruin Plaza 17,560 triangles in 23 meshes (one merged
+  base, 16 bushes, 6 crates); Central Lawn 7,126 in 11 (unchanged). Each
+  bush is its own mesh so it can fade, so the bush count is the main draw
+  call cost.
+
+Found, not changed: Central Lawn's spawns (18, 3) and (18, 21) sit exactly
+on bush corners, and the engine's inclusive bush bounds count that as
+inside, so a Showdown fighter starting there starts hidden.
+
+Not verified: any phone or touch device, controlled latency or loss, GPU
+time, a complete-match memory trend or rematch teardown stress test, audio
+by ear, and any human playtest. The catch has no authored animation clip
+(standard §10). Starting share, respawn delay, Fisher speed, match length
+and Bruin Plaza's layout are first-pass values. On a field this size there
+is no minimap, and 2:30 may be short for the Fishers.
+
 ## November 20, 2026 — Bots for every fighter (`feature/bots`)
 
 The host can add bots to the lobby. Every fighter can be a bot, and a new
@@ -1450,6 +1547,18 @@ aim with against the authority's real hits.
   - The nearest teammate chases a loose ball.
   - The bot nearest its own goal keeps goal and steps into incoming shots.
   - A carrier runs at the rival goal and shoots from 10 units.
+- **Fishers of Men play.** Merged on top of that mode. `MODES` gains
+  `prey` (the team that wins by staying free; `fishing` sets 0, the Fish).
+  - Prey bots hold the edge of their range, poking back. They break away
+    to the nearest bush no hunter is near, and sit in it.
+  - Hunter bots follow where they last saw prey, then sweep the bushes.
+    They never retreat, since they respawn in 2 s.
+  - Bots in team modes see what the snapshot shows their team: a rival in
+    a bush is visible when any living teammate is close.
+- **Routing.** When cover blocks the straight line, a bot follows a
+  breadth-first route over a 1-unit grid of the map. The route is cached
+  per goal and rebuilt when crates break or after 3 s. Bruin Plaza's
+  large buildings needed this: without it, Fishers stalled behind them.
 - **Commands.**
   - New: `{type: "bot", fighter?}`, host only. Without a pick, the bot
     takes a fighter nobody in the party has.
@@ -1481,8 +1590,13 @@ Chrome for Testing at 1100×680, DPR 1:
   all seven Super kinds fire.
 - **Broomball pace.** Over 24 random 3v3 bot lineups, the median match ran
   the full 150 s regulation, and 21 of 24 had at least one goal.
+- **Fishers of Men pace.** Over 16 all-bot games of 6–10, the Fishers won
+  13, in 54–133 s, and the Fish held out to time in 3. Planning cost
+  0.08 ms per tick on Bruin Plaza. The live app ran at 16.7 ms median and
+  17.6 ms p95 with eight players.
 
-**Verification.** `npm test` (159) and `npm run build` pass.
+**Verification.** `npm test` (175, after merging Fishers of Men) and
+`npm run build` pass.
 `tests/bot.test.ts` covers:
 
 - every row's bot and Super use
@@ -1492,6 +1606,7 @@ Chrome for Testing at 1100×680, DPR 1:
 - bush concealment
 - a ten-bot Showdown with a winner, within the planning budget
 - Broomball scoring and the keeper
+- a Fishers of Men game: Fish hide in bushes, and Fishers catch them
 
 The live app checks were:
 
@@ -1502,11 +1617,15 @@ The live app checks were:
   match.
 - **Host on a phone viewport.** A full room of 10 was checked, plus the
   bot sheet's team and remove buttons.
+- **Fishers of Men, desktop.** Seven bots and the host, with bots
+  catching Fish live.
 
 **Not verified.**
 
 - Physical phones.
 - Controlled latency or loss with bots in the room. Bots run on the host,
   so they see no network delay; that is an advantage over guests.
-- A human playtest of bot difficulty. There is one difficulty level.
+- A human playtest of bot difficulty. There is one difficulty level. In
+  all-bot Fishers of Men the Fishers usually win; whether bot Fish are too
+  easy against people is unknown.
 - Bots do not pick up or use items.

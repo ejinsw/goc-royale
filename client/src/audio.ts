@@ -54,6 +54,19 @@ const CUES: Record<string, Tone[]> = {
     { wave: "triangle", from: 160, to: 60, dur: 0.18, gain: 0.95 },
     { wave: "sawtooth", from: 900, to: 300, at: 0.01, dur: 0.08, gain: 0.25 },
   ],
+  // Fishers of Men: a reel's ratchet, a splash, and a rising "got one".
+  caught: [
+    ...[0, 0.04, 0.08, 0.12].map((at) => ({
+      wave: "square" as const,
+      from: 1300,
+      to: 900,
+      at,
+      dur: 0.025,
+      gain: 0.22,
+    })),
+    { wave: "triangle", from: 200, to: 70, at: 0.16, dur: 0.2, gain: 0.9 },
+    { wave: "sine", from: 520, to: 1040, at: 0.22, dur: 0.18, gain: 0.45 },
+  ],
   swap: [
     { wave: "sine", from: 500, to: 500, dur: 0.06, gain: 0.6 },
     { wave: "sine", from: 750, to: 750, at: 0.06, dur: 0.08, gain: 0.6 },

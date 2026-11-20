@@ -1,6 +1,6 @@
 import { Bot } from "./bot";
 import { Engine } from "./engine";
-import { FIGHTERS, IDS, type FighterId, type Mode } from "./definitions";
+import { FIGHTERS, IDS, MODES, isMode, type FighterId } from "./definitions";
 import type { Command, HostMessage, Lobby, Member } from "./types";
 interface Session {
   id: string;
@@ -9,8 +9,6 @@ interface Session {
   lastMessage: number;
   count: number;
 }
-/** Party caps: Showdown 10, Broomball 6, bots included. */
-const CAPACITY = { showdown: 10, broomball: 6 } as const;
 export class Room {
   lobby: Lobby;
   engine: Engine | null = null;
@@ -66,7 +64,7 @@ export class Room {
       throw Error(
         "This match has started. Join after the host returns to the lobby.",
       );
-    if (this.lobby.members.length >= CAPACITY[this.lobby.mode])
+    if (this.lobby.members.length >= MODES[this.lobby.mode].capacity)
       throw Error(
         this.lobby.members.some((m) => m.bot)
           ? "Room is full. Ask the host to remove a bot."
@@ -122,7 +120,7 @@ export class Room {
   /** Host: add a bot, as `fighter` or a fighter nobody in the party has. */
   private addBot(fighter?: FighterId) {
     const l = this.lobby;
-    if (l.members.length >= CAPACITY[l.mode]) return "The room is full.";
+    if (l.members.length >= MODES[l.mode].capacity) return "The room is full.";
     const used = new Set(l.members.map((m) => m.fighter));
     const free = IDS.filter((f) => !used.has(f));
     const pool = free.length ? free : IDS;
@@ -131,8 +129,9 @@ export class Room {
         ? fighter
         : pool[Math.floor(this.random() * pool.length) % pool.length];
     const blue = l.members.filter((m) => m.team === 0).length;
+    // Team modes fill the smaller side (Fishers of Men re-deals teams itself).
     const team =
-      l.mode === "broomball"
+      MODES[l.mode].teams
         ? blue <= l.members.length - blue
           ? 0
           : 1
@@ -163,12 +162,11 @@ export class Room {
     if (m.some((p) => !p.connected))
       return "Wait for disconnected players to reconnect or expire.";
     if (m.some((p) => !p.ready)) return "Everyone needs to ready up.";
-    // No minimum player count by product decision. Caps only: Showdown 10,
-    // Broomball 6. Broomball teams may be any split and may share fighters.
-    if (l.mode === "showdown" && m.length > 10)
-      return "Showdown is capped at 10 players.";
-    if (l.mode === "broomball" && m.length > 6)
-      return "Broomball is capped at 6 players.";
+    // No minimum player count by product decision. Caps only (MODES).
+    // Broomball teams may be any split and may share fighters.
+    const rules = MODES[l.mode];
+    if (m.length > rules.capacity)
+      return `${rules.name} is capped at ${rules.capacity} players.`;
     return null;
   }
   command(id: string, c: Command) {
@@ -236,12 +234,8 @@ export class Room {
         return;
       }
     } else if (c.type === "ready") member.ready = c.ready === true;
-    else if (
-      c.type === "mode" &&
-      host &&
-      ["showdown", "broomball"].includes(c.mode)
-    ) {
-      this.lobby.mode = c.mode as Mode;
+    else if (c.type === "mode" && host && isMode(c.mode)) {
+      this.lobby.mode = c.mode;
       this.unready();
       this.lobby.members.forEach((p, i) => (p.team = i < 3 ? 0 : 1));
     } else if (c.type === "team" && host && (c.team === 0 || c.team === 1)) {

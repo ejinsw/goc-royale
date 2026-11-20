@@ -1,6 +1,8 @@
 import {
   AREAS,
   FIGHTERS,
+  MAPS,
+  MODES,
   RULES,
   add,
   clamp,
@@ -25,6 +27,9 @@ import type { Player } from "./types";
  * attack and when to use the Super come from the fighter's ability data via
  * the same exact footprints the aim preview draws; how it moves comes from
  * the fighter's `bot` row. A new fighter row is therefore a playable bot.
+ * Modes steer it through their data too: Showdown's zone, Broomball's
+ * ball, and a mode's `prey` team (Fishers of Men), whose bots hide while
+ * the other side hunts.
  */
 
 /** Ticks between plans (10 Hz at the 30 Hz simulation); input goes every tick. */
@@ -95,6 +100,63 @@ const rotate = (v: Vec, a: number): Vec => ({
 /** Left of a heading. */
 const left = (v: Vec): Vec => ({ x: -v.y, y: v.x });
 
+/**
+ * Walking distance to one goal cell over a 1-unit grid of the map: the
+ * route a bot takes when cover blocks the straight line. Cells are open
+ * when a fighter fits at their center; diagonals need both sides open.
+ */
+interface Route {
+  goal: number;
+  walls: number;
+  at: number;
+  dist: Int32Array;
+}
+function routeField(e: Engine, goal: Vec): Route | null {
+  const map = MAPS[e.state.mode],
+    w = Math.floor(map.w),
+    h = Math.floor(map.h);
+  const open = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      open[y * w + x] = e.valid({ x: x + 0.5, y: y + 0.5 }) ? 1 : 0;
+  // Start from the open cell nearest the goal.
+  const gx = clamp(Math.floor(goal.x), 0, w - 1),
+    gy = clamp(Math.floor(goal.y), 0, h - 1);
+  let start = -1;
+  for (let r = 0; r < 4 && start < 0; r++)
+    for (let dy = -r; dy <= r && start < 0; dy++)
+      for (let dx = -r; dx <= r && start < 0; dx++) {
+        const x = gx + dx,
+          y = gy + dy;
+        if (x >= 0 && y >= 0 && x < w && y < h && open[y * w + x]) start = y * w + x;
+      }
+  if (start < 0) return null;
+  const dist = new Int32Array(w * h).fill(-1);
+  const queue = new Int32Array(w * h);
+  let head = 0,
+    tail = 0;
+  dist[start] = 0;
+  queue[tail++] = start;
+  while (head < tail) {
+    const c = queue[head++],
+      cx = c % w,
+      cy = (c - cx) / w;
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const x = cx + dx,
+          y = cy + dy;
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
+        const n = y * w + x;
+        if (!open[n] || dist[n] >= 0) continue;
+        if (dx && dy && (!open[cy * w + x] || !open[y * w + cx])) continue;
+        dist[n] = dist[c] + 1;
+        queue[tail++] = n;
+      }
+  }
+  return { goal: gy * w + gx, walls: e.state.walls.length, at: e.state.time, dist };
+}
+
 interface Seen {
   pos: Vec;
   t: number;
@@ -121,6 +183,9 @@ export class Bot {
   private lastHp = Infinity;
   private hurtAt = -Infinity;
   private seen = new Map<string, Seen>();
+  private route: Route | null = null;
+  /** The bush a hiding bot is heading for or sitting in. */
+  private den: { x: number; y: number; w: number; h: number } | null = null;
 
   /** `offset` staggers plans so several bots do not all think on one tick. */
   constructor(
@@ -165,18 +230,29 @@ export class Bot {
     if (Number.isFinite(this.lastHp) && me.hp < this.lastHp - 1)
       this.hurtAt = now;
     this.lastHp = me.hp;
-    const share = me.hp / f.hp;
-    if (share < style.retreat) this.retreating = true;
-    else if (share > Math.min(0.95, style.retreat + 0.3))
-      this.retreating = false;
+
     if (now >= this.strafeUntil) {
       this.strafeSign = this.random() < 0.5 ? 1 : -1;
       this.strafeUntil = now + 0.7 + this.random() * 1.3;
     }
 
+    // The snapshot's rule: a rival in a bush is hidden unless this bot or
+    // a living teammate is close (or it is marked).
+    const eyes = s.players.filter((a) => a.alive && e.allies(me, a));
     const rivals = s.players.filter(
-      (t) => t.alive && !e.allies(me, t) && !e.concealed(t, me.pos),
+      (t) =>
+        t.alive &&
+        !e.allies(me, t) &&
+        !eyes.every((a) => e.concealed(t, a.pos)),
     );
+    const prey = MODES[s.mode].prey;
+    const hiding = prey !== undefined && me.team === prey;
+    const hunting = prey !== undefined && me.team !== prey;
+    // Hunters come straight back after a knockout, so they never back off.
+    const share = me.hp / f.hp;
+    if (share < style.retreat && !hunting) this.retreating = true;
+    else if (hunting || share > Math.min(0.95, style.retreat + 0.3))
+      this.retreating = false;
     this.observe(rivals, now);
     const ball = s.ball;
     const broomball = s.mode === "broomball";
@@ -188,11 +264,17 @@ export class Bot {
     if (carrying) want = this.runBall(me, rivals);
     else {
       if (target) {
-        want = this.approach(e, me, target);
+        want = hiding
+          ? this.evade(e, me, target, rivals)
+          : this.approach(e, me, target);
         if (!this.trySuper(e, me, target, rivals)) this.tryAttack(e, me, target);
       } else {
         this.trySuper(e, me, null, rivals);
-        want = this.wander(e, me);
+        want = hiding
+          ? this.hide(e, me, rivals)
+          : hunting
+            ? this.search(e, me)
+            : this.wander(e, me);
       }
       if (broomball) want = this.playBall(e, me, want);
     }
@@ -260,10 +342,158 @@ export class Bot {
     if (this.retreating) return add(mul(dir, -1.2), mul(left(dir), 0.4 * this.strafeSign));
     const keep = Math.max(1, style.keep * f.range);
     let want: Vec = { x: 0, y: 0 };
-    if (!e.lineClear(me.pos, t.pos)) want = dir;
+    if (!e.lineClear(me.pos, t.pos)) return this.toward(e, me, t.pos);
     else if (d > keep + 0.6) want = dir;
     else if (d < keep - 0.6) want = mul(dir, -0.8);
     return add(want, mul(left(dir), style.strafe * this.strafeSign));
+  }
+
+  /**
+   * The way to `goal`: straight when a fighter's body clears the line,
+   * otherwise along the grid route around cover.
+   */
+  private toward(e: Engine, me: Player, goal: Vec): Vec {
+    const straight = unit(sub(goal, me.pos));
+    const d = distance(me.pos, goal);
+    if (d < 0.3) return { x: 0, y: 0 };
+    if (!e.state.walls.length) return straight;
+    const side = mul(left(straight), RULES.radius);
+    if (
+      d < 24 &&
+      e.lineClear(me.pos, goal) &&
+      e.lineClear(add(me.pos, side), add(goal, side)) &&
+      e.lineClear(sub(me.pos, side), sub(goal, side))
+    )
+      return straight;
+    const map = MAPS[e.state.mode],
+      w = Math.floor(map.w),
+      h = Math.floor(map.h);
+    const cell = clamp(Math.floor(goal.y), 0, h - 1) * w + clamp(Math.floor(goal.x), 0, w - 1);
+    const r = this.route;
+    if (
+      !r ||
+      r.goal !== cell ||
+      r.walls !== e.state.walls.length ||
+      e.state.time - r.at > 3
+    )
+      this.route = routeField(e, goal);
+    const dist = this.route?.dist;
+    if (!dist) return straight;
+    // Walk downhill from this cell, then aim at the farthest of the next few
+    // cells still in a straight line, so the path is smooth, not stair-step.
+    let x = clamp(Math.floor(me.pos.x), 0, w - 1),
+      y = clamp(Math.floor(me.pos.y), 0, h - 1);
+    if (dist[y * w + x] < 0) return straight;
+    let next: Vec | null = null;
+    for (let step = 0; step < 6 && dist[y * w + x] > 0; step++) {
+      let bx = x,
+        by = y;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx,
+            ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const v = dist[ny * w + nx];
+          if (v >= 0 && v < dist[by * w + bx]) {
+            bx = nx;
+            by = ny;
+          }
+        }
+      if (bx === x && by === y) break;
+      x = bx;
+      y = by;
+      const c = { x: x + 0.5, y: y + 0.5 };
+      if (step === 0 || e.lineClear(me.pos, c)) next = c;
+      else break;
+    }
+    return next ? unit(sub(next, me.pos)) : straight;
+  }
+
+  /**
+   * Prey with a hunter in sight: hold the edge of its own range, poking
+   * back, and break away to hide when hurt or when the hunter is far.
+   */
+  private evade(e: Engine, me: Player, t: Player, rivals: Player[]): Vec {
+    const f = FIGHTERS[me.fighter];
+    const to = sub(t.pos, me.pos),
+      d = length(to),
+      dir = unit(to);
+    const side = mul(left(dir), f.bot.strafe * this.strafeSign);
+    if (this.retreating) return add(mul(dir, -1.2), mul(side, 0.4));
+    const keep = f.range * 0.95;
+    if (d > keep + 2.5) return this.hide(e, me, rivals);
+    if (d < keep - 0.5) return add(mul(dir, -1), side);
+    return side;
+  }
+
+  /** Prey with no hunter in sight: get into a bush away from them and sit. */
+  private hide(e: Engine, me: Player, rivals: Player[]): Vec {
+    const bushes = MAPS[e.state.mode].bushes;
+    if (!bushes.length) return this.wander(e, me);
+    const center = (b: (typeof bushes)[number]) => ({
+      x: b.x + b.w / 2,
+      y: b.y + b.h / 2,
+    });
+    const exposed = (b: (typeof bushes)[number]) =>
+      rivals.some((r) => distance(r.pos, center(b)) < 5);
+    if (!this.den || exposed(this.den)) {
+      let best = Infinity;
+      this.den = null;
+      for (const b of bushes) {
+        if (exposed(b)) continue;
+        const d = distance(me.pos, center(b));
+        if (d < best) {
+          best = d;
+          this.den = b;
+        }
+      }
+    }
+    if (!this.den) return this.wander(e, me);
+    const b = this.den,
+      m = 0.35;
+    if (
+      me.pos.x > b.x + m &&
+      me.pos.x < b.x + b.w - m &&
+      me.pos.y > b.y + m &&
+      me.pos.y < b.y + b.h - m
+    )
+      return { x: 0, y: 0 };
+    return this.toward(e, me, center(b));
+  }
+
+  /**
+   * A hunter with no prey in sight: run to where one was last seen, then
+   * sweep the bushes, where hiding prey sit.
+   */
+  private search(e: Engine, me: Player): Vec {
+    const s = e.state;
+    let trail: Vec | null = null,
+      best = Infinity;
+    for (const [id, v] of this.seen) {
+      const p = s.players.find((x) => x.id === id);
+      if (!p?.alive || e.allies(me, p) || s.time - v.t > 4) continue;
+      const d = distance(me.pos, v.pos);
+      if (d > 1.5 && d < best) {
+        best = d;
+        trail = v.pos;
+      }
+    }
+    if (trail) {
+      this.aim = unit(sub(trail, me.pos));
+      return this.toward(e, me, trail);
+    }
+    const bushes = MAPS[s.mode].bushes;
+    if (
+      bushes.length &&
+      (!this.waypoint ||
+        s.time >= this.waypointUntil ||
+        distance(me.pos, this.waypoint) < 1.2)
+    ) {
+      const b = bushes[Math.floor(this.random() * bushes.length) % bushes.length];
+      this.waypoint = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+      this.waypointUntil = s.time + 8;
+    }
+    return this.wander(e, me);
   }
 
   /** Fire when the attack's exact footprint covers where the rival will be. */
@@ -342,9 +572,13 @@ export class Bot {
       s.time >= this.waypointUntil ||
       distance(me.pos, this.waypoint) < 1.5
     ) {
+      const map = MAPS[s.mode];
       const center =
-        s.mode === "showdown" ? ZONE_CENTER : { x: 17, y: 10 };
-      const r = s.mode === "showdown" ? Math.min(8, s.zone * 0.6) : 6;
+        s.mode === "showdown" ? ZONE_CENTER : { x: map.w / 2, y: map.h / 2 };
+      const r =
+        s.mode === "showdown"
+          ? Math.min(8, s.zone * 0.6)
+          : Math.min(map.w, map.h) * 0.4;
       this.waypoint = null;
       for (let i = 0; i < 10 && !this.waypoint; i++) {
         const a = this.random() * Math.PI * 2,
@@ -357,7 +591,7 @@ export class Bot {
     }
     const to = sub(this.waypoint, me.pos);
     if (length(to) > 0.1) this.aim = unit(to);
-    return unit(to);
+    return this.toward(e, me, this.waypoint);
   }
 
   /**
@@ -377,7 +611,7 @@ export class Bot {
           !best || distance(p.pos, to) < distance(best.pos, to) ? p : best,
         null,
       );
-    const own = { x: me.team === 0 ? 0 : 34, y: 10 };
+    const own = { x: me.team === 0 ? 0 : MAPS.broomball.w, y: 10 };
     // A shot flying at our goal: the bot nearest the goal steps into its path.
     const incoming =
       !b.carrier &&
@@ -409,7 +643,7 @@ export class Bot {
 
   /** Carry the ball at the rival goal and shoot once it is in range. */
   private runBall(me: Player, rivals: Player[]): Vec {
-    const goalX = me.team === 0 ? 34 : 0;
+    const goalX = me.team === 0 ? MAPS.broomball.w : 0;
     const goal = { x: goalX, y: 10 };
     let want = unit(sub(goal, me.pos));
     for (const r of rivals) {

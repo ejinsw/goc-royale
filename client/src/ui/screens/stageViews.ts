@@ -153,21 +153,29 @@ const mvpScore = (p: Match["players"][number]) =>
   p.stats.damage +
   p.stats.healing * 0.6;
 
-/** Players in finishing order, with the MVP for team matches. */
+/** Showdown and Fishers of Men rank by placement; Broomball by MVP score. */
+const ranked = (match: Match) => match.mode !== "broomball";
+
+/** Players in finishing order, with the MVP (Fishers of Men: top catcher). */
 export function standings(match: Match) {
-  const ordered = [...match.players].sort((a, b) =>
-    match.mode === "showdown"
-      ? (a.id === match.winner ? 0 : a.placement || 99) - (b.id === match.winner ? 0 : b.placement || 99)
-      : mvpScore(b) - mvpScore(a),
-  );
-  return { ordered, mvp: match.mode === "broomball" ? ordered[0]?.id : undefined };
+  const place = (p: Match["players"][number]) =>
+    match.mode === "showdown" && p.id === match.winner ? 0 : p.placement || 99;
+  const ordered = [...match.players].sort((a, b) => (ranked(match) ? place(a) - place(b) : mvpScore(b) - mvpScore(a)));
+  const catcher = [...match.players].sort((a, b) => b.stats.catches - a.stats.catches)[0];
+  const mvp =
+    match.mode === "broomball"
+      ? ordered[0]?.id
+      : match.mode === "fishing" && catcher?.stats.catches
+        ? catcher.id
+        : undefined;
+  return { ordered, mvp };
 }
 
 export function resultsStage(match: Match, selfId: string, frame: StageFrame): StageView {
   const { ordered, mvp } = standings(match);
   const winTeam = match.winner === "blue" ? 0 : match.winner === "red" ? 1 : null;
   const fighters: StageFighter[] = ordered.map((p, i) => {
-    if (match.mode === "showdown")
+    if (ranked(match))
       return {
         key: p.id,
         fighter: p.fighter,
@@ -191,21 +199,26 @@ export function resultsStage(match: Match, selfId: string, frame: StageFrame): S
   // sheet has everyone. This keeps a 10-player podium readable on a phone.
   const featured = (p: Match["players"][number], i: number) =>
     p.id === selfId ||
-    (match.mode === "showdown" ? i < 3 : winTeam === null ? i < 3 : p.team === winTeam);
+    p.id === mvp ||
+    (ranked(match) ? i < 3 : winTeam === null ? i < 3 : p.team === winTeam);
   const plates: StagePlate[] = ordered.filter(featured).map((p) => {
     const i = ordered.indexOf(p);
-    const winnerIcon = match.mode === "showdown" ? i === 0 : p.id === mvp;
+    const crown = ranked(match) && i === 0;
+    const winnerIcon = crown || p.id === mvp;
+    const fishing = match.mode === "fishing";
     return {
       key: p.id,
-      label:
-        match.mode === "showdown"
+      label: fishing
+        ? `${p.name}, place ${i + 1}, ${p.stats.catches} caught${p.id === mvp ? ", top fisher" : ""}`
+        : match.mode === "showdown"
           ? `${p.name}, place ${i + 1}${i === 0 ? ", winner" : ""}, ${p.stats.kills} knockouts`
           : `${p.name}, ${p.stats.goals} goals, ${p.stats.assists} assists${p.id === mvp ? ", MVP" : ""}`,
-      title: match.mode === "showdown" ? `#${i + 1} ${p.name}` : p.name,
+      title: ranked(match) ? `#${i + 1} ${p.name}` : p.name,
       // One line per plate: the crown or MVP star leads instead of a badge row.
-      icon: winnerIcon ? (match.mode === "showdown" ? "crown" : "star") : undefined,
-      caption:
-        match.mode === "showdown"
+      icon: crown ? "crown" : winnerIcon ? "star" : undefined,
+      caption: fishing
+        ? `${p.id === mvp ? "Top fisher · " : ""}${p.stats.catches} caught`
+        : match.mode === "showdown"
           ? `${p.stats.kills} KO · ${Math.round(p.stats.damage).toLocaleString()} dmg`
           : `${p.id === mvp ? "MVP · " : ""}${p.stats.goals}G ${p.stats.assists}A`,
       variant: p.id === selfId ? "selected" : winnerIcon ? "primary" : undefined,

@@ -18,7 +18,7 @@ export type FighterId =
   | "jemuel"
   | "russell"
   | "brandon_n";
-export type Mode = "showdown" | "broomball";
+export type Mode = "showdown" | "broomball" | "fishing";
 export type Vec = { x: number; y: number };
 
 /** Shared simulation item catalogue. Behavior is resolved by kind, not item ID. */
@@ -948,6 +948,70 @@ export const RULES = {
   respawn: 3,
   protection: 1.5,
 };
+/**
+ * Per-mode rules as data, read by the authority, the room and the client
+ * alike, so a mode is a row here rather than a branch at every call site.
+ */
+export interface ModeRules {
+  name: string;
+  /** Lobby chip label when `name` is too long for it. */
+  short?: string;
+  capacity: number;
+  /** Regulation length (s) after the 3 s countdown. */
+  length: number;
+  /** Same-team fighters are allies: no friendly fire, shared heals. */
+  teams: boolean;
+  /** Seconds until an eliminated fighter is back; null means out for the match. */
+  respawn: number | null;
+  /** Movement speed multiplier by team. */
+  teamSpeed?: readonly [number, number];
+  /**
+   * The team that wins by staying free. Its bots keep their distance and
+   * hide in bushes; the other team's bots hunt and search (shared/bot.ts).
+   */
+  prey?: 0 | 1;
+}
+export const MODES: Record<Mode, ModeRules> = {
+  showdown: {
+    name: "Showdown",
+    capacity: 10,
+    length: 210,
+    teams: false,
+    respawn: null,
+  },
+  broomball: {
+    name: "Broomball",
+    capacity: 6,
+    length: 150,
+    teams: true,
+    respawn: RULES.respawn,
+  },
+  fishing: {
+    name: "Fishers of Men",
+    short: "Fishers",
+    capacity: 10,
+    length: 150,
+    teams: true,
+    respawn: 2,
+    teamSpeed: [1, 1.1],
+    prey: 0,
+  },
+};
+export const isMode = (m: unknown): m is Mode =>
+  typeof m === "string" && Object.hasOwn(MODES, m);
+/**
+ * Fishers of Men (infection): team 0 are the Fish still free, team 1 the
+ * Fishers. A caught Fish joins the Fishers. First-pass playtest values.
+ */
+export const FISH = 0;
+export const FISHERS = 1;
+export const FISHING = {
+  /** Share of the party that starts as Fishers (rounded, at least one). */
+  starters: 0.25,
+};
+/** A fighter's movement speed before slows, in this mode and on this team. */
+export const moveSpeed = (mode: Mode, p: { fighter: FighterId; team: 0 | 1 }) =>
+  FIGHTERS[p.fighter].speed * (MODES[mode].teamSpeed?.[p.team] ?? 1);
 export interface Wall {
   id: string;
   x: number;
@@ -962,44 +1026,142 @@ export interface Arena {
   walls: Wall[];
   bushes: { x: number; y: number; w: number; h: number }[];
   spawns: Vec[];
+  /**
+   * Where each team comes back in modes that respawn; the point farthest
+   * from living rivals is used. Fishers of Men also starts its Fishers here.
+   */
+  respawns?: readonly [Vec[], Vec[]];
+  /**
+   * The area the camera fits to the screen; the whole field by default. A
+   * larger field keeps Central Lawn's frame so fighters stay the same size.
+   */
+  frame?: { w: number; h: number };
 }
+const LAWN: Arena = {
+  w: 36,
+  h: 24,
+  walls: [
+    { id: "a", x: 8, y: 7, w: 3, h: 1 },
+    { id: "b", x: 25, y: 16, w: 3, h: 1 },
+    { id: "c", x: 8, y: 16, w: 3, h: 1 },
+    { id: "d", x: 25, y: 7, w: 3, h: 1 },
+    { id: "e", x: 16, y: 9, w: 1, h: 2 },
+    { id: "f", x: 19, y: 13, w: 1, h: 2 },
+    ...[
+      [12, 5],
+      [23, 18],
+      [12, 18],
+      [23, 5],
+    ].map(([x, y], i) => ({ id: "crate" + i, x, y, w: 1, h: 1, hp: 1800 })),
+  ],
+  bushes: [
+    { x: 4, y: 10, w: 3, h: 4 },
+    { x: 29, y: 10, w: 3, h: 4 },
+    { x: 14, y: 3, w: 4, h: 2 },
+    { x: 18, y: 19, w: 4, h: 2 },
+  ],
+  spawns: [
+    { x: 3, y: 3 },
+    { x: 33, y: 21 },
+    { x: 33, y: 3 },
+    { x: 3, y: 21 },
+    { x: 18, y: 3 },
+    { x: 18, y: 21 },
+    { x: 3, y: 12 },
+    { x: 33, y: 12 },
+    { x: 10, y: 12 },
+    { x: 26, y: 12 },
+  ],
+};
+/** Where the Fishers start and come back: around the Bruin Bear. */
+const BEAR: Vec[] = [
+  { x: 30, y: 17.3 },
+  { x: 27.3, y: 20 },
+  { x: 32.7, y: 20 },
+  { x: 30, y: 22.7 },
+];
+/**
+ * Bruin Plaza, Fishers of Men's field: UCLA's central campus around Ackerman
+ * Union, an original low-poly interpretation. Bruin Walk runs east-west and
+ * Westwood Plaza north-south, crossing at the Bruin Bear. Ackerman Union and
+ * Kerckhoff Hall stand to the south-east, Pauley Pavilion to the south-west,
+ * the John Wooden Center and JD Morgan Center to the north-west and the
+ * Student Activities Center to the north-east; Janss Steps close Bruin Walk's
+ * east end. 2.8x Central Lawn's area in the same proportions, and the same
+ * under a half turn (so Ackerman's footprint is the Wooden Center's,
+ * Pauley's is the Student Activities Center's, and so on). Wall ids name the
+ * art the client draws for them.
+ */
+const BRUIN_PLAZA: Arena = {
+  w: 60,
+  h: 40,
+  frame: { w: LAWN.w, h: LAWN.h },
+  walls: [
+    { id: "ackerman", x: 36, y: 28, w: 12, h: 8 },
+    { id: "wooden", x: 12, y: 4, w: 12, h: 8 },
+    { id: "kerckhoff", x: 52, y: 29, w: 6, h: 7 },
+    { id: "morgan", x: 2, y: 4, w: 6, h: 7 },
+    { id: "pauley", x: 7, y: 28, w: 14, h: 9 },
+    { id: "sac", x: 39, y: 3, w: 14, h: 9 },
+    { id: "bear", x: 29, y: 19, w: 2, h: 2 },
+    { id: "bus0", x: 28.5, y: 30, w: 2, h: 5.5 },
+    { id: "bus1", x: 29.5, y: 4.5, w: 2, h: 5.5 },
+    // Club tables along both sides of Bruin Walk.
+    ...[
+      [8, 23.2],
+      [14, 23.2],
+      [40, 23.2],
+      [46, 23.2],
+      [49.6, 16],
+      [43.6, 16],
+      [17.6, 16],
+      [11.6, 16],
+    ].map(([x, y], i) => ({ id: "table" + i, x, y, w: 2.4, h: 0.8 })),
+    // Brick planters down the middle of Bruin Walk.
+    ...[6, 16, 42.4, 52.4].map((x, i) => ({ id: "planter" + i, x, y: 19.2, w: 1.6, h: 1.6 })),
+    ...[
+      [44, 38],
+      [15, 1],
+      [3, 26],
+      [56, 13],
+      [24.5, 34],
+      [34.5, 5],
+    ].map(([x, y], i) => ({ id: "crate" + i, x, y, w: 1, h: 1, hp: 1800 })),
+  ],
+  bushes: [
+    { x: 34, y: 30, w: 2, h: 4 },
+    { x: 24, y: 6, w: 2, h: 4 },
+    { x: 52, y: 25, w: 5, h: 2 },
+    { x: 3, y: 13, w: 5, h: 2 },
+    { x: 23, y: 30, w: 2, h: 3 },
+    { x: 35, y: 7, w: 2, h: 3 },
+    { x: 2, y: 31, w: 3, h: 3 },
+    { x: 55, y: 6, w: 3, h: 3 },
+    { x: 49, y: 37, w: 2, h: 2 },
+    { x: 9, y: 1, w: 2, h: 2 },
+    { x: 12, y: 38, w: 4, h: 1.6 },
+    { x: 44, y: 0.4, w: 4, h: 1.6 },
+    { x: 34, y: 23.5, w: 3, h: 2 },
+    { x: 23, y: 14.5, w: 3, h: 2 },
+    { x: 23, y: 23.5, w: 3, h: 2 },
+    { x: 34, y: 14.5, w: 3, h: 2 },
+  ],
+  spawns: [
+    { x: 2, y: 2 },
+    { x: 58, y: 38 },
+    { x: 58, y: 2 },
+    { x: 2, y: 38 },
+    { x: 4, y: 20 },
+    { x: 56, y: 20 },
+    { x: 18.5, y: 38.8 },
+    { x: 41.5, y: 1.2 },
+    { x: 44, y: 26 },
+    { x: 16, y: 14 },
+  ],
+  respawns: [BEAR, BEAR],
+};
 export const MAPS: Record<Mode, Arena> = {
-  showdown: {
-    w: 36,
-    h: 24,
-    walls: [
-      { id: "a", x: 8, y: 7, w: 3, h: 1 },
-      { id: "b", x: 25, y: 16, w: 3, h: 1 },
-      { id: "c", x: 8, y: 16, w: 3, h: 1 },
-      { id: "d", x: 25, y: 7, w: 3, h: 1 },
-      { id: "e", x: 16, y: 9, w: 1, h: 2 },
-      { id: "f", x: 19, y: 13, w: 1, h: 2 },
-      ...[
-        [12, 5],
-        [23, 18],
-        [12, 18],
-        [23, 5],
-      ].map(([x, y], i) => ({ id: "crate" + i, x, y, w: 1, h: 1, hp: 1800 })),
-    ],
-    bushes: [
-      { x: 4, y: 10, w: 3, h: 4 },
-      { x: 29, y: 10, w: 3, h: 4 },
-      { x: 14, y: 3, w: 4, h: 2 },
-      { x: 18, y: 19, w: 4, h: 2 },
-    ],
-    spawns: [
-      { x: 3, y: 3 },
-      { x: 33, y: 21 },
-      { x: 33, y: 3 },
-      { x: 3, y: 21 },
-      { x: 18, y: 3 },
-      { x: 18, y: 21 },
-      { x: 3, y: 12 },
-      { x: 33, y: 12 },
-      { x: 10, y: 12 },
-      { x: 26, y: 12 },
-    ],
-  },
+  showdown: LAWN,
   broomball: {
     w: 34,
     h: 20,
@@ -1013,7 +1175,9 @@ export const MAPS: Record<Mode, Arena> = {
       { x: 27, y: 5 },
       { x: 27, y: 15 },
     ],
+    respawns: [[{ x: 4, y: 10 }], [{ x: 30, y: 10 }]],
   },
+  fishing: BRUIN_PLAZA,
 };
 export const add = (a: Vec, b: Vec): Vec => ({ x: a.x + b.x, y: a.y + b.y });
 export const sub = (a: Vec, b: Vec): Vec => ({ x: a.x - b.x, y: a.y - b.y });

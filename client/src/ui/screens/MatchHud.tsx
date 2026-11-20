@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FIGHTERS, ITEMS, RULES, type FighterId, type ItemKind } from "../../../../shared/definitions";
+import { FIGHTERS, FISH, ITEMS, MODES, RULES, type FighterId, type ItemKind } from "../../../../shared/definitions";
 import type { Match } from "../../../../shared/types";
 import { uiCue } from "../../audio";
 import type { ArenaHandle, GameBridge } from "../../game";
@@ -13,8 +13,8 @@ import { installStickRouter } from "../game/touchRouter";
 
 const { Control, Display } = gameKit;
 
-const matchDuration = (mode: Match["mode"], overtime: boolean) =>
-  overtime ? 180 : mode === "showdown" ? 210 : 150;
+/** Regulation plus Broomball's 30 s golden goal. */
+const matchDuration = (mode: Match["mode"], overtime: boolean) => MODES[mode].length + (overtime ? 30 : 0);
 const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**
@@ -35,6 +35,8 @@ interface HudView {
   carrying: boolean;
   item: ItemKind | null;
   ball: "self" | "blue" | "red" | "loose" | null;
+  /** Fishers of Men: which side the local player is on. */
+  role: "fish" | "fisher" | null;
   goalKickoff: number | null;
   alive: boolean;
   fighter: FighterId | null;
@@ -78,6 +80,7 @@ const deriveHud = (match: Match | null, selfId: string, spectate: string | null)
               ? "blue"
               : "red"
             : "loose",
+    role: match.mode === "fishing" && self ? (self.team === FISH ? "fish" : "fisher") : null,
     goalKickoff: match.phase === "goal" ? Math.ceil(match.phaseUntil - match.time) : null,
     alive: !!self?.alive,
     fighter: self?.fighter ?? null,
@@ -269,6 +272,11 @@ export function MatchHud({
             <Display kind="label" level="number" text={hud.clock} />
             {hud.mode === "showdown" ? (
               <Display kind="badge" icon="users" text={`${hud.aliveCount} LEFT`} pulseKey={hud.aliveCount} emphasis="pulse" />
+            ) : hud.mode === "fishing" ? (
+              <span className="hud-score">
+                <Display kind="badge" variant="primary" text={`▲ ${hud.score0} FISH`} pulseKey={hud.score0} emphasis="burst" />
+                <Display kind="badge" variant="secondary" text={`${hud.score1} FISHERS ◆`} pulseKey={hud.score1} emphasis="burst" />
+              </span>
             ) : (
               <span className="hud-score">
                 <Display kind="badge" variant="primary" text={`▲ ${hud.score0}`} pulseKey={hud.score0} emphasis="burst" />
@@ -308,6 +316,15 @@ export function MatchHud({
                       : "◆ RED BALL"
               }
               pulseKey={hud.ball}
+            />
+          )}
+          {hud.role && hud.alive && (
+            <Display
+              kind="badge"
+              icon="hook"
+              variant={hud.role === "fish" ? "primary" : "secondary"}
+              text={hud.role === "fish" ? "▲ YOU'RE A FISH · STAY FREE" : "◆ YOU'RE A FISHER · CATCH THEM"}
+              pulseKey={hud.role}
             />
           )}
           {notice && <Display kind="callout" size="sm" text={notice} pulseKey={notice} />}
@@ -405,7 +422,14 @@ export function MatchHud({
             />
           </Display>
         ) : (
-          <Display kind="callout" className="hud-respawn" icon="timer" text={`Back in ${hud.respawnIn}`} pulseKey={hud.respawnIn} />
+          <Display
+            kind="callout"
+            className="hud-respawn"
+            icon="timer"
+            text={`Back in ${hud.respawnIn}`}
+            sub={hud.role === "fisher" ? "◆ At the Bruin Bear, as a Fisher" : undefined}
+            pulseKey={hud.respawnIn}
+          />
         )}
         {hud.countdown !== null && (
           <Display kind="callout" className="hud-big" variant="primary" size="mega" text={String(hud.countdown)} pulseKey={hud.countdown} />

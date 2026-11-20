@@ -5,6 +5,7 @@ import {
   type ItemKind,
   clamp,
   distance,
+  moveSpeed,
   type FighterId,
   type Vec,
 } from "../../shared/definitions";
@@ -324,7 +325,7 @@ class Arena {
         const result = this.predictor.frame(
           s,
           p.pos,
-          FIGHTERS[p.fighter].speed,
+          moveSpeed(s.mode, p),
           p.slow,
           this.bridge.paused ? { x: 0, y: 0 } : this.bridge.input.move,
           performance.now() / 1000,

@@ -32,23 +32,32 @@ export function ResultsScreen({
   const { ordered, mvp } = standings(match);
   const me = match.players.find((p) => p.id === selfId);
   const showdown = match.mode === "showdown";
+  const fishing = match.mode === "fishing";
+  const ranked = showdown || fishing;
   const winner = match.players.find((p) => p.id === match.winner);
-  const headline = showdown
-    ? `${winner?.name ?? "Nobody"} wins!`
-    : match.winner
-      ? `${match.winner === "blue" ? "▲ Blue" : "◆ Red"} wins!`
-      : "Draw!";
+  // Fishers of Men's score is [Fish still free, Fishers].
+  const headline = fishing
+    ? match.winner === "fish"
+      ? `${match.score[0] === 1 ? "A fish" : `${match.score[0]} fish`} got away!`
+      : "Everyone got caught!"
+    : showdown
+      ? `${winner?.name ?? "Nobody"} wins!`
+      : match.winner
+        ? `${match.winner === "blue" ? "▲ Blue" : "◆ Red"} wins!`
+        : "Draw!";
   const myPlace = ordered.findIndex((p) => p.id === selfId) + 1;
-  const sub = showdown
+  const sub = ranked
     ? me
-      ? `You placed #${myPlace} of ${ordered.length}`
+      ? `You placed #${myPlace} of ${ordered.length}${fishing && me.stats.catches ? ` · ${me.stats.catches} caught` : ""}`
       : `${ordered.length} fighters`
     : `▲ ${match.score[0]} — ${match.score[1]} ◆${
         me && match.winner ? ((me.team === 0) === (match.winner === "blue") ? " · Victory" : " · Defeat") : ""
       }`;
-  const columns = showdown
-    ? ["Player", "Place", "K / D", "Damage", "Healing", "Survived"]
-    : ["Player", "G / A", "K / D", "Damage", "Healing", "MVP"];
+  const columns = fishing
+    ? ["Player", "Place", "Caught", "K / D", "Damage", "Free for"]
+    : showdown
+      ? ["Player", "Place", "K / D", "Damage", "Healing", "Survived"]
+      : ["Player", "G / A", "K / D", "Damage", "Healing", "MVP"];
   const rows = ordered.map((p, i) => ({
     key: p.id,
     cells: [
@@ -56,11 +65,22 @@ export function ResultsScreen({
         <Display kind="portrait" src={fighterArt(p.fighter)} alt="" />
         {p.name}
       </span>,
-      showdown ? `#${i + 1}` : `${p.stats.goals} / ${p.stats.assists}`,
-      `${p.stats.kills} / ${p.stats.deaths}`,
-      Math.round(p.stats.damage).toLocaleString(),
-      Math.round(p.stats.healing).toLocaleString(),
-      showdown ? clock(p.stats.survived) : p.id === mvp ? "★ MVP" : "",
+      ...(fishing
+        ? [
+            `#${i + 1}`,
+            `${p.stats.catches}${p.id === mvp ? " ★" : ""}`,
+            `${p.stats.kills} / ${p.stats.deaths}`,
+            Math.round(p.stats.damage).toLocaleString(),
+            // Starting Fishers were never free.
+            p.stats.survived ? clock(p.stats.survived) : "—",
+          ]
+        : [
+            showdown ? `#${i + 1}` : `${p.stats.goals} / ${p.stats.assists}`,
+            `${p.stats.kills} / ${p.stats.deaths}`,
+            Math.round(p.stats.damage).toLocaleString(),
+            Math.round(p.stats.healing).toLocaleString(),
+            showdown ? clock(p.stats.survived) : p.id === mvp ? "★ MVP" : "",
+          ]),
     ],
   }));
   return (
@@ -74,7 +94,7 @@ export function ResultsScreen({
         className="results-banner"
         variant="primary"
         size="hero"
-        icon={showdown ? "crown" : "ball"}
+        icon={fishing ? "hook" : showdown ? "crown" : "ball"}
         text={headline}
         sub={sub}
         pulseKey={headline}

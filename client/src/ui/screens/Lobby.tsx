@@ -1,19 +1,24 @@
-import { FIGHTERS } from "../../../../shared/definitions";
+import { FIGHTERS, MODES, type Mode } from "../../../../shared/definitions";
 import type { Command, Lobby } from "../../../../shared/types";
 import type { PressResult } from "../core/control";
 import { menuKit } from "../menu/menuKit";
 
 const { Control } = menuKit;
 
-export const CAPACITY = { showdown: 10, broomball: 6 } as const;
+/** Lobby order and icon of each mode; names and capacities come from MODES. */
+const MODE_PICKS: { value: Mode; icon: "users" | "ball" | "hook" }[] = [
+  { value: "showdown", icon: "users" },
+  { value: "broomball", icon: "ball" },
+  { value: "fishing", icon: "hook" },
+];
 
 /** Mirrors the room's start validation so Start can deny with a reason. */
 export function startBlocked(l: Lobby): string | undefined {
   if (l.members.some((p) => !p.connected)) return "Waiting for players to reconnect";
   const waiting = l.members.filter((p) => !p.ready).length;
   if (waiting) return waiting === 1 ? "1 player is not ready" : `${waiting} players are not ready`;
-  if (l.members.length > CAPACITY[l.mode])
-    return `${l.mode === "showdown" ? "Showdown" : "Broomball"} holds up to ${CAPACITY[l.mode]}`;
+  if (l.members.length > MODES[l.mode].capacity)
+    return `${MODES[l.mode].name} holds up to ${MODES[l.mode].capacity}`;
   return undefined;
 }
 
@@ -34,7 +39,8 @@ export function LobbyScreen({ lobby, selfId, command, onCopy, onLeave, onFighter
   const ready = lobby.members.filter((m) => m.ready).length;
   const blocked = startBlocked(lobby);
   const count = lobby.members.length;
-  const full = count >= CAPACITY[lobby.mode];
+  const capacity = MODES[lobby.mode].capacity;
+  const full = count >= capacity;
   return (
     <main className="screen lobby">
       <header className="bar">
@@ -55,19 +61,16 @@ export function LobbyScreen({ lobby, selfId, command, onCopy, onLeave, onFighter
           label="Game mode"
           value={lobby.mode}
           disabled={host ? undefined : "Only the host picks the mode"}
-          options={[
-            { value: "showdown", icon: "users", label: "Showdown", sub: `${count}/${CAPACITY.showdown} players` },
-            {
-              value: "broomball",
-              icon: "ball",
-              label: "Broomball",
-              sub: `${count}/${CAPACITY.broomball} players`,
-              disabled:
-                count > CAPACITY.broomball && lobby.mode !== "broomball"
-                  ? `Broomball holds up to ${CAPACITY.broomball}`
-                  : undefined,
-            },
-          ]}
+          options={MODE_PICKS.map(({ value, icon }) => ({
+            value,
+            icon,
+            label: MODES[value].short ?? MODES[value].name,
+            sub: `${count}/${MODES[value].capacity} players`,
+            disabled:
+              count > MODES[value].capacity && lobby.mode !== value
+                ? `${MODES[value].name} holds up to ${MODES[value].capacity}`
+                : undefined,
+          }))}
           onChange={(mode) => command({ type: "mode", mode })}
         />
         <Control kind="icon" icon="gear" label="Settings" hideLabel onPress={onSettings} />
@@ -87,7 +90,7 @@ export function LobbyScreen({ lobby, selfId, command, onCopy, onLeave, onFighter
               variant="dark"
               icon="bot"
               label="Add bot"
-              disabled={full ? `The room holds ${CAPACITY[lobby.mode]}` : undefined}
+              disabled={full ? `The room holds ${capacity}` : undefined}
               onPress={() => {
                 command({ type: "bot" });
                 return "confirm";

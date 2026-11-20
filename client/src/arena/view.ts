@@ -20,6 +20,7 @@ import {
   FIGHTERS,
   ITEMS,
   MAPS,
+  MODES,
   clamp,
   shotPoint,
   type FighterId,
@@ -419,7 +420,8 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     const key = `${W}x${H}:${mode}`;
     if (key === fitted) return;
     fitted = key;
-    const m = MAPS[mode];
+    // A larger field keeps Central Lawn's frame, so fighters keep their size.
+    const m = MAPS[mode].frame ?? MAPS[mode];
     renderer.setSize(W, H, false);
     camera.aspect = W / H;
     camera.updateProjectionMatrix();
@@ -765,13 +767,11 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         z = a.at.y;
       markers.shadow(x, z, 0.62);
       if (!p.alive) continue;
-      const ring =
-        s.mode === "broomball"
-          ? TEAM_COLOR[p.team]
-          : hex(FIGHTERS[p.fighter].color);
+      const teams = MODES[s.mode].teams;
+      const ring = teams ? TEAM_COLOR[p.team] : hex(FIGHTERS[p.fighter].color);
       if (p.id === local) {
         markers.ring(x, z, 0.74, 0xfff0b8);
-        if (s.mode === "broomball") markers.ring(x, z, 0.6, ring, 0.035);
+        if (teams) markers.ring(x, z, 0.6, ring, 0.035);
       } else markers.ring(x, z, 0.67, ring);
       if (!localAlive && focusId === p.id) markers.ring(x, z, 0.98, 0xffd86e);
       if (p.protectedUntil > s.time)
@@ -805,7 +805,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
           0x8bc7ff,
           0.95,
         );
-      const name = `${s.mode === "broomball" ? (p.team === 0 ? "▲ " : "◆ ") : ""}${p.name}${p.connected ? "" : " · offline"}`;
+      const name = `${teams ? (p.team === 0 ? "▲ " : "◆ ") : ""}${p.name}${p.connected ? "" : " · offline"}`;
       billboards.label(at, 27 * ui, billboards.text(p.id, name), 12.5 * ui);
       if (p.stunUntil > s.time)
         for (let k = 0; k < 2; k++) {
@@ -1092,6 +1092,15 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         case "eliminated":
           effects.ring(e.pos, 0.4, 1.6, 0xffffff, 0.5, now);
           effects.disc(e.pos, 0.2, 1.2, color, 0.45, now, 0.4);
+          break;
+        case "caught":
+          // A splash where the Fish was hooked, and the line reeling it to
+          // the Fisher who caught it.
+          effects.ring(e.pos, 0.3, 1.9, 0x8fd3ff, 0.6, now, 0.9, 0.18);
+          effects.ring(e.pos, 0.2, 1.2, 0xffffff, 0.45, now, 0.9, 0.1);
+          effects.disc(e.pos, 0.2, 1, TEAM_COLOR[1], 0.5, now, 0.35);
+          if (e.value)
+            effects.streak(e.pos, e.dir, 0, e.value, 0.06, 0xf4f1e6, 0.5, now, 0.9);
           break;
         case "burst":
           play.blast(e.pos, e.value ?? 3, color, now, dur);

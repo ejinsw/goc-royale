@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FIGHTERS, IDS, type FighterId } from "../shared/definitions";
+import { FIGHTERS, FISH, IDS, MAPS, type FighterId } from "../shared/definitions";
 import { Bot, superUses } from "../shared/bot";
 import { Engine } from "../shared/engine";
 import { Room } from "../shared/room";
@@ -279,5 +279,37 @@ test("the Broomball bot nearest its goal keeps it against a shot flying at it", 
   assert.ok(
     e.state.ball.carrier === keeper.id || Math.abs(keeper.pos.y - lane()) < before - 1,
     "the keeper moved into the shot's path",
+  );
+});
+
+test("Fishers of Men bots: Fishers hunt and catch, Fish hide in bushes", () => {
+  const fighters = ["daniel", "rich", "samuel", "josh", "elijah", "tovya", "joyce", "miriam"] as FighterId[];
+  const members: Member[] = fighters.map((f, i) => ({
+    id: "b" + i,
+    name: f,
+    fighter: f,
+    team: 0,
+    ready: true,
+    connected: true,
+    bot: true,
+  }));
+  const rnd = random(14);
+  const e = new Engine("fishing", members, rnd);
+  const bots = members.map((m, i) => new Bot(m.id, rnd, i));
+  const bushes = MAPS.fishing.bushes;
+  const inBush = (p: { pos: { x: number; y: number } }) =>
+    bushes.some((b) => p.pos.x >= b.x && p.pos.x <= b.x + b.w && p.pos.y >= b.y && p.pos.y <= b.y + b.h);
+  let hid = false;
+  while (e.state.phase !== "finished" && e.state.time < 200) {
+    for (const b of bots) b.update(e);
+    e.step();
+    while (e.state.cutscene) e.step();
+    hid ||= e.state.players.some((p) => p.alive && p.team === FISH && inBush(p));
+  }
+  assert.equal(e.state.phase, "finished");
+  assert.ok(hid, "a Fish bot hid in a bush");
+  assert.ok(
+    e.state.players.reduce((n, p) => n + p.stats.catches, 0) >= 2,
+    "Fisher bots caught Fish",
   );
 });
