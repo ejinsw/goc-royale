@@ -1053,6 +1053,7 @@ export class Engine {
     const s = this.state,
       f = FIGHTERS[owner.fighter];
     this.effect("splash", at, owner.id, { x: 1, y: 0 }, spec.radius, 0.45);
+    let dealt = 0;
     for (const t of s.players) {
       if (!t.alive || distance(at, t.pos) > spec.radius + RULES.radius)
         continue;
@@ -1072,7 +1073,18 @@ export class Engine {
         }
         continue;
       }
-      if (this.lineClear(at, t.pos)) this.damage(t, f.damage, owner);
+      if (!this.lineClear(at, t.pos)) continue;
+      const before = t.hp + t.shield;
+      if (this.damage(t, f.damage, owner)) dealt += before - Math.max(0, t.hp) - t.shield;
+    }
+    if (spec.lifesteal && dealt > 0) {
+      const hp = owner.hp;
+      this.heal(owner, Math.round(dealt * spec.lifesteal), owner, false);
+      const got = Math.round(owner.hp - hp);
+      if (got > 0) {
+        this.effect("heal", owner.pos, owner.id, owner.aim, got);
+        this.emit("heal_applied", owner.pos, owner.id, owner.aim, got);
+      }
     }
     for (const a of s.areas)
       if (this.enemyArea(owner, a) && distance(a.pos, at) <= spec.radius + 0.5)
@@ -1427,7 +1439,7 @@ export class Engine {
           ? s.time >= t.protectedUntil
           : this.damage(
               t,
-              b.damage === "knockout" ? t.hp + t.shield : b.damage,
+              b.damage,
               p,
               true,
             );
@@ -1484,7 +1496,7 @@ export class Engine {
     }
   }
   /** Turn a homing shot toward the nearest rival ahead that its owner can see. */
-  private steer(q: Projectile, owner: Player, maxTurn: number, anywhere = false) {
+  private steer(q: Projectile, owner: Player, maxTurn: number) {
     let best: Player | null = null,
       bestD = Infinity;
     for (const t of this.state.players) {
@@ -1496,7 +1508,7 @@ export class Engine {
       if (
         len < 1e-6 ||
         len > q.remaining + 1 ||
-        (!anywhere && (d.x * q.dir.x + d.y * q.dir.y) / len < 0.34)
+        (d.x * q.dir.x + d.y * q.dir.y) / len < 0.34
       )
         continue;
       if (len < bestD && this.lineClear(q.pos, t.pos)) {
@@ -1647,8 +1659,7 @@ export class Engine {
           : f.damage;
       const width = sup ? sup.width : (spec.width ?? SHOT_WIDTH);
       const weave = sup ? undefined : spec.weave;
-      if (!sup && spec.seek) this.steer(q, owner, Math.PI, true);
-      else if (!sup && spec.homing && !q.back)
+      if (!sup && spec.homing && !q.back)
         this.steer(q, owner, spec.homing * dt);
       let dead = false;
       const dist = Math.min(speed * dt, q.remaining);
@@ -1734,8 +1745,11 @@ export class Engine {
             ) <=
               RULES.radius + spec.centerBonus.width;
           const centerBonus = centered ? spec.centerBonus!.damage : 0;
+          // Checked before this hit refreshes the mark.
+          const followUp =
+            spec.followUp && t.revealUntil > s.time ? spec.followUp : 0;
           const before = t.hp + t.shield;
-          if (this.damage(t, power + centerBonus, owner)) {
+          if (this.damage(t, power + centerBonus + followUp, owner)) {
             if (centered)
               this.effect("harmony", t.pos, owner.id, q.dir, centerBonus, 0.3);
             this.afterHit(owner, t, spec, before);

@@ -44,6 +44,7 @@ import {
 import type { Area, Item } from "../../../shared/types";
 import { merge, part } from "../ui/scene/geometry";
 import type { AimIntent, AimShape } from "./aimPreview";
+import { itemModel, projectileModel } from "./attackModels";
 import type { ArenaMaterials } from "./materials";
 
 /**
@@ -974,37 +975,8 @@ export class Items {
   private flyer: InstancedMesh;
   private hands = new Vector3();
   constructor(mats: ArenaMaterials) {
-    const broomGeometry = merge([
-      part(
-        new CylinderGeometry(0.045, 0.045, 1.25, 8),
-        "#e3a924",
-        [0, 0, 0],
-        [Math.PI / 2, 0, 0],
-      ),
-      part(
-        new RoundedBoxGeometry(0.52, 0.11, 0.35, 1, 0.04),
-        "#ffd85b",
-        [0, 0, 0.67],
-      ),
-      part(
-        new RoundedBoxGeometry(0.43, 0.12, 0.07, 1, 0.02),
-        "#a96e12",
-        [0, 0.01, 0.52],
-      ),
-    ]);
-    const flyerGeometry = merge([
-      part(new RoundedBoxGeometry(0.52, 0.045, 0.7, 1, 0.02), "#f4f7ff"),
-      part(
-        new RoundedBoxGeometry(0.38, 0.05, 0.1, 1, 0.01),
-        "#387dce",
-        [0, 0.01, -0.2],
-      ),
-      part(
-        new RoundedBoxGeometry(0.3, 0.05, 0.035, 1, 0.01),
-        "#7a92ae",
-        [0, 0.01, 0.04],
-      ),
-    ]);
+    const broomGeometry = itemModel("golden_broom");
+    const flyerGeometry = itemModel("goc_flyer");
     this.broom = new InstancedMesh(mats.track(broomGeometry), mats.toon, 32);
     this.flyer = new InstancedMesh(mats.track(flyerGeometry), mats.toon, 32);
     for (const mesh of [this.broom, this.flyer]) {
@@ -1096,244 +1068,6 @@ const SPIN: Record<FighterId, number> = {
 const PROJECTILE_VISUAL_SCALE = 1.6;
 type ShotKind = FighterId;
 
-function projectileGeometry(kind: ShotKind): BufferGeometry {
-  switch (kind) {
-    case "brandon":
-      return merge([
-        part(new RoundedBoxGeometry(0.44, 0.05, 0.3, 1, 0.02), "#fff3cf"),
-        part(
-          new RoundedBoxGeometry(0.44, 0.06, 0.09, 1, 0.02),
-          "#417bc2",
-          [0, 0.005, -0.105],
-        ),
-        part(
-          new RoundedBoxGeometry(0.24, 0.06, 0.03, 1, 0.01),
-          "#315e94",
-          [0, 0.01, 0.04],
-        ),
-      ]);
-    case "daniel":
-      return merge([
-        part(
-          new TorusGeometry(0.11, 0.035, 6, 14),
-          "#ffdc76",
-          [0, 0, 0],
-          [Math.PI / 2, 0, 0],
-        ),
-        part(
-          new RoundedBoxGeometry(0.06, 0.04, 0.26, 1, 0.015),
-          "#e9c45c",
-          [0, 0, 0.2],
-        ),
-        part(
-          new RoundedBoxGeometry(0.1, 0.04, 0.05, 1, 0.015),
-          "#e9c45c",
-          [0.03, 0, 0.3],
-        ),
-      ]);
-    case "samuel":
-      // A snack bag: crimped foil top and bottom, a cookie on the label.
-      return merge([
-        part(new RoundedBoxGeometry(0.34, 0.42, 0.14, 2, 0.05), "#f5d46e"),
-        part(new RoundedBoxGeometry(0.36, 0.05, 0.1, 1, 0.015), "#d8994c", [0, 0.23, 0]),
-        part(new RoundedBoxGeometry(0.36, 0.05, 0.1, 1, 0.015), "#d8994c", [0, -0.23, 0]),
-        part(new CylinderGeometry(0.1, 0.1, 0.03, 14), "#d8994c", [0, 0, 0.075], [Math.PI / 2, 0, 0]),
-        part(new SphereGeometry(0.022, 6, 4), "#624534", [0.03, 0.02, 0.095]),
-        part(new SphereGeometry(0.02, 6, 4), "#624534", [-0.035, -0.02, 0.095]),
-        part(new RoundedBoxGeometry(0.3, 0.06, 0.02, 1, 0.01), "#e8553a", [0, 0.12, 0.072]),
-      ]);
-    case "elijah":
-      return merge([
-        part(
-          new SphereGeometry(0.15, 12, 8),
-          "#77d5b9",
-          [0, 0, 0],
-          [0, 0, 0],
-          [1, 0.7, 1.35],
-        ),
-        part(new SphereGeometry(0.09, 10, 8), "#1f3a37", [0, 0.02, 0.18]),
-        part(new SphereGeometry(0.04, 6, 4), "#1f3a37", [0.07, 0.09, -0.02]),
-        part(new SphereGeometry(0.04, 6, 4), "#1f3a37", [-0.06, 0.09, -0.08]),
-        ...[-1, 1].flatMap((s) =>
-          [-0.08, 0, 0.08].map((z) =>
-            part(
-              new RoundedBoxGeometry(0.26, 0.02, 0.02, 1, 0.005),
-              "#1f3a37",
-              [0, -0.03, z],
-              [0, 0, s * 0.3],
-            ),
-          ),
-        ),
-      ]);
-    case "ethan":
-      return merge([
-        part(
-          new SphereGeometry(0.12, 12, 8),
-          "#df83c8",
-          [0, 0, 0],
-          [0, 0, 0],
-          [1.25, 0.6, 1],
-        ),
-        part(
-          new RoundedBoxGeometry(0.04, 0.42, 0.04, 1, 0.015),
-          "#df83c8",
-          [0.11, 0.2, 0],
-        ),
-        part(
-          new RoundedBoxGeometry(0.18, 0.05, 0.04, 1, 0.015),
-          "#df83c8",
-          [0.18, 0.38, 0],
-          [0, 0, -0.5],
-        ),
-      ]);
-    case "david":
-      return merge([
-        part(
-          new TorusGeometry(0.13, 0.035, 6, 18, Math.PI * 1.45),
-          "#f2c65d",
-          [-0.07, 0, 0],
-          [Math.PI / 2, 0, 0.35],
-        ),
-        part(
-          new TorusGeometry(0.13, 0.035, 6, 18, Math.PI * 1.45),
-          "#4f7fd1",
-          [0.07, 0, 0],
-          [Math.PI / 2, 0, -0.35],
-        ),
-        part(new SphereGeometry(0.055, 10, 7), "#fff8d7"),
-      ]);
-    case "dylan":
-      return merge([
-        part(
-          new TorusGeometry(0.18, 0.035, 6, 18, Math.PI * 1.4),
-          "#c9b98a",
-          [0, 0, 0],
-          [Math.PI / 2, 0, 0.4],
-        ),
-        part(
-          new RoundedBoxGeometry(0.05, 0.04, 0.22, 1, 0.015),
-          "#6e8795",
-          [0.13, 0, 0.15],
-          [0, 0, 0.5],
-        ),
-      ]);
-    case "isaac":
-      return merge([
-        part(new RoundedBoxGeometry(0.28, 0.05, 0.05, 1, 0.012), "#d7dde4"),
-        part(
-          new RoundedBoxGeometry(0.05, 0.05, 0.22, 1, 0.012),
-          "#8b939d",
-          [-0.12, 0, 0.08],
-        ),
-        part(
-          new RoundedBoxGeometry(0.05, 0.05, 0.22, 1, 0.012),
-          "#8b939d",
-          [0.12, 0, 0.08],
-        ),
-      ]);
-    case "rosalie":
-      return merge([
-        part(
-          new TorusGeometry(0.3, 0.055, 8, 24, Math.PI),
-          "#fbe8d3",
-          [0, 0, 0],
-          [Math.PI / 2, 0, 0],
-        ),
-        part(
-          new TorusGeometry(0.2, 0.04, 8, 20, Math.PI),
-          "#e8553a",
-          [0, 0.02, 0.02],
-          [Math.PI / 2, 0, 0],
-        ),
-      ]);
-    case "joelle":
-      return merge([
-        part(
-          new RoundedBoxGeometry(0.32, 0.055, 0.09, 1, 0.02),
-          "#ffb300",
-          [-0.1, 0, 0],
-          [0, 0, 0.55],
-        ),
-        part(
-          new RoundedBoxGeometry(0.32, 0.055, 0.09, 1, 0.02),
-          "#ffcf55",
-          [0.1, 0, 0],
-          [0, 0, -0.55],
-        ),
-      ]);
-    case "susannah":
-      return merge([
-        part(new RoundedBoxGeometry(0.34, 0.055, 0.28, 1, 0.025), "#fff6fa"),
-        part(
-          new RoundedBoxGeometry(0.25, 0.06, 0.055, 1, 0.012),
-          "#ff6f91",
-          [0, 0.01, -0.07],
-        ),
-        part(new SphereGeometry(0.025, 6, 4), "#3b3f63", [-0.09, 0.04, 0.06]),
-      ]);
-    case "joyce":
-      return merge([
-        part(
-          new RoundedBoxGeometry(0.38, 0.035, 0.16, 1, 0.01),
-          "#fffdf4",
-          [0, 0, 0],
-          [0, 0, 0.22],
-        ),
-        part(
-          new RoundedBoxGeometry(0.2, 0.04, 0.06, 1, 0.01),
-          "#2e9e5b",
-          [-0.02, 0.02, -0.08],
-          [0, 0, -0.45],
-        ),
-      ]);
-    case "miriam":
-      return merge([
-        part(
-          new SphereGeometry(0.12, 12, 8),
-          "#fbfbf7",
-          [0, 0, 0],
-          [0, 0, 0],
-          [1.5, 0.75, 0.8],
-        ),
-        part(new SphereGeometry(0.07, 10, 8), "#fbfbf7", [0, 0.03, 0.14]),
-        part(
-          new RoundedBoxGeometry(0.26, 0.025, 0.08, 1, 0.01),
-          "#e3e6df",
-          [0, 0.04, -0.02],
-        ),
-      ]);
-    case "russell":
-      return merge([
-        part(new CylinderGeometry(0.18, 0.18, 0.055, 20), "#f3c26b"),
-        part(
-          new TorusGeometry(0.12, 0.018, 6, 20),
-          "#8a6827",
-          [0, 0.03, 0],
-          [Math.PI / 2, 0, 0],
-        ),
-      ]);
-    case "brandon_n":
-      return merge([
-        part(new RoundedBoxGeometry(0.4, 0.035, 0.26, 1, 0.015), "#2d6fc0"),
-        part(
-          new RoundedBoxGeometry(0.4, 0.045, 0.06, 1, 0.012),
-          "#ffd24a",
-          [0, 0.004, -0.09],
-        ),
-        part(
-          new RoundedBoxGeometry(0.11, 0.045, 0.1, 1, 0.012),
-          "#f4f7fb",
-          [-0.1, 0.004, 0.04],
-        ),
-      ]);
-    case "rich":
-    case "josh":
-    case "tovya":
-    case "jemuel":
-      return new SphereGeometry(0.01, 4, 2);
-  }
-}
-
 export interface ProjectileView {
   fighter: FighterId;
   /** Drawn ground position: the weave applied, extrapolated past the snapshot. */
@@ -1363,7 +1097,7 @@ export class Projectiles {
       return attack === "shot" || attack === "lob";
     })) {
       const mesh = new InstancedMesh(
-        mats.track(projectileGeometry(kind)),
+        mats.track(projectileModel(kind)),
         mats.toon,
         24,
       );

@@ -89,14 +89,10 @@ export interface ShotSpec {
   returns?: boolean;
   /** Turns toward the nearest visible rival ahead, up to this rate (rad/s). */
   homing?: number;
-  /**
-   * Aimbot: every step it turns straight at the nearest visible rival in
-   * reach, whichever way it was fired. Cover, range and spawn protection
-   * still stop it, and it cannot see a rival hidden in a bush.
-   */
-  seek?: boolean;
-  /** Seconds a hit rival stays visible inside bushes. */
+  /** Seconds a hit rival stays visible inside bushes (marked). */
   reveal?: number;
+  /** Bonus damage against a rival who is still marked when it hits. */
+  followUp?: number;
   /** Bonus damage inside a narrower, clearly presented center hit radius. */
   centerBonus?: { width: number; damage: number };
   /** Drags a hit rival this far toward the shooter. Not a knockback. */
@@ -151,6 +147,8 @@ export interface LobSpec {
   radius: number;
   /** Injured teammates in the splash recover this much. */
   healAllies?: number;
+  /** Share of the splash damage dealt returned to the thrower as health. */
+  lifesteal?: number;
 }
 
 /**
@@ -188,8 +186,7 @@ export function shotPoint(
  */
 export interface BurstSpec {
   radius: number;
-  /** "knockout" removes all remaining health, shield included. */
-  damage?: number | "knockout";
+  damage?: number;
   stun?: number;
   /** Push rivals this far away from the center. */
   knock?: number;
@@ -307,7 +304,7 @@ export interface AreaSpec {
   wall?: { thickness: number };
 }
 export const AREAS: Record<AreaKind, AreaSpec> = {
-  welcome: { radius: 3.5, duration: 5, heal: 220, slow: 0.3 },
+  welcome: { radius: 4.5, duration: 7, heal: 400, slow: 0.4 },
   table: { radius: 3, duration: 6, hp: 2000, hitRadius: 0.65, heal: 350 },
   panda: {
     radius: 0.7,
@@ -349,20 +346,22 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     name: "Brandon",
     team: "Welcome & Follow-Up",
     role: "Controller",
-    hp: 5700,
+    hp: 6200,
     speed: 5.2,
     ammo: 3,
-    reload: 1.3,
-    damage: 700,
+    reload: 1.1,
+    damage: 850,
     range: 8,
-    projectileSpeed: 12,
+    projectileSpeed: 15,
     attack: "Nametag Toss",
     super: "Welcome Committee",
     color: "#417bc2",
-    description: "Throw a nametag. Mark enemies for 4 seconds.",
-    superDescription: "A welcoming circle slows enemies and heals allies.",
+    description:
+      "Throw a nametag that marks a rival for 5 seconds. A marked rival takes +350 from the follow-up.",
+    superDescription:
+      "A big welcoming circle for 7 seconds: rivals inside are slowed 40%, allies heal 400 per second.",
     abilities: {
-      attack: { kind: "shot", reveal: 4 },
+      attack: { kind: "shot", reveal: 5, width: 0.2, followUp: 350 },
       super: { kind: "zone", area: "welcome", distance: 4 },
     },
   },
@@ -531,16 +530,16 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     speed: 5.2,
     ammo: 3,
     reload: 1.4,
-    damage: 2000,
+    damage: 380,
     range: 8,
     projectileSpeed: 14,
     attack: "Rizz",
     super: "Aura Pulse",
     color: "#df83c8",
     description:
-      "Strum two notes that spiral around each other, each dealing 2,000 damage.",
+      "Strum two notes that spiral around each other, 380 damage each.",
     superDescription:
-      "Instantly knock out rivals within 4 units. Walls and spawn protection block it.",
+      "A pulse of aura: 1,200 damage and a shove to rivals within 3.5 units. Walls and spawn protection block it.",
     abilities: {
       attack: {
         kind: "shot",
@@ -550,8 +549,9 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
       super: {
         kind: "burst",
         at: 0,
-        radius: 4,
-        damage: "knockout",
+        radius: 3.5,
+        damage: 1200,
+        knock: 1.5,
         effect: "aura",
         cutscene: { seconds: 3.8, again: 1.2, window: 20 },
       },
@@ -852,16 +852,17 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     speed: 5.2,
     ammo: 3,
     reload: 1.4,
-    damage: 760,
-    range: 8,
-    projectileSpeed: 14,
+    damage: 700,
+    range: 7.5,
+    projectileSpeed: 11,
     attack: "Reimbursement",
     super: "Budget Cuts",
     color: "#7cb342",
-    description: "Coins that refund 35% of their damage as health.",
+    description:
+      "Toss a coin pouch over cover. It bursts on landing and refunds 35% of the damage as health.",
     superDescription: "Rivals around you take damage and lose all their ammo.",
     abilities: {
-      attack: { kind: "shot", lifesteal: 0.35 },
+      attack: { kind: "lob", radius: 1.1, lifesteal: 0.35 },
       super: { kind: "burst", at: 0, radius: 4.5, damage: 700, drain: true },
     },
   },
@@ -881,13 +882,13 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     super: "Swipe You In",
     color: "#2d6fc0",
     description:
-      "Fling three meal cards that lock onto the nearest rival in reach. They do not miss.",
+      "Fling a fan of three meal cards. Up close, all three land.",
     superDescription:
       "All-you-can-eat: heal yourself and nearby teammates 1,200 HP, plus a 600 shield for 4 seconds. Charges 20% faster.",
     // His Super is ready after about 4,170 damage instead of 5,000.
     chargeRate: 1.2,
     abilities: {
-      attack: { kind: "shot", spread: [-0.17, 0, 0.17], seek: true },
+      attack: { kind: "shot", spread: [-0.17, 0, 0.17] },
       super: {
         kind: "burst",
         at: 0,

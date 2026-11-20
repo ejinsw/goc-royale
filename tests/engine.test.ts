@@ -59,7 +59,7 @@ test("roster: the seven pilot fighters keep their HP, followed by David and the 
   ]);
   assert.deepEqual(
     IDS.slice(0, 7).map((i) => FIGHTERS[i].hp),
-    [5700, 8200, 4600, 5900, 5600, 5100, 5400],
+    [6200, 8200, 4600, 5900, 5600, 5100, 5400],
   );
   // Every ministry team with a named leader is represented.
   assert.deepEqual(
@@ -135,9 +135,28 @@ test("swept projectiles hit and Brandon reveal refreshes", () => {
   t.pos = { x: 13, y: 12 };
   fire(e);
   advance(e, 0.4);
-  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 700);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 850);
   assert.ok(t.revealUntil > e.state.time);
-  assert.equal(p.charge, 700);
+  assert.equal(p.charge, 850);
+});
+test("Brandon's follow-up: a marked rival takes +350 from the next nametag", () => {
+  const e = engine(),
+    [p, t] = e.playerList;
+  p.pos = { x: 10, y: 12 };
+  t.pos = { x: 13, y: 12 };
+  fire(e);
+  advance(e, 0.4);
+  const marked = FIGHTERS[t.fighter].hp - 850;
+  assert.equal(t.hp, marked, "the first tag marks");
+  fire(e);
+  advance(e, 0.4);
+  assert.equal(t.hp, marked - 1200, "the follow-up lands harder");
+  // Once the mark has worn off, the next tag is back to normal.
+  t.hp = FIGHTERS[t.fighter].hp;
+  advance(e, 5.2);
+  fire(e);
+  advance(e, 0.4);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 850);
 });
 test("Daniel spread can hit one nearby enemy five times", () => {
   const e = engine("daniel"),
@@ -330,14 +349,15 @@ test("David Side Eye warns, then shoves away from its center line and slows", ()
 test("passive healing starts after four quiet seconds and stays bounded", () => {
   const e = engine();
   const p = e.playerList[0];
+  const max = FIGHTERS[p.fighter].hp;
   p.hp -= 2000;
   p.quietSince = e.state.time;
   advance(e, 3.8);
-  assert.equal(p.hp, 3700);
+  assert.equal(p.hp, max - 2000);
   advance(e, 1);
-  assert.ok(p.hp > 3700);
+  assert.ok(p.hp > max - 2000);
   advance(e, 6);
-  assert.equal(p.hp, 5700);
+  assert.equal(p.hp, max);
 });
 test("invalid Super does not consume charge; carrier cannot use Super", () => {
   const e = engine("elijah", "broomball");
@@ -359,10 +379,12 @@ test("Brandon zone slows enemies, heals owner, expires", () => {
   assert.equal(e.activateSuper(p), true);
   p.pos = { x: 12, y: 12 };
   e.step();
-  assert.equal(t.slow, 0.3);
-  assert.ok(p.hp > 4700);
+  assert.equal(t.slow, 0.4);
+  assert.ok(p.hp > FIGHTERS.brandon.hp - 1000);
   assert.equal(p.charge, 0);
-  advance(e, 5.1);
+  advance(e, 6.9);
+  assert.equal(e.state.areas.length, 1, "the circle lasts 7 seconds");
+  advance(e, 0.2);
   assert.equal(e.state.areas.length, 0);
 });
 test("Samuel table can be destroyed by enemy projectiles", () => {
@@ -703,10 +725,10 @@ test("Ethan Rizz spends one ammo for two damaging notes", () => {
   assert.equal(p.ammo, 2);
   assert.equal(e.state.projectiles.length, 2);
   advance(e, 0.25);
-  assert.equal(target.hp, hp - 4000);
-  assert.equal(p.charge, 4000);
+  assert.equal(target.hp, hp - 760, "two notes, 380 each");
+  assert.equal(p.charge, 760);
 });
-test("Ethan Aura Pulse knocks out rivals, spares allies, respects range and does not recharge", () => {
+test("Ethan Aura Pulse hits and shoves rivals, spares allies, respects range and does not recharge", () => {
   const e = engine("ethan", "broomball");
   const [p, ally, far, enemy] = e.playerList;
   p.pos = { x: 10, y: 10 };
@@ -724,9 +746,10 @@ test("Ethan Aura Pulse knocks out rivals, spares allies, respects range and does
   while (e.state.cutscene) e.step();
   assert.equal(p.hp, 3900);
   assert.equal(ally.hp, FIGHTERS[ally.fighter].hp - 500);
-  assert.equal(far.hp, farHp);
-  assert.equal(enemy.hp, 0);
-  assert.equal(enemy.alive, false);
+  assert.equal(far.hp, farHp, "3.5 units of reach");
+  assert.equal(enemy.hp, hp - 1200, "no longer a knockout");
+  assert.ok(enemy.alive);
+  assert.ok(enemy.pos.y > 12.5, "shoved away");
   assert.equal(p.charge, 0);
   assert.equal(p.stats.healing, 0);
 });
@@ -748,7 +771,7 @@ test("Aura Pulse cannot pass through walls or activate while carrying the ball",
   assert.equal(enemy.hp, hp);
 });
 
-test("Aura Pulse respects spawn protection and knocks out multiple opponents", () => {
+test("Aura Pulse respects spawn protection and hits multiple opponents", () => {
   const e = engine("ethan", "broomball");
   const [p, , , a, b, shielded] = e.playerList;
   p.pos = { x: 10, y: 10 };
@@ -760,10 +783,10 @@ test("Aura Pulse respects spawn protection and knocks out multiple opponents", (
   e.activateSuper(p);
   // Aura Pulse now plays a cutscene: the match holds, then it resolves.
   while (e.state.cutscene) e.step();
-  assert.equal(a.alive, false);
-  assert.equal(b.alive, false);
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 1200);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 1200);
   assert.equal(shielded.hp, FIGHTERS[shielded.fighter].hp);
-  assert.equal(p.stats.kills, 2);
+  assert.equal(p.stats.damage, 2400);
 });
 
 test("presentation events carry stable ids, authoritative ticks, and payloads", () => {
@@ -1287,24 +1310,32 @@ test("Jemuel's ring hits behind him too; his covering shield absorbs damage firs
   assert.equal(p.shield, 0, "the shield expires");
 });
 
-test("Russell's coins refund health; Budget Cuts empties rivals' ammo", () => {
-  const e = duel("russell");
-  const [p, t] = e.playerList;
+test("Russell lobs a coin pouch over cover that refunds health; Budget Cuts empties rivals' ammo", () => {
+  const e = duel("russell", "broomball");
+  const [p, , , t, u] = e.playerList;
   p.pos = { x: 10, y: 12 };
+  t.pos = { x: 15, y: 12 };
+  u.pos = { x: 15.6, y: 12.6 };
+  e.state.walls = [{ id: "cover", x: 12, y: 10, w: 1, h: 4 }];
+  p.hp -= 2000;
+  // Five units of a 7.5 range: the held power picks the landing spot.
+  e.setInput(p.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, attack: true, power: 5 / 7.5 });
+  e.step();
+  assert.ok(e.state.projectiles[0]?.lob, "a lob");
+  advance(e, 0.6);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 700, "over cover");
+  assert.equal(u.hp, FIGHTERS[u.fighter].hp - 700, "a splash");
+  assert.equal(p.hp, FIGHTERS.russell.hp - 2000 + 490, "35% of 1,400 refunded");
+  e.state.walls = [];
   t.pos = { x: 13, y: 12 };
-  p.hp -= 1000;
-  fire(e);
-  advance(e, 0.3);
-  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 760);
-  assert.equal(p.hp, FIGHTERS.russell.hp - 1000 + 266);
   t.ammo = 3;
   charged(p);
   assert.ok(e.activateSuper(p));
   assert.equal(t.ammo, 0);
-  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 760 - 700);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 700 - 700);
 });
 
-test("Brandon Nguyen's card fan lands all three up close and one at range; Swipe You In feeds nearby teammates only", () => {
+test("Brandon Nguyen's card fan lands all three up close and only one at range; Swipe You In feeds nearby teammates only", () => {
   const near = duel("brandon_n");
   const [p, t] = near.playerList;
   p.pos = { x: 10, y: 12 };
@@ -1318,10 +1349,16 @@ test("Brandon Nguyen's card fan lands all three up close and one at range; Swipe
   const [q, u] = far.playerList;
   q.pos = { x: 10, y: 12 };
   u.pos = { x: 20, y: 12 };
-  // Fired the wrong way entirely: the cards turn and all three still land.
+  // The cards no longer home: at range only the middle card lands, and a
+  // swipe the wrong way misses.
+  fire(far);
+  advance(far, 1);
+  assert.equal(u.hp, FIGHTERS[u.fighter].hp - 340, "one card at range");
+  u.hp = FIGHTERS[u.fighter].hp;
+  advance(far, 0.4);
   fire(far, "p0", { x: -1, y: 0 });
   advance(far, 1);
-  assert.equal(u.hp, FIGHTERS[u.fighter].hp - 3 * 340, "they do not miss");
+  assert.equal(u.hp, FIGHTERS[u.fighter].hp, "they can miss");
   const blocked = duel("brandon_n");
   const [w, hidden] = blocked.playerList;
   w.pos = { x: 10, y: 12 };
@@ -1465,7 +1502,7 @@ test("a short-cutscene request survives a later input that arrives before the ti
   assert.equal(total(), 3.8);
 });
 
-test("Aura Pulse still knocks out a shielded rival", () => {
+test("a shield absorbs Aura Pulse", () => {
   const e = engine("ethan");
   const [p, t] = e.playerList;
   p.pos = { x: 10, y: 12 };
@@ -1476,7 +1513,9 @@ test("Aura Pulse still knocks out a shielded rival", () => {
   e.activateSuper(p);
   // Aura Pulse now plays a cutscene: the match holds, then it resolves.
   while (e.state.cutscene) e.step();
-  assert.equal(t.alive, false);
+  assert.ok(t.alive);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp);
+  assert.equal(t.shield, 800);
 });
 
 test("a thrown Super behind cover is cut short; a zone behind cover keeps the charge", () => {
