@@ -34,6 +34,44 @@ import type { Player } from "./types";
 
 /** Ticks between plans (10 Hz at the 30 Hz simulation); input goes every tick. */
 const THINK_EVERY = 3;
+
+/**
+ * How calm and how sharp every bot is: the one place to tune them. Bots
+ * notice rivals only nearby, take a moment before engaging, walk unless
+ * something is dangerous, rest between moves, and aim, lead and dodge
+ * like a casual player rather than a perfect one.
+ */
+export const TEMPER = {
+  /** Rivals farther than this are not noticed (world units). */
+  sight: 10,
+  /** Seconds it takes to react to a newly noticed rival. */
+  react: [0.4, 0.9],
+  /** Speed share when nothing is dangerous; danger moves at full speed. */
+  walk: 0.65,
+  /** Seconds standing still on reaching a roaming point. */
+  rest: [0.8, 2.4],
+  /** How far a roaming point is from where the bot stands. */
+  roam: 6,
+  /** Aim error on each shot, radians either side: some shots miss. */
+  aimError: 0.17,
+  /** Share of a rival's motion it leads its shots by, low to high. */
+  lead: [0.15, 0.7],
+  /** Chance per plan to take a clean shot. */
+  trigger: 0.4,
+  /** Seconds it waits after a shot before the next, beyond the attack interval. */
+  shotRest: [0.5, 1.3],
+  /** Chance per plan to step out of an incoming shot. */
+  dodge: 0.3,
+  /** Sidestep strength, scaling the fighter's own `strafe`. */
+  strafe: 0.5,
+  /** Seconds between sidestep changes; some spells stand still instead. */
+  strafeHold: [1.4, 3.2],
+  stillChance: 0.45,
+  /** Chance per plan to use a ready Super when the moment fits. */
+  superChance: 0.3,
+};
+const between = (r: () => number, [lo, hi]: readonly number[]) =>
+  lo + r() * (hi - lo);
 /** Showdown's shrinking zone is centered here (see Engine.step). */
 const ZONE_CENTER = { x: 18, y: 12 };
 /** Broomball goal mouths span this band on each end line. */
@@ -171,7 +209,8 @@ export class Bot {
   private cast = false;
   private power = 0.35;
   private target: string | null = null;
-  private strafeSign: 1 | -1 = 1;
+  /** Sidestep direction; 0 stands its ground. */
+  private strafeSign: -1 | 0 | 1 = 0;
   private strafeUntil = 0;
   private retreating = false;
   private waypoint: Vec | null = null;
@@ -182,6 +221,14 @@ export class Bot {
   private last: Vec | null = null;
   private lastHp = Infinity;
   private hurtAt = -Infinity;
+  /** When it has finished reacting to its current target. */
+  private engageAt = 0;
+  /** Earliest time for its next shot. */
+  private shotAt = 0;
+  /** Standing still on a roaming point until then. */
+  private restUntil = 0;
+  /** Something dangerous is happening: move at full speed this plan. */
+  private hurry = false;
   private seen = new Map<string, Seen>();
   private route: Route | null = null;
   /** The bush a hiding bot is heading for or sitting in. */
@@ -232,9 +279,11 @@ export class Bot {
     this.lastHp = me.hp;
 
     if (now >= this.strafeUntil) {
-      this.strafeSign = this.random() < 0.5 ? 1 : -1;
-      this.strafeUntil = now + 0.7 + this.random() * 1.3;
+      this.strafeSign =
+        this.random() < TEMPER.stillChance ? 0 : this.random() < 0.5 ? 1 : -1;
+      this.strafeUntil = now + between(this.random, TEMPER.strafeHold);
     }
+    this.hurry = false;
 
     // The snapshot's rule: a rival in a bush is hidden unless this bot or
     // a living teammate is close (or it is marked).
@@ -258,12 +307,17 @@ export class Bot {
     const broomball = s.mode === "broomball";
     const carrying = broomball && ball.carrier === me.id;
     const target = this.pick(me, rivals, broomball ? ball.carrier : null);
+    if (target && target.id !== this.target)
+      this.engageAt = now + between(this.random, TEMPER.react);
     this.target = target?.id ?? null;
+    // Still taking in a newly noticed rival: stop and look at it.
+    const reacting = !!target && now < this.engageAt;
 
     let want: Vec = { x: 0, y: 0 };
     if (carrying) want = this.runBall(me, rivals);
     else {
-      if (target) {
+      if (target && reacting) this.aim = unit(sub(target.pos, me.pos));
+      else if (target) {
         want = hiding
           ? this.evade(e, me, target, rivals)
           : this.approach(e, me, target);
@@ -276,14 +330,19 @@ export class Bot {
             ? this.search(e, me)
             : this.wander(e, me);
       }
+      if (hunting && target) this.hurry = true;
       if (broomball) want = this.playBall(e, me, want);
     }
     if (s.mode === "showdown") {
       // The zone hurts more every stage: stay well inside it.
       const d = distance(me.pos, ZONE_CENTER);
       const k = clamp((d - (s.zone - 2.5)) / 2, 0, 2.5);
-      if (k > 0) want = add(want, mul(unit(sub(ZONE_CENTER, me.pos)), k));
+      if (k > 0) {
+        want = add(want, mul(unit(sub(ZONE_CENTER, me.pos)), k));
+        this.hurry = true;
+      }
     }
+    if (this.retreating && target) this.hurry = true;
     want = add(want, this.dodge(e, me));
     this.steer(e, me, want, now);
   }
@@ -309,7 +368,7 @@ export class Bot {
   /** Where a rival will be `lead` seconds from now, leading imperfectly. */
   private predict(t: Player, lead: number): Vec {
     const v = this.seen.get(t.id)?.vel ?? { x: 0, y: 0 };
-    return add(t.pos, mul(v, lead * (0.55 + this.random() * 0.45)));
+    return add(t.pos, mul(v, lead * between(this.random, TEMPER.lead)));
   }
 
   /** Close, weak and current rivals first; a rival ball carrier above all. */
@@ -318,11 +377,12 @@ export class Bot {
       score = Infinity;
     for (const t of rivals) {
       const d = distance(me.pos, t.pos);
-      if (d > 16) continue;
+      // Out of notice range, unless it is carrying the ball.
+      if (d > TEMPER.sight && t.id !== carrier) continue;
       const v =
         d -
         (1 - t.hp / FIGHTERS[t.fighter].hp) * 3 -
-        (t.id === this.target ? 1.5 : 0) -
+        (t.id === this.target ? 3 : 0) -
         (t.id === carrier ? 5 : 0);
       if (v < score) {
         score = v;
@@ -332,20 +392,23 @@ export class Bot {
     return best;
   }
 
-  /** Hold the fighter's preferred distance, sidestepping as it fights. */
+  /**
+   * Hold the fighter's preferred distance: walk in, back off, and otherwise
+   * stand its ground or sidestep now and then.
+   */
   private approach(e: Engine, me: Player, t: Player): Vec {
     const f = FIGHTERS[me.fighter],
       style = f.bot;
     const to = sub(t.pos, me.pos),
       d = length(to),
       dir = unit(to);
-    if (this.retreating) return add(mul(dir, -1.2), mul(left(dir), 0.4 * this.strafeSign));
+    if (this.retreating) return mul(dir, -1);
     const keep = Math.max(1, style.keep * f.range);
     let want: Vec = { x: 0, y: 0 };
     if (!e.lineClear(me.pos, t.pos)) return this.toward(e, me, t.pos);
-    else if (d > keep + 0.6) want = dir;
-    else if (d < keep - 0.6) want = mul(dir, -0.8);
-    return add(want, mul(left(dir), style.strafe * this.strafeSign));
+    else if (d > keep + 1) want = dir;
+    else if (d < keep - 1) want = mul(dir, -0.8);
+    return add(want, mul(left(dir), style.strafe * TEMPER.strafe * this.strafeSign));
   }
 
   /**
@@ -418,11 +481,17 @@ export class Bot {
     const to = sub(t.pos, me.pos),
       d = length(to),
       dir = unit(to);
-    const side = mul(left(dir), f.bot.strafe * this.strafeSign);
-    if (this.retreating) return add(mul(dir, -1.2), mul(side, 0.4));
+    const side = mul(left(dir), f.bot.strafe * TEMPER.strafe * this.strafeSign);
+    if (this.retreating) {
+      this.hurry = true;
+      return mul(dir, -1);
+    }
     const keep = f.range * 0.95;
     if (d > keep + 2.5) return this.hide(e, me, rivals);
-    if (d < keep - 0.5) return add(mul(dir, -1), side);
+    if (d < keep - 0.5) {
+      this.hurry = true;
+      return add(mul(dir, -1), side);
+    }
     return side;
   }
 
@@ -505,15 +574,22 @@ export class Bot {
     const at = this.predict(t, attackLead(f, d0));
     const rel = sub(at, me.pos);
     const d = length(rel);
-    // A little hand shake, so a bot can be outplayed.
-    this.aim = rotate(unit(rel), (this.random() - 0.5) * 0.12);
+    // It decides on the aim it means; a casual player's hand then sends
+    // the shot a little to either side, so some shots really miss.
+    const meant = unit(rel);
+    this.aim = rotate(meant, (this.random() * 2 - 1) * TEMPER.aimError);
     this.power = attack.kind === "lob" ? clamp(d / f.range, 0.35, 1) : 0.35;
     if (me.ammo < 1 || s.time - me.lastAttack < RULES.attackInterval) return;
+    if (s.time < this.shotAt) return;
     const shape = aimPreviewFor(me.fighter, "attack", false, this.power);
-    if (footprintEdge(shape, toFootprint(rel, this.aim)) < 0.1) return;
+    if (footprintEdge(shape, toFootprint(rel, meant)) < 0.1) return;
     if (attack.kind !== "lob" && !e.lineClear(me.pos, t.pos)) return;
-    // Trigger discipline: not every chance, so shots come at a human pace.
-    if (this.random() < 0.7) this.fire = true;
+    // Trigger discipline: not every chance, and a breath between shots.
+    if (this.random() < TEMPER.trigger) {
+      this.fire = true;
+      this.shotAt =
+        s.time + RULES.attackInterval + between(this.random, TEMPER.shotRest);
+    }
   }
 
   /** Use the Super when its data says this is the moment for it. */
@@ -522,6 +598,8 @@ export class Bot {
       f = FIGHTERS[me.fighter],
       spec = f.abilities.super;
     if (me.charge < RULES.superCharge || s.ball.carrier === me.id) return false;
+    // A ready Super is not always used the moment it could be.
+    if (this.random() >= TEMPER.superChance) return false;
     const uses = superUses(spec);
     const shape = aimPreviewFor(me.fighter, "super");
     const share = me.hp / f.hp;
@@ -564,34 +642,50 @@ export class Bot {
     return false;
   }
 
-  /** No rival in sight: drift toward open ground near the middle. */
+  /**
+   * No rival in sight: roam a few steps from where it stands, resting at
+   * each point. In Showdown the points stay inside the zone.
+   */
   private wander(e: Engine, me: Player): Vec {
     const s = e.state;
-    if (
-      !this.waypoint ||
-      s.time >= this.waypointUntil ||
-      distance(me.pos, this.waypoint) < 1.5
-    ) {
-      const map = MAPS[s.mode];
-      const center =
-        s.mode === "showdown" ? ZONE_CENTER : { x: map.w / 2, y: map.h / 2 };
-      const r =
-        s.mode === "showdown"
-          ? Math.min(8, s.zone * 0.6)
-          : Math.min(map.w, map.h) * 0.4;
+    if (s.time < this.restUntil) return { x: 0, y: 0 };
+    const arrived = !!this.waypoint && distance(me.pos, this.waypoint) < 1.2;
+    if (arrived) {
       this.waypoint = null;
-      for (let i = 0; i < 10 && !this.waypoint; i++) {
+      this.restUntil = s.time + between(this.random, TEMPER.rest);
+      return { x: 0, y: 0 };
+    }
+    if (!this.waypoint || s.time >= this.waypointUntil) {
+      const map = MAPS[s.mode];
+      this.waypoint = null;
+      for (let i = 0; i < 12 && !this.waypoint; i++) {
         const a = this.random() * Math.PI * 2,
-          k = Math.sqrt(this.random()) * r;
-        const c = add(center, { x: Math.cos(a) * k, y: Math.sin(a) * k });
+          k = (0.4 + 0.6 * this.random()) * TEMPER.roam;
+        const c = this.inside(
+          s.mode,
+          add(me.pos, { x: Math.cos(a) * k, y: Math.sin(a) * k }),
+          s.zone,
+          map,
+        );
         if (e.valid(c)) this.waypoint = c;
       }
-      this.waypoint ??= center;
-      this.waypointUntil = s.time + 5;
+      this.waypoint ??= s.mode === "showdown" ? ZONE_CENTER : { x: map.w / 2, y: map.h / 2 };
+      this.waypointUntil = s.time + 6;
     }
     const to = sub(this.waypoint, me.pos);
     if (length(to) > 0.1) this.aim = unit(to);
     return this.toward(e, me, this.waypoint);
+  }
+
+  /** Keep a roaming point on the map, and in Showdown well inside the zone. */
+  private inside(mode: string, p: Vec, zone: number, map: { w: number; h: number }): Vec {
+    let q = { x: clamp(p.x, 1, map.w - 1), y: clamp(p.y, 1, map.h - 1) };
+    if (mode === "showdown") {
+      const r = Math.max(1, zone * 0.7);
+      const off = sub(q, ZONE_CENTER);
+      if (length(off) > r) q = add(ZONE_CENTER, mul(unit(off), r));
+    }
+    return q;
   }
 
   /**
@@ -622,11 +716,14 @@ export class Bot {
       const t = (lineX - b.pos.x) / b.velocity.x;
       const y = clamp(b.pos.y + b.velocity.y * t, GOAL_Y[0] - 1, GOAL_Y[1] + 1);
       const to = sub({ x: lineX, y }, me.pos);
+      this.hurry = true;
       return length(to) > 0.2 ? unit(to) : { x: 0, y: 0 };
     }
     const chaser = b.carrier ? null : nearest(where, team);
-    if (chaser?.id === me.id || (!b.carrier && distance(me.pos, where) < 3.5))
+    if (chaser?.id === me.id || (!b.carrier && distance(me.pos, where) < 3.5)) {
+      this.hurry = true;
       return add(unit(sub(where, me.pos)), mul(fight, 0.25));
+    }
     const carrier = s.players.find((p) => p.id === b.carrier);
     const threat = carrier
       ? carrier.team !== me.team
@@ -634,6 +731,7 @@ export class Bot {
     const keeper =
       threat && nearest(own, team.filter((p) => p.bot && p !== chaser));
     if (keeper && keeper.id === me.id) {
+      this.hurry = true;
       const spot = add(own, mul(unit(sub(b.pos, own)), 1.6));
       const to = sub(spot, me.pos);
       return length(to) > 0.4 ? add(unit(to), mul(fight, 0.3)) : mul(fight, 0.3);
@@ -645,6 +743,7 @@ export class Bot {
   private runBall(me: Player, rivals: Player[]): Vec {
     const goalX = me.team === 0 ? MAPS.broomball.w : 0;
     const goal = { x: goalX, y: 10 };
+    this.hurry = true;
     let want = unit(sub(goal, me.pos));
     for (const r of rivals) {
       const rel = sub(r.pos, me.pos);
@@ -664,7 +763,7 @@ export class Bot {
 
   /** Step out of the way of rival shots, beams and landing spots. */
   private dodge(e: Engine, me: Player): Vec {
-    if (this.random() < 0.35) return { x: 0, y: 0 };
+    if (this.random() >= TEMPER.dodge) return { x: 0, y: 0 };
     const s = e.state;
     let out: Vec = { x: 0, y: 0 };
     const rival = (id: string) => {
@@ -676,7 +775,7 @@ export class Bot {
       const along = rel.x * dir.x + rel.y * dir.y;
       const side = dir.x * rel.y - dir.y * rel.x;
       if (along > 0 && along < reach && Math.abs(side) < 0.95)
-        out = add(out, mul(left(dir), side >= 0 ? 1.6 : -1.6));
+        out = add(out, mul(left(dir), side >= 0 ? 1.4 : -1.4));
     };
     for (const q of s.projectiles)
       if (!q.lob && rival(q.owner)) line(q.pos, q.dir, 4.5);
@@ -687,8 +786,9 @@ export class Bot {
         (fx.kind === "lob" || fx.kind === "marker" || fx.kind === "leap") &&
         distance(me.pos, fx.pos) < (fx.value ?? 1) + 0.8
       )
-        out = add(out, mul(unit(sub(me.pos, fx.pos)), 1.6));
+        out = add(out, mul(unit(sub(me.pos, fx.pos)), 1.4));
     }
+    if (length(out) > 0) this.hurry = true;
     return out;
   }
 
@@ -704,20 +804,23 @@ export class Bot {
     if (this.detour && now < this.detourUntil)
       dir = unit(add(dir, mul(this.detour, 1.5)));
     const open = (d: Vec) => e.valid(add(me.pos, mul(d, 0.7)));
+    const hand = this.strafeSign || 1;
     if (!open(dir))
       for (const a of [0.6, 1.2, 1.8, 2.4]) {
-        const turn = rotate(dir, a * this.strafeSign);
+        const turn = rotate(dir, a * hand);
         if (open(turn)) {
           dir = turn;
           break;
         }
-        const other = rotate(dir, -a * this.strafeSign);
+        const other = rotate(dir, -a * hand);
         if (open(other)) {
           dir = other;
           break;
         }
       }
-    if (this.last && distance(this.last, me.pos) < 0.08) this.stuck++;
+    // Walking covers less ground per plan, so "stuck" scales with the pace.
+    const pace = this.hurry ? 1 : TEMPER.walk;
+    if (this.last && distance(this.last, me.pos) < 0.08 * pace) this.stuck++;
     else this.stuck = 0;
     if (this.stuck >= 3) {
       this.detour = rotate(dir, (Math.PI / 2) * (this.random() < 0.5 ? 1 : -1));
@@ -725,6 +828,6 @@ export class Bot {
       this.stuck = 0;
     }
     this.last = { ...me.pos };
-    this.move = dir;
+    this.move = mul(dir, pace);
   }
 }

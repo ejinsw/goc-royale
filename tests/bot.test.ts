@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { FIGHTERS, FISH, IDS, MAPS, type FighterId } from "../shared/definitions";
-import { Bot, superUses } from "../shared/bot";
+import { Bot, TEMPER, superUses } from "../shared/bot";
 import { Engine } from "../shared/engine";
 import { Room } from "../shared/room";
 import type { HostMessage, Member } from "../shared/types";
@@ -312,4 +312,72 @@ test("Fishers of Men bots: Fishers hunt and catch, Fish hide in bushes", () => {
     e.state.players.reduce((n, p) => n + p.stats.catches, 0) >= 2,
     "Fisher bots caught Fish",
   );
+});
+
+test("bots are calm: they walk, rest and pace their shots", () => {
+  const members: Member[] = IDS.slice(0, 10).map((f, i) => ({
+    id: "b" + i,
+    name: f,
+    fighter: f,
+    team: 0,
+    ready: true,
+    connected: true,
+    bot: true,
+  }));
+  const rnd = random(31);
+  const e = new Engine("showdown", members, rnd);
+  const bots = members.map((m, i) => new Bot(m.id, rnd, i));
+  const last = new Map<string, { x: number; y: number }>();
+  let alive = 0,
+    still = 0,
+    travelled = 0,
+    shots = 0;
+  while (e.state.phase !== "finished" && e.state.time < 63) {
+    for (const b of bots) b.update(e);
+    e.step();
+    while (e.state.cutscene) e.step();
+    shots += e.state.events.filter((ev) => ev.tick === e.state.tick && ev.type === "attack_started").length;
+    if (e.state.phase !== "playing") continue;
+    for (const p of e.state.players) {
+      const was = last.get(p.id);
+      last.set(p.id, { ...p.pos });
+      if (!p.alive || !was) continue;
+      const d = Math.hypot(p.pos.x - was.x, p.pos.y - was.y);
+      alive++;
+      travelled += d;
+      if (d < 0.02) still++;
+    }
+  }
+  const seconds = alive / 30;
+  // Fighters run at about 5 units a second; calm bots average well under it.
+  assert.ok(travelled / seconds < 3.5, `bots averaged ${(travelled / seconds).toFixed(2)} u/s`);
+  assert.ok(still / alive > 0.25, `bots stood still only ${Math.round((100 * still) / alive)}% of the time`);
+  assert.ok((shots / seconds) * 60 < 30, `bots fired ${((shots / seconds) * 60).toFixed(1)} shots a minute each`);
+});
+
+test("a bot takes a moment to react to a rival it just noticed", () => {
+  const members: Member[] = [
+    { id: "bot", name: "Bot", fighter: "rich", team: 0, ready: true, connected: true, bot: true },
+    { id: "rival", name: "Rival", fighter: "daniel", team: 1, ready: true, connected: true },
+  ];
+  const e = new Engine("showdown", members, random(6));
+  const bot = new Bot("bot", random(6));
+  const [me, rival] = e.state.players;
+  for (let i = 0; i < 100; i++) e.step();
+  me.pos = { x: 12, y: 12 };
+  rival.pos = { x: 33, y: 21 }; // far out of notice range
+  for (let i = 0; i < 30; i++) {
+    bot.update(e);
+    e.step();
+  }
+  me.pos = { x: 12, y: 12 }; // it roamed while nobody was in view
+  rival.pos = { x: 19, y: 12 }; // steps into view, in range of the shot
+  let first = -1;
+  for (let i = 0; i < 90 && first < 0; i++) {
+    bot.update(e);
+    e.step();
+    if (e.state.events.some((ev) => ev.tick === e.state.tick && ev.type === "attack_started")) first = i;
+  }
+  assert.ok(first >= 0, "the bot did attack");
+  assert.ok(first / 30 >= TEMPER.react[0], `fired after only ${(first / 30).toFixed(2)} s`);
 });

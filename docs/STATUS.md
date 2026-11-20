@@ -1661,3 +1661,59 @@ The live app checks were:
   all-bot Fishers of Men the Fishers usually win; whether bot Fish are too
   easy against people is unknown.
 - Bots do not pick up or use items.
+
+## November 20, 2026 — Calmer, slightly dumber bots (`feature/calmer-bots`)
+
+A user found the bots too chaotic: every bot charged every rival. Every
+calmness and sharpness setting now lives in one table, `TEMPER` in
+`shared/bot.ts`. Gameplay rules are unchanged.
+
+- **Notice range.** Bots notice rivals within 10 units, down from 16. A
+  rival carrying the ball is still always seen.
+- **Reaction.** A bot stops and looks at a newly noticed rival for
+  0.4–0.9 s before engaging.
+- **Speed.** Bots walk at 65% speed. Full speed is kept for danger:
+  dodging, retreating, the Showdown zone, ball play, fleeing prey and
+  hunters chasing prey.
+- **Holding distance.** At their preferred distance, bots stand still
+  about 45% of the time, otherwise sidestepping at half strength. Each
+  choice lasts 1.4–3.2 s instead of 0.7–2 s.
+- **Roaming.** With nobody in view, a bot roams to points within 6 units
+  of where it stands, inside the zone in Showdown, and rests 0.8–2.4 s at
+  each. Before, every bot headed for the middle.
+- **Aim.** The bot decides to shoot on the aim it means, then the shot
+  leaves up to 0.17 rad off, so some shots really miss. Before, the shake
+  was checked against the hit area, which only made bots hesitate.
+- **Leading and shooting.** Leading covers 15–70% of the rival's motion,
+  down from 55–100%. Bots take 40% of clean chances, down from 70%, and
+  wait 0.5–1.3 s after each shot.
+- **Dodging and Supers.** Bots dodge 30% of the time, down from 65%. A
+  ready Super is used on 30% of plans where it fits.
+
+**Measured.** Three ten-bot Showdowns, each time before → after:
+
+| Measure | Before | After |
+|---|---|---|
+| Match length | 41–125 s | 78–131 s |
+| First knockout | 2–7 s | 7–10 s |
+| Shots per bot per minute | 39 | 25 |
+| Average speed | 5.2 u/s (full) | 2.3 u/s |
+| Share of time moving | 99% | 60% |
+| Sharp turns per second | 3.2 | 1.4 |
+
+In 60 s duels against a juking rival, damage per minute fell 24%, from
+27,200 to 20,800.
+
+- **Broomball.** Across 24 lineups, goals were scored in 22 games.
+- **Fishers of Men.** Across 16 games, the Fish won 6, up from 3.
+- **Live app.** Five bots ran at 16.7 ms median and 17.5 ms p95 frame
+  time, with no page errors. About 14 s in, the idle host was untouched
+  and everyone was still alive.
+
+**Verification.** `npm test` (180) and `npm run build` pass. New tests pin
+the calm pacing: in a ten-bot Showdown, bots average under 3.5 u/s, stand
+still over 25% of the time and fire under 30 shots a minute. Another test
+checks that a bot does not fire before its reaction time.
+
+**Not verified.** How the new difficulty feels to people (playtest), and
+phones.
