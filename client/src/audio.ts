@@ -38,9 +38,21 @@ const CUES: Record<string, Tone[]> = {
   ],
   marker: [{ wave: "sine", from: 420, to: 900, dur: 0.18, gain: 0.6 }],
   leap: [{ wave: "triangle", from: 260, to: 620, dur: 0.2, gain: 0.8 }],
-  chain: [
+  // Attack-kind cues: a post going viral, a beam tell/flash, a lob's
+  // throw and its landing.
+  split: [
     { wave: "square", from: 900, to: 700, dur: 0.04, gain: 0.35 },
     { wave: "square", from: 1100, to: 800, at: 0.05, dur: 0.05, gain: 0.35 },
+    { wave: "square", from: 1300, to: 900, at: 0.1, dur: 0.05, gain: 0.3 },
+  ],
+  beam: [
+    { wave: "sine", from: 1800, to: 2600, dur: 0.06, gain: 0.35 },
+    { wave: "sawtooth", from: 3000, to: 400, at: 0.04, dur: 0.12, gain: 0.25 },
+  ],
+  lob: [{ wave: "sine", from: 300, to: 700, dur: 0.22, gain: 0.55 }],
+  splash: [
+    { wave: "triangle", from: 160, to: 60, dur: 0.18, gain: 0.95 },
+    { wave: "sawtooth", from: 900, to: 300, at: 0.01, dur: 0.08, gain: 0.25 },
   ],
   swap: [
     { wave: "sine", from: 500, to: 500, dur: 0.06, gain: 0.6 },
@@ -148,6 +160,147 @@ const CUES: Record<string, Tone[]> = {
     { wave: "sine", from: 220, to: 3400, dur: 1, gain: 0.2 },
   ],
   swiper_pop: [{ wave: "sine", from: 500, to: 900, dur: 0.05, gain: 0.35 }],
+  // The roster showcase (client/src/arena/roster.ts): one shared vocabulary
+  // that every fighter's theme picks from by name, with a pitch per fighter.
+  show_pop: [{ wave: "sine", from: 480, to: 960, dur: 0.06, gain: 0.4 }],
+  show_whoosh: [
+    { wave: "sawtooth", from: 900, to: 180, dur: 0.14, gain: 0.18 },
+    { wave: "sine", from: 600, to: 200, dur: 0.12, gain: 0.25 },
+  ],
+  show_thud: [
+    { wave: "sine", from: 120, to: 40, dur: 0.2, gain: 1.2 },
+    { wave: "triangle", from: 300, to: 90, dur: 0.06, gain: 0.5 },
+  ],
+  show_boom: [
+    { wave: "sine", from: 150, to: 35, dur: 0.36, gain: 1.3 },
+    { wave: "sawtooth", from: 400, to: 60, dur: 0.18, gain: 0.3 },
+  ],
+  show_chime: [
+    { wave: "sine", from: 1318, to: 1318, dur: 0.16, gain: 0.4 },
+    { wave: "sine", from: 1976, to: 1976, at: 0.05, dur: 0.22, gain: 0.3 },
+  ],
+  show_sparkle: [0, 0.04, 0.08].map((at, i) => ({
+    wave: "sine" as const,
+    from: 2400 + i * 500,
+    to: 2600 + i * 500,
+    at,
+    dur: 0.08,
+    gain: 0.22,
+  })),
+  show_rise: [{ wave: "sawtooth", from: 200, to: 1200, dur: 0.4, gain: 0.25 }],
+  show_sad: [
+    { wave: "triangle", from: 440, to: 415, dur: 0.18, gain: 0.55 },
+    { wave: "triangle", from: 392, to: 370, at: 0.2, dur: 0.18, gain: 0.55 },
+    { wave: "triangle", from: 330, to: 247, at: 0.4, dur: 0.4, gain: 0.55 },
+  ],
+  show_fanfare: [392, 523, 659, 784].map((hz, i) => ({
+    wave: "triangle" as const,
+    from: hz,
+    to: hz,
+    at: i * 0.08,
+    dur: i === 3 ? 0.3 : 0.08,
+    gain: 0.55,
+  })),
+  show_honk: [
+    { wave: "square", from: 330, to: 320, dur: 0.12, gain: 0.35 },
+    { wave: "square", from: 415, to: 405, dur: 0.12, gain: 0.25 },
+    { wave: "square", from: 330, to: 320, at: 0.16, dur: 0.18, gain: 0.35 },
+    { wave: "square", from: 415, to: 405, at: 0.16, dur: 0.18, gain: 0.25 },
+  ],
+  show_jingle: [0, 0.03, 0.07, 0.1].map((at, i) => ({
+    wave: "triangle" as const,
+    from: 2600 + (i % 2) * 700,
+    to: 2400 + (i % 2) * 700,
+    at,
+    dur: 0.05,
+    gain: 0.2,
+  })),
+  show_shutter: [
+    { wave: "square", from: 2200, to: 1800, dur: 0.02, gain: 0.35 },
+    { wave: "square", from: 1400, to: 900, at: 0.05, dur: 0.03, gain: 0.35 },
+  ],
+  show_flash: [{ wave: "sine", from: 1200, to: 5200, dur: 0.18, gain: 0.3 }],
+  show_crunch: [0, 0.03, 0.06, 0.1].map((at, i) => ({
+    wave: "sawtooth" as const,
+    from: 700 - i * 90,
+    to: 160,
+    at,
+    dur: 0.03,
+    gain: 0.3,
+  })),
+  show_feedback: [
+    { wave: "square", from: 2900, to: 3100, dur: 0.22, gain: 0.12 },
+    { wave: "sawtooth", from: 90, to: 60, dur: 0.22, gain: 0.5 },
+  ],
+  show_glitch: [0, 0.03, 0.05, 0.09].map((at, i) => ({
+    wave: "square" as const,
+    from: [880, 220, 1760, 440][i],
+    to: [880, 220, 1760, 440][i],
+    at,
+    dur: 0.025,
+    gain: 0.22,
+  })),
+  show_rewind: [{ wave: "sawtooth", from: 1600, to: 200, dur: 0.35, gain: 0.25 }],
+  show_strum: [196, 247, 294, 392].map((hz, i) => ({
+    wave: "triangle" as const,
+    from: hz,
+    to: hz * 0.99,
+    at: i * 0.018,
+    dur: 0.35,
+    gain: 0.4,
+  })),
+  show_hum: [
+    { wave: "sine", from: 392, to: 400, dur: 0.3, gain: 0.45 },
+    { wave: "sine", from: 588, to: 594, dur: 0.3, gain: 0.3 },
+  ],
+  show_reel: [0, 0.04, 0.08, 0.12, 0.16].map((at) => ({
+    wave: "square" as const,
+    from: 1300,
+    to: 1100,
+    at,
+    dur: 0.02,
+    gain: 0.15,
+  })),
+  show_splash: [
+    { wave: "sawtooth", from: 1800, to: 200, dur: 0.2, gain: 0.2 },
+    { wave: "sine", from: 260, to: 90, dur: 0.18, gain: 0.6 },
+  ],
+  show_clack: [0, 0.09, 0.18].map((at) => ({
+    wave: "square" as const,
+    from: 700,
+    to: 250,
+    at,
+    dur: 0.03,
+    gain: 0.35,
+  })),
+  show_bonk: [
+    { wave: "triangle", from: 520, to: 180, dur: 0.1, gain: 0.9 },
+    { wave: "sine", from: 1400, to: 900, dur: 0.06, gain: 0.25 },
+  ],
+  show_ding: [
+    { wave: "sine", from: 1568, to: 1568, dur: 0.12, gain: 0.35 },
+    { wave: "sine", from: 2093, to: 2093, at: 0.08, dur: 0.18, gain: 0.3 },
+  ],
+  show_flutter: [0, 0.05, 0.1, 0.15].map((at) => ({
+    wave: "sine" as const,
+    from: 900,
+    to: 600,
+    at,
+    dur: 0.035,
+    gain: 0.2,
+  })),
+  show_choir: [262, 330, 392].map((hz) => ({
+    wave: "sine" as const,
+    from: hz,
+    to: hz * 1.01,
+    dur: 0.55,
+    gain: 0.35,
+  })),
+  show_coin: [
+    { wave: "square", from: 988, to: 988, dur: 0.06, gain: 0.25 },
+    { wave: "square", from: 1319, to: 1319, at: 0.06, dur: 0.2, gain: 0.25 },
+  ],
+  show_whistle: [{ wave: "sine", from: 1400, to: 2100, dur: 0.16, gain: 0.3 }],
 };
 
 function play(tones: Tone[], pitch: number) {

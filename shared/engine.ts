@@ -13,9 +13,12 @@ import {
   clamp,
   finiteVec,
   segmentDistance,
+  shotPoint,
   type AreaKind,
+  type BeamSpec,
   type BurstSpec,
   type ConeSpec,
+  type LobSpec,
   type ShotSpec,
   type SuperSpec,
   type Vec,
@@ -52,7 +55,8 @@ interface History {
 }
 /**
  * Work scheduled for a later tick: the rest of a windup Super (frame,
- * charge, thrown burst) or a later volley of a burst attack.
+ * charge, thrown burst), a later volley of a burst attack, or a beam
+ * attack firing at the end of its windup.
  */
 type Pending =
   | {
@@ -63,7 +67,8 @@ type Pending =
       dir: Vec;
       spec: SuperSpec;
     }
-  | { kind: "volley"; at: number; id: string; dir: Vec };
+  | { kind: "volley"; at: number; id: string; dir: Vec }
+  | { kind: "beam"; at: number; id: string; dir: Vec };
 interface Dash {
   id: string;
   remaining: number;
@@ -834,6 +839,21 @@ export class Engine {
       this.cone(p, spec);
       return;
     }
+    if (spec.kind === "beam") {
+      // The tell is the aim line for the windup; the beam fires later.
+      this.effect("beam", p.pos, p.id, p.aim, 0, spec.windup);
+      this.pending.push({
+        kind: "beam",
+        at: s.time + spec.windup,
+        id: p.id,
+        dir: { ...p.aim },
+      });
+      return;
+    }
+    if (spec.kind === "lob") {
+      this.lob(p, spec);
+      return;
+    }
     this.volley(p, p.aim);
     // A burst fires its later volleys on later ticks, along the first aim.
     for (let k = 1; k < (spec.burst?.count ?? 1); k++)
@@ -844,11 +864,18 @@ export class Engine {
         dir: { ...p.aim },
       });
   }
+  /** Which way each fighter's next alternating weave bends first. */
+  private weaveSide = new Map<string, 1 | -1>();
   /** One projectile per spread angle from the fighter's position. */
   private volley(p: Player, aim: Vec) {
     const f = FIGHTERS[p.fighter],
       spec = f.abilities.attack;
     if (spec.kind !== "shot") return;
+    let first: 1 | -1 = 1;
+    if (spec.weave?.alternate) {
+      first = this.weaveSide.get(p.id) ?? 1;
+      this.weaveSide.set(p.id, first === 1 ? -1 : 1);
+    }
     for (const angle of spec.spread ?? [0]) {
       const a = Math.atan2(aim.y, aim.x) + angle;
       const dir = { x: Math.cos(a), y: Math.sin(a) };
@@ -861,9 +888,141 @@ export class Engine {
         remaining: f.range,
         traveled: 0,
         bounces: spec.bounces ?? 0,
+        // Spread shots bend away from the aim on their own side.
+        ...(spec.weave
+          ? { side: angle < 0 ? (-first as 1 | -1) : first }
+          : {}),
       });
       this.emit("projectile_spawned", p.pos, p.id, dir);
     }
+  }
+  /**
+   * Throw an arc to a point along the aim: the attack's power share of the
+   * range, 35% to 100%. Everyone sees where it will land while it flies.
+   */
+  private lob(p: Player, spec: LobSpec) {
+    const f = FIGHTERS[p.fighter];
+    const power = clamp(this.inputs.get(p.id)?.power ?? 0.35, 0.35, 1);
+    const target = this.inArena(add(p.pos, mul(p.aim, f.range * power)), 0.3);
+    const d = distance(p.pos, target);
+    const dir = d > 1e-6 ? unit(sub(target, p.pos)) : { ...p.aim };
+    this.state.projectiles.push({
+      id: ++this.serial,
+      owner: p.id,
+      fighter: p.fighter,
+      pos: { ...p.pos },
+      dir,
+      remaining: d,
+      traveled: 0,
+      bounces: 0,
+      lob: true,
+    });
+    this.effect(
+      "lob",
+      target,
+      p.id,
+      dir,
+      spec.radius,
+      Math.max(0.1, d / f.projectileSpeed),
+    );
+    this.emit("projectile_spawned", p.pos, p.id, dir);
+  }
+  /**
+   * A lob lands: rivals in the splash with a clear line from its center are
+   * hit, injured teammates (not the thrower) are fed, and enemy stations
+   * and crates in reach take the damage too.
+   */
+  private splash(owner: Player, at: Vec, spec: LobSpec) {
+    const s = this.state,
+      f = FIGHTERS[owner.fighter];
+    this.effect("splash", at, owner.id, { x: 1, y: 0 }, spec.radius, 0.45);
+    for (const t of s.players) {
+      if (!t.alive || distance(at, t.pos) > spec.radius + RULES.radius)
+        continue;
+      if (this.allies(owner, t)) {
+        if (
+          spec.healAllies &&
+          t.id !== owner.id &&
+          t.hp < FIGHTERS[t.fighter].hp
+        ) {
+          const before = t.hp;
+          this.heal(t, spec.healAllies, owner);
+          const got = Math.round(t.hp - before);
+          if (got > 0) {
+            this.effect("heal", t.pos, owner.id, t.aim, got);
+            this.emit("heal_applied", t.pos, owner.id, t.aim, got);
+          }
+        }
+        continue;
+      }
+      if (this.lineClear(at, t.pos)) this.damage(t, f.damage, owner);
+    }
+    for (const a of s.areas)
+      if (this.enemyArea(owner, a) && distance(a.pos, at) <= spec.radius + 0.5)
+        a.hp -= f.damage;
+    for (const w of s.walls) {
+      if (w.hp === undefined) continue;
+      const near = {
+        x: clamp(at.x, w.x, w.x + w.w),
+        y: clamp(at.y, w.y, w.y + w.h),
+      };
+      if (distance(near, at) <= spec.radius) w.hp -= f.damage;
+    }
+    s.walls = s.walls.filter((w) => w.hp === undefined || w.hp > 0);
+    s.areas = s.areas.filter((a) => a.hp > 0 && a.end > s.time);
+  }
+  /**
+   * A beam fires: an instant line along `dir` from where the fighter
+   * stands. It stops at cover (chipping a crate), at an enemy station,
+   * barrier or companion, or at the first rival whose body it touches.
+   */
+  private beam(p: Player, dir: Vec) {
+    const s = this.state,
+      f = FIGHTERS[p.fighter],
+      spec = f.abilities.attack as BeamSpec,
+      m = MAPS[s.mode],
+      from = { ...p.pos };
+    const n = Math.max(1, Math.ceil(f.range / 0.12));
+    let reach = 0;
+    let target: Player | null = null;
+    trace: for (let i = 1; i <= n; i++) {
+      const d = (f.range * i) / n;
+      const at = add(from, mul(dir, d));
+      if (at.x < 0 || at.y < 0 || at.x > m.w || at.y > m.h) break;
+      const wall = s.walls.find(
+        (w) => at.x >= w.x && at.x <= w.x + w.w && at.y >= w.y && at.y <= w.y + w.h,
+      );
+      if (wall) {
+        if (wall.hp !== undefined) {
+          wall.hp -= f.damage;
+          if (wall.hp <= 0) s.walls = s.walls.filter((w) => w.id !== wall.id);
+        }
+        break;
+      }
+      reach = d;
+      for (const a of s.areas)
+        if (this.blocks(a, p, at)) {
+          a.hp -= f.damage;
+          break trace;
+        }
+      for (const t of s.players)
+        if (
+          t.alive &&
+          !this.allies(p, t) &&
+          distance(at, t.pos) <= RULES.radius + spec.width
+        ) {
+          target = t;
+          break trace;
+        }
+    }
+    this.effect("beam", from, p.id, dir, Math.max(0.05, reach), 0.3);
+    s.areas = s.areas.filter((a) => a.hp > 0 && a.end > s.time);
+    if (!target) return;
+    const bonus =
+      spec.farBonus && reach >= f.range * spec.farBonus.from
+        ? spec.farBonus.damage
+        : 0;
+    this.damage(target, f.damage + bonus, p);
   }
   /** An instant cone: each rival and enemy station inside it is hit once. */
   private cone(p: Player, spec: ConeSpec) {
@@ -1260,35 +1419,6 @@ export class Engine {
         );
       }
     }
-    if (spec.chain) {
-      let next: Player | null = null,
-        nd = Infinity;
-      for (const o of s.players) {
-        if (
-          o === t ||
-          !o.alive ||
-          this.allies(owner, o) ||
-          this.concealed(o, owner.pos)
-        )
-          continue;
-        const d = distance(o.pos, t.pos);
-        if (d <= spec.chain.range && d < nd && this.lineClear(t.pos, o.pos)) {
-          next = o;
-          nd = d;
-        }
-      }
-      if (next) {
-        this.effect(
-          "chain",
-          t.pos,
-          owner.id,
-          unit(sub(next.pos, t.pos)),
-          nd,
-          0.3,
-        );
-        this.damage(next, spec.chain.damage, owner);
-      }
-    }
     if (!t.alive) return;
     if (spec.slow) this.applySlow(t, spec.slow);
     if (spec.tug) {
@@ -1340,20 +1470,66 @@ export class Engine {
     }
     return distance(a.pos, pos) <= (spec.hitRadius ?? a.radius);
   }
+  /**
+   * Fan a split shot into its shares at `at`. They start moving next tick
+   * and skip the rival the parent hit.
+   */
+  private split(q: Projectile, at: Vec, spec: ShotSpec, skip?: string) {
+    const sp = spec.split!,
+      owner = this.state.players.find((p) => p.id === q.owner);
+    const a0 = Math.atan2(q.dir.y, q.dir.x),
+      out: Projectile[] = [];
+    for (let i = 0; i < sp.count; i++) {
+      const a = a0 + (i - (sp.count - 1) / 2) * sp.spread;
+      out.push({
+        id: ++this.serial,
+        owner: q.owner,
+        fighter: q.fighter,
+        pos: { ...at },
+        dir: { x: Math.cos(a), y: Math.sin(a) },
+        remaining: sp.range,
+        traveled: 0,
+        bounces: 0,
+        shard: true,
+        ...(skip ? { hit: [skip] } : {}),
+      });
+    }
+    this.effect("split", at, q.owner, q.dir, sp.count, 0.35);
+    if (owner) this.emit("projectile_spawned", at, owner.id, q.dir);
+    return out;
+  }
   private projectiles(dt: number) {
     const s = this.state;
     const surviving: Projectile[] = [];
+    const spawned: Projectile[] = [];
     for (const q of s.projectiles) {
       const owner = s.players.find((p) => p.id === q.owner);
       if (!owner) continue;
       const f = FIGHTERS[q.fighter];
       const attack = f.abilities.attack;
-      const spec: ShotSpec = attack.kind === "shot" ? attack : { kind: "shot" };
+      if (q.lob) {
+        // In the air over everything; only the landing matters.
+        const step = Math.min(f.projectileSpeed * dt, q.remaining);
+        q.pos = add(q.pos, mul(q.dir, step));
+        q.remaining -= step;
+        q.traveled += step;
+        if (q.remaining > 1e-6) surviving.push(q);
+        else if (attack.kind === "lob") this.splash(owner, q.pos, attack);
+        continue;
+      }
+      // A share flies as a plain shot with the split's damage.
+      const spec: ShotSpec =
+        attack.kind === "shot" && !q.shard ? attack : { kind: "shot" };
       const sup =
         q.super && f.abilities.super.kind === "shot" ? f.abilities.super : null;
       const speed = sup ? sup.speed : f.projectileSpeed;
-      const power = sup ? sup.damage : f.damage;
+      const power = sup
+        ? sup.damage
+        : q.shard && attack.kind === "shot" && attack.split
+          ? attack.split.damage
+          : f.damage;
       const width = sup ? sup.width : (spec.width ?? SHOT_WIDTH);
+      const weave = sup ? undefined : spec.weave;
       if (!sup && spec.seek) this.steer(q, owner, Math.PI, true);
       else if (!sup && spec.homing && !q.back)
         this.steer(q, owner, spec.homing * dt);
@@ -1372,18 +1548,22 @@ export class Engine {
         }
         const old = { ...q.pos };
         const next = add(old, mul(q.dir, dist / steps));
+        const was = q.traveled;
         q.remaining -= dist / steps;
         q.traveled += dist / steps;
+        // A weaving shot is tested where it is drawn, off its center line.
+        const from = shotPoint(old, q.dir, was, weave, q.side);
+        const probe = shotPoint(next, q.dir, q.traveled, weave, q.side);
         const m = MAPS[s.mode];
         const wall = s.walls.find(
           (w) =>
-            next.x >= w.x &&
-            next.x <= w.x + w.w &&
-            next.y >= w.y &&
-            next.y <= w.y + w.h,
+            probe.x >= w.x &&
+            probe.x <= w.x + w.w &&
+            probe.y >= w.y &&
+            probe.y <= w.y + w.h,
         );
         const boundary =
-          next.x < 0 || next.y < 0 || next.x > m.w || next.y > m.h;
+          probe.x < 0 || probe.y < 0 || probe.x > m.w || probe.y > m.h;
         if (wall || boundary) {
           if (wall?.hp !== undefined) {
             wall.hp -= power;
@@ -1392,64 +1572,53 @@ export class Engine {
           if (q.bounces > 0) {
             q.bounces--;
             const hitX = wall
-              ? old.x <= wall.x || old.x >= wall.x + wall.w
-              : next.x < 0 || next.x > m.w;
+              ? from.x <= wall.x || from.x >= wall.x + wall.w
+              : probe.x < 0 || probe.x > m.w;
             if (hitX) q.dir.x *= -1;
             else q.dir.y *= -1;
+            if (weave) {
+              // Restart the wave from where it bounced, so it does not jump.
+              q.pos = from;
+              const half = weave.wavelength / 2;
+              q.traveled = Math.floor(was / half) * half;
+            }
           } else dead = true;
           continue;
         }
         q.pos = next;
         // Enemy stations, companions and barriers absorb the shot.
         for (const a of s.areas)
-          if (this.blocks(a, owner, q.pos)) {
+          if (this.blocks(a, owner, probe)) {
             a.hp -= power;
             dead = true;
             break;
           }
         if (dead) break;
+        const reach =
+          RULES.radius + width + (sup ? 0 : (spec.grow ?? 0) * q.traveled);
         for (const t of s.players) {
           if (
             !t.alive ||
             t.id === owner.id ||
-            distance(q.pos, t.pos) > RULES.radius + width
+            distance(probe, t.pos) > reach
           )
             continue;
-          if (this.allies(owner, t)) {
-            if (!sup && spec.healAllies && t.hp < FIGHTERS[t.fighter].hp) {
-              this.heal(t, spec.healAllies, owner);
-              this.effect("heal", t.pos, owner.id, t.aim, spec.healAllies);
-              this.emit(
-                "heal_applied",
-                t.pos,
-                owner.id,
-                t.aim,
-                spec.healAllies,
-              );
-              dead = true;
-              break;
-            }
-            continue;
-          }
+          if (this.allies(owner, t)) continue;
           if (q.hit?.includes(t.id)) continue;
           if (sup) {
             this.superHit(owner, t, q, sup);
             dead = true;
             break;
           }
-          const farBonus =
-            spec.farBonus && q.traveled >= f.range * spec.farBonus.from
-              ? spec.farBonus.damage
-              : 0;
           const centered =
             !!spec.centerBonus &&
             Math.abs(
-              (t.pos.x - q.pos.x) * q.dir.y - (t.pos.y - q.pos.y) * q.dir.x,
+              (t.pos.x - probe.x) * q.dir.y - (t.pos.y - probe.y) * q.dir.x,
             ) <=
               RULES.radius + spec.centerBonus.width;
           const centerBonus = centered ? spec.centerBonus!.damage : 0;
           const before = t.hp + t.shield;
-          if (this.damage(t, power + farBonus + centerBonus, owner)) {
+          if (this.damage(t, power + centerBonus, owner)) {
             if (centered)
               this.effect("harmony", t.pos, owner.id, q.dir, centerBonus, 0.3);
             this.afterHit(owner, t, spec, before);
@@ -1458,6 +1627,7 @@ export class Engine {
             (q.hit ??= []).push(t.id);
             continue;
           }
+          if (spec.split) spawned.push(...this.split(q, probe, spec, t.id));
           dead = true;
           break;
         }
@@ -1468,9 +1638,16 @@ export class Engine {
         q.hit = [];
         q.remaining = f.range + 1;
       }
+      if (!dead && q.remaining <= 1e-6 && spec.split && !sup) {
+        // Out of range unshared: it goes viral where it stops.
+        spawned.push(
+          ...this.split(q, shotPoint(q.pos, q.dir, q.traveled, weave, q.side), spec),
+        );
+        dead = true;
+      }
       if (!dead && q.remaining > 0) surviving.push(q);
     }
-    s.projectiles = surviving;
+    s.projectiles = surviving.concat(spawned);
     s.areas = s.areas.filter((a) => a.hp > 0 && a.end > s.time);
   }
   /**
@@ -1831,10 +2008,12 @@ export class Engine {
     for (const item of due) {
       const p = s.players.find((x) => x.id === item.id);
       if (!p?.alive) continue;
-      if (item.kind === "volley") {
-        // A stun or a ball pickup interrupts the rest of a burst.
-        if (s.time >= p.stunUntil && s.ball.carrier !== p.id)
-          this.volley(p, item.dir);
+      if (item.kind === "volley" || item.kind === "beam") {
+        // A stun or a ball pickup interrupts a burst or a beam windup.
+        if (s.time >= p.stunUntil && s.ball.carrier !== p.id) {
+          if (item.kind === "volley") this.volley(p, item.dir);
+          else this.beam(p, item.dir);
+        }
         continue;
       }
       const spec = item.spec;

@@ -88,6 +88,8 @@ class Arena {
   private predictedCones: number[] = [];
   private predictedSuperAt = -Infinity;
   private predictedReleaseAt = -Infinity;
+  /** Last predicted local attack, to skip its authoritative windup tells. */
+  private predictedAttackAt = -Infinity;
   private lastPredictedItem: { id: number; until: number } | null = null;
   private lastMatch: Match | null = null;
   private matchAt = 0;
@@ -213,11 +215,14 @@ class Arena {
       if (e.pointerType !== "mouse" || !this.mouseAction) return;
       if (this.mouseAction === "attack" && e.button === 0) {
         this.bridge.input.attack = true;
-        this.bridge.input.power = clamp(
-          (performance.now() - this.mouseDown) / 800,
-          0.35,
-          1,
-        );
+        // A lob's power is the cursor distance, kept current each frame;
+        // otherwise (a ball shot) it is how long the button was held.
+        if (!this.lobbing())
+          this.bridge.input.power = clamp(
+            (performance.now() - this.mouseDown) / 800,
+            0.35,
+            1,
+          );
       } else if (this.mouseAction === "super" && e.button === 2) {
         this.bridge.input.super = true;
       } else return;
@@ -226,6 +231,17 @@ class Arena {
       this.bridge.aiming = null;
     });
     this.on(this.parent, "contextmenu", (e) => e.preventDefault());
+  }
+
+  /** The local fighter throws a lob with the attack button (no ball held). */
+  private lobbing() {
+    const s = this.bridge.match,
+      me = s?.players.find((p) => p.id === this.bridge.id);
+    return (
+      !!me &&
+      FIGHTERS[me.fighter].abilities.attack.kind === "lob" &&
+      s!.ball.carrier !== me.id
+    );
   }
 
   private frame = (nowMs: number) => {
@@ -258,12 +274,15 @@ class Arena {
     // Re-aim every frame, so the aim keeps pointing at a still cursor while
     // the fighter or camera moves.
     if (this.mouse && this.view && me?.alive && !this.bridge.paused) {
-      const aim = this.view.aim(
-        this.mouse.x,
-        this.mouse.y,
-        this.renderPos.get(me.id) ?? me.pos,
-      );
+      const from = this.renderPos.get(me.id) ?? me.pos;
+      const aim = this.view.aim(this.mouse.x, this.mouse.y, from);
       if (aim) this.bridge.input.aim = aim;
+      // A lob lands under the cursor: its power is the cursor's distance.
+      if (this.lobbing()) {
+        const d = this.view.reach(this.mouse.x, this.mouse.y, from);
+        if (d !== null)
+          this.bridge.input.power = clamp(d / FIGHTERS[me.fighter].range, 0.35, 1);
+      }
     }
     // Send this frame's input before drawing so it leaves as early as
     // possible and the predictor attributes this frame to the right input.
@@ -480,14 +499,27 @@ class Arena {
     const attack = fighter.abilities.attack;
     // Cone attacks are instant; shot attacks create authoritative projectiles.
     if (attack.kind === "cone") this.predictedCones.push(t);
+    this.predictedAttackAt = t;
+    // Beams show their windup tell and lobs their landing spot at once.
+    const power = clamp(this.bridge.input.power ?? 0.35, 0.35, 1);
     this.cue(
-      attack.kind === "cone" ? (me.fighter === "tovya" ? "melee_sweep" : "cone") : "attack",
+      attack.kind === "cone"
+        ? me.fighter === "tovya"
+          ? "melee_sweep"
+          : "cone"
+        : attack.kind === "beam" || attack.kind === "lob"
+          ? attack.kind
+          : "attack",
       me,
       col(fighter.color),
       t,
       attack.kind === "cone"
         ? { range: fighter.range, half: attack.halfAngle }
-        : undefined,
+        : attack.kind === "beam"
+          ? { range: fighter.range, half: attack.width }
+          : attack.kind === "lob"
+            ? { range: fighter.range * power, half: attack.radius }
+            : undefined,
     );
     // The animation starts on the input frame and is never restarted by the
     // authoritative attack_started that follows (standard §7.2).
@@ -520,6 +552,16 @@ class Arena {
           this.predictedCones.shift();
           continue;
         }
+      }
+      // A beam's windup tell and a lob's landing spot were drawn on the
+      // local input frame; the fired beam and the splash still play.
+      if (
+        ((e.kind === "beam" && !e.value) || e.kind === "lob") &&
+        e.owner === this.bridge.id &&
+        now - this.predictedAttackAt < PREDICTION_WINDOW
+      ) {
+        this.predictedEffectIds.add(e.id);
+        continue;
       }
       // Side Eye's warning was already drawn on the local input frame; only
       // the resolving flash is replayed from authority.

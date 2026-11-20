@@ -30,6 +30,23 @@ import {
   buildFighter,
 } from "../ui/scene/fighterModels";
 import type { ArenaMaterials } from "./materials";
+import {
+  B,
+  BONE_COUNT,
+  MOTION,
+  OVERHAND,
+  POSE_SIZE,
+  ROOT_Y,
+  SQUASH,
+  TAU,
+  TORSO_SQUASH,
+  ease,
+  easeOut,
+  lerp,
+  set,
+  type Hold,
+  type StyledClip,
+} from "./motion";
 
 /**
  * Arena presentation layer (performance standard §3, §7): fighter models and
@@ -294,6 +311,10 @@ export class AnimationGraph {
     const C = this.carry * Math.max(0, 1 - U - fade);
     const override = Math.min(1, U + fade + C);
 
+    // Standing still, a one-shot takes the legs too (a crouch, a lunge, a
+    // braced stance); on the run the legs keep running under it.
+    const still = this.loco[0];
+    const legs = Math.min(1, (U + fade) * still);
     this.count = 0;
     for (let i = 0; i < 5; i++) {
       const w = this.loco[i];
@@ -303,19 +324,28 @@ export class AnimationGraph {
         i === 0
           ? this.clock % this.duration(clip)
           : this.phase * this.duration(clip);
-      this.push(clip, "lower", time, w * body);
+      this.push(clip, "lower", time, w * (1 - legs) * body);
       this.push(clip, "upper", time, w * (1 - override) * body);
     }
     const at = (s: Shot) => Math.min(now - s.start, this.duration(s.clip));
-    if (this.upper)
+    if (this.upper) {
       this.push(this.upper.clip, "upper", at(this.upper), U * body);
-    if (this.fading)
+      this.push(this.upper.clip, "lower", at(this.upper), U * still * body);
+    }
+    if (this.fading) {
       this.push(
         this.fading.shot.clip,
         "upper",
         at(this.fading.shot),
         fade * body,
       );
+      this.push(
+        this.fading.shot.clip,
+        "lower",
+        at(this.fading.shot),
+        fade * still * body,
+      );
+    }
     this.push(
       "carry_ball",
       "upper",
@@ -338,23 +368,6 @@ interface Rig {
 
 // ---------------------------------------------------------------- procedural
 
-const B = {
-  root: 0,
-  hips: 1,
-  torso: 2,
-  head: 3,
-  armL: 4,
-  armR: 5,
-  legL: 6,
-  legR: 7,
-  extra: 8,
-} as const;
-const BONE_COUNT = 9;
-/** Pose layout: three Euler angles per bone, then three scalars. */
-const ROOT_Y = BONE_COUNT * 3;
-const SQUASH = ROOT_Y + 1;
-const TORSO_SQUASH = ROOT_Y + 2;
-const POSE_SIZE = ROOT_Y + 3;
 const LOWER_INDICES = [B.root, B.hips, B.legL, B.legR]
   .flatMap((b) => [b * 3, b * 3 + 1, b * 3 + 2])
   .concat([ROOT_Y, SQUASH]);
@@ -383,23 +396,6 @@ const PROCEDURAL_DURATION: Record<ClipName, number> = {
   defeat: 1.4,
 };
 
-type Hold = { x: number; z: number };
-const TAU = Math.PI * 2;
-const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
-const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
-const easeOut = (t: number) => 1 - (1 - t) ** 3;
-const set = (
-  p: Float32Array,
-  bone: number,
-  x: number,
-  y: number,
-  z: number,
-) => {
-  p[bone * 3] = x;
-  p[bone * 3 + 1] = y;
-  p[bone * 3 + 2] = z;
-};
-
 function restPose(p: Float32Array, hold: Hold) {
   p.fill(0);
   p[B.armL * 3 + 2] = -0.22;
@@ -411,10 +407,12 @@ function restPose(p: Float32Array, hold: Hold) {
  * The clip set as code, for fighters without an authored asset. Each writes
  * a whole pose over the rest pose; the layer mask decides which bones are
  * used. Signs: negative x rotation swings a limb forward, positive x leans
- * the torso forward, the prop arm is armR (+x).
+ * the torso forward, the prop arm is armR (+x). The one-shots every fighter
+ * performs differently (attack, Super, hit, knockout, landing, victory) are
+ * per-fighter styles in `MOTION` (./motion.ts); these are shared.
  */
 const PROCEDURAL_CLIPS: Record<
-  ClipName,
+  Exclude<ClipName, StyledClip>,
   (t: number, p: Float32Array, hold: Hold) => void
 > = {
   idle(t, p) {
@@ -464,27 +462,6 @@ const PROCEDURAL_CLIPS: Record<
     set(p, B.torso, 0.06, -0.2, 0);
     p[ROOT_Y] = 0.05 * (1 - Math.cos((2 * TAU * t) / 0.8)) * 0.5;
   },
-  basic_attack(t, p, hold) {
-    const n = t / PROCEDURAL_DURATION.basic_attack;
-    if (n < 0.3) {
-      // Anticipation: draw the prop arm back with a torso twist.
-      const k = ease(n / 0.3);
-      set(p, B.armR, lerp(hold.x, 0.9, k), 0, lerp(hold.z, 0.5, k));
-      p[B.torso * 3 + 1] = 0.35 * k;
-    } else if (n < 0.55) {
-      // Release: a fast forward swing.
-      const k = easeOut((n - 0.3) / 0.25);
-      set(p, B.armR, lerp(0.9, -1.9, k), 0, lerp(0.5, 0.15, k));
-      p[B.torso * 3 + 1] = lerp(0.35, -0.3, k);
-      p[B.armL * 3] = 0.35 * k;
-    } else {
-      // Recovery back to the carry pose.
-      const k = ease((n - 0.55) / 0.45);
-      set(p, B.armR, lerp(-1.9, hold.x, k), 0, lerp(0.15, hold.z, k));
-      p[B.torso * 3 + 1] = lerp(-0.3, 0, k);
-      p[B.armL * 3] = lerp(0.35, 0, k);
-    }
-  },
   item_sweep(t, p, hold) {
     const n = Math.min(1, t / PROCEDURAL_DURATION.item_sweep);
     // Wind up across the body, accelerate through a wide arc, then follow through.
@@ -513,31 +490,7 @@ const PROCEDURAL_CLIPS: Record<
     );
   },
   item_throw(t, p, hold) {
-    PROCEDURAL_CLIPS.basic_attack(t, p, hold);
-  },
-  super(t, p, hold) {
-    const n = t / PROCEDURAL_DURATION.super;
-    if (n < 0.4) {
-      const k = ease(n / 0.4);
-      set(p, B.armL, 0, 0, lerp(-0.22, -2.7, k));
-      set(p, B.armR, lerp(hold.x, -0.15, k), 0, lerp(hold.z, 2.7, k));
-      p[TORSO_SQUASH] = 0.08 * k;
-      p[B.head * 3] = -0.3 * k;
-    } else if (n < 0.6) {
-      const k = easeOut((n - 0.4) / 0.2);
-      set(p, B.armL, -1.5 * k, 0, lerp(-2.7, -0.5, k));
-      set(p, B.armR, lerp(-0.15, -1.5, k), 0, lerp(2.7, 0.5, k));
-      p[TORSO_SQUASH] = lerp(0.08, -0.12, k);
-      p[B.torso * 3] = 0.3 * k;
-      p[B.head * 3] = lerp(-0.3, 0.1, k);
-    } else {
-      const k = ease((n - 0.6) / 0.4);
-      set(p, B.armL, lerp(-1.5, 0, k), 0, lerp(-0.5, -0.22, k));
-      set(p, B.armR, lerp(-1.5, hold.x, k), 0, lerp(0.5, hold.z, k));
-      p[TORSO_SQUASH] = lerp(-0.12, 0, k);
-      p[B.torso * 3] = lerp(0.3, 0, k);
-      p[B.head * 3] = lerp(0.1, 0, k);
-    }
+    OVERHAND(t, p, hold, PROCEDURAL_DURATION.item_throw);
   },
   ball_shot(t, p, hold) {
     const n = t / PROCEDURAL_DURATION.ball_shot;
@@ -559,14 +512,6 @@ const PROCEDURAL_CLIPS: Record<
     set(p, B.armR, Math.min(x, hold.x), 0, -0.15);
     p[B.torso * 3] = torso;
   },
-  hit(t, p, hold) {
-    const k = Math.sin(Math.PI * Math.min(1, t / PROCEDURAL_DURATION.hit));
-    p[B.torso * 3] = -0.38 * k;
-    p[B.head * 3] = -0.28 * k;
-    p[B.armL * 3 + 2] = -0.22 - 0.45 * k;
-    set(p, B.armR, hold.x * (1 - k), 0, hold.z + 0.45 * k);
-    p[TORSO_SQUASH] = -0.07 * k;
-  },
   carry_ball(t, p) {
     const w = 0.05 * Math.sin((TAU * t) / 0.8);
     set(p, B.armL, -1.15 + w, 0, 0.18);
@@ -582,35 +527,6 @@ const PROCEDURAL_CLIPS: Record<
     set(p, B.legL, 0, 0, 0.05);
     set(p, B.legR, 0, 0, -0.05);
     p[B.root * 3 + 2] = 0.05 * w;
-  },
-  eliminated(t, p, hold) {
-    const k = Math.min(1, t / PROCEDURAL_DURATION.eliminated) ** 2;
-    set(p, B.root, -1.45 * k, 0, 0);
-    p[ROOT_Y] = -0.04 * k;
-    set(p, B.armL, 0, 0, -0.22 - 1.1 * k);
-    set(p, B.armR, hold.x * (1 - k), 0, hold.z + 1.1 * k);
-    p[B.head * 3] = -0.35 * k;
-    set(p, B.legL, -0.3 * k, 0, 0);
-    set(p, B.legR, -0.2 * k, 0, 0);
-  },
-  respawn(t, p, hold) {
-    const n = t / PROCEDURAL_DURATION.respawn;
-    if (n < 0.65) {
-      const fall = 1 - n / 0.65;
-      p[ROOT_Y] = 1.8 * fall * fall;
-      p[SQUASH] = 0.06;
-      set(p, B.armL, 0, 0, -0.22 - 1 * fall);
-      set(p, B.armR, hold.x, 0, hold.z + 1 * fall);
-    } else p[SQUASH] = -0.2 * Math.sin(Math.PI * ((n - 0.65) / 0.35));
-  },
-  victory(t, p) {
-    const n = Math.min(1, t / PROCEDURAL_DURATION.victory);
-    const b = Math.abs(Math.sin(TAU * n * 2));
-    p[ROOT_Y] = 0.2 * b;
-    set(p, B.armL, 0, 0, -2.6);
-    set(p, B.armR, -0.1, 0, 2.6);
-    p[B.head * 3] = -0.25;
-    p[TORSO_SQUASH] = 0.04 * b;
   },
   defeat(t, p, hold) {
     const k = ease(Math.min(1, t / 0.5));
@@ -681,11 +597,14 @@ class ProceduralRig implements Rig {
   private pose = new Float32Array(POSE_SIZE);
   private acc = new Float32Array(POSE_SIZE);
   private tmp = new Float32Array(POSE_SIZE);
+  /** This fighter's attack, Super, hit, knockout, landing and victory. */
+  private styles: (typeof MOTION)[FighterId];
   constructor(
     private asset: ProceduralAsset,
     material: Material,
     outline: Material,
   ) {
+    this.styles = MOTION[asset.fighter];
     this.bones = Array.from({ length: BONE_COUNT }, () => new Bone());
     const [root, hips, torso, head, armL, armR, legL, legR, extra] = this.bones;
     root.add(hips, extra);
@@ -710,7 +629,8 @@ class ProceduralRig implements Rig {
     this.root.scale.setScalar(PROCEDURAL_SCALE);
   }
   duration(clip: ClipName) {
-    return PROCEDURAL_DURATION[clip];
+    const styled = this.styles[clip as StyledClip];
+    return styled ? styled[1] : PROCEDURAL_DURATION[clip];
   }
   apply(channels: readonly Channel[], count: number) {
     const { acc, tmp, pose } = this;
@@ -721,17 +641,9 @@ class ProceduralRig implements Rig {
     for (let i = 0; i < count; i++) {
       const c = channels[i];
       restPose(tmp, hold);
-      // Tovya's melee attack uses the same momentum-driven sweep profile.
-      const clip =
-        c.clip === "basic_attack" && this.asset.fighter === "tovya"
-          ? "item_sweep"
-          : c.clip;
-      const t =
-        clip === "item_sweep" && c.clip === "basic_attack"
-          ? (c.time * PROCEDURAL_DURATION.item_sweep) /
-            PROCEDURAL_DURATION.basic_attack
-          : c.time;
-      PROCEDURAL_CLIPS[clip](t, tmp, hold);
+      const styled = this.styles[c.clip as StyledClip];
+      if (styled) styled[0](c.time, tmp, hold, styled[1]);
+      else PROCEDURAL_CLIPS[c.clip as Exclude<ClipName, StyledClip>](c.time, tmp, hold);
       if (c.layer !== "upper") {
         for (const j of LOWER_INDICES) acc[j] += tmp[j] * c.weight;
         lower += c.weight;
@@ -1090,7 +1002,8 @@ export interface ActorFrame {
   turn: number;
 }
 
-const DEATH_SHOW = 0.8;
+/** A knockout stays on the field this long after its clip ends, then sinks. */
+const DEATH_REST = 0.3;
 const DEATH_SINK = 0.4;
 
 /**
@@ -1183,6 +1096,7 @@ export class FighterActor {
       }
     }
     // A knocked-out fighter stays down briefly, then sinks out of view.
+    const DEATH_SHOW = Math.max(0.8, this.rig.duration("eliminated") + DEATH_REST);
     const deadFor = f.alive ? 0 : now - this.deadAt;
     if (!f.alive && deadFor > DEATH_SHOW + DEATH_SINK) {
       this.hide();

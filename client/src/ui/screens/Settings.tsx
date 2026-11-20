@@ -79,7 +79,7 @@ export function SettingsSheet({
           />
         </div>
       )}
-      <Display kind="label" level="caption" text={`Build ${BUILD}${metrics.showcase ? ` · Swiper effects ${metrics.showcase}` : ""}`} />
+      <Display kind="label" level="caption" text={`Build ${BUILD}${metrics.showcase ? ` · Swiper effects ${metrics.showcase}` : ""}${metrics.roster ? ` · Fighter effects ${metrics.roster}` : ""}`} />
       <Control kind="button" variant="primary" size="lg" icon="play" label={inMatch ? "Back to it" : "Done"} onPress={onClose} />
     </Display>
   );

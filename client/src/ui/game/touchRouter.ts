@@ -121,11 +121,14 @@ export function installStickRouter(o: StickRouterOptions): () => void {
           : null;
   };
 
-  /** A tap aims at the nearest visible enemy, or the ball for a sweep. */
-  const autoAim = (itemAction = false) => {
+  /**
+   * A tap aims at the nearest visible enemy, or the ball for a sweep.
+   * Returns how far away that target is, or null with nothing to aim at.
+   */
+  const autoAim = (itemAction = false): number | null => {
     const m = o.bridge.match,
       me = m?.players.find((p) => p.id === o.bridge.id);
-    if (!m || !me) return;
+    if (!m || !me) return null;
     const clear = (a: Vec, b: Vec) =>
       !m.walls.some((w) => {
         for (let t = 0; t <= 1; t += 0.02) {
@@ -153,7 +156,9 @@ export function installStickRouter(o: StickRouterOptions): () => void {
       targets.push(m.ball.pos);
     targets.sort((a, b) => distance(a, me.pos) - distance(b, me.pos));
     const target = targets[0];
-    if (target) aim({ x: target.x - me.pos.x, y: target.y - me.pos.y });
+    if (!target) return null;
+    aim({ x: target.x - me.pos.x, y: target.y - me.pos.y });
+    return distance(target, me.pos);
   };
 
   const track = (role: Role, s: Stick, x: number, y: number) => {
@@ -229,10 +234,16 @@ export function installStickRouter(o: StickRouterOptions): () => void {
         feedback(s.el, "deny", { reason: "Reloading" });
         o.onDeny?.("attack");
       }
-      if (tap && !o.carrying()) autoAim();
-      else if (!s.mouse) aim(s.value);
+      let power = s.power;
+      if (tap && !o.carrying()) {
+        // A tapped lob lands on the auto-aim target.
+        const reach = autoAim();
+        const me = o.bridge.match?.players.find((p) => p.id === o.bridge.id);
+        if (reach !== null && me && FIGHTERS[me.fighter].abilities.attack.kind === "lob")
+          power = clamp(reach / FIGHTERS[me.fighter].range, 0.35, 1);
+      } else if (!s.mouse) aim(s.value);
       o.bridge.input.attack = true;
-      o.bridge.input.power = s.power;
+      o.bridge.input.power = power;
       return;
     }
     const blocked = o.superBlocked();

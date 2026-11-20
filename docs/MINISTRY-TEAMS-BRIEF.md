@@ -92,7 +92,7 @@ kept because they are the content being represented.
 All ten have 3 ammo. Single-target damage per reload runs from 400 (Joelle,
 one leg; 800 when both legs hit) to 875 (Tovya). The pilot roster spans
 538–1,031. Dylan, Susannah, Miriam and Joyce (480–500) sit below it and trade
-damage for utility: tug, chain, slow, homing. Super damage never charges
+damage for utility: tug, split, slow, homing. Super damage never charges
 Super, as in the pilot rules.
 
 | Fighter | Team | Role | HP | Speed | Basic attack | Super |
@@ -100,11 +100,11 @@ Super, as in the pilot rules.
 | Dylan | Fisherman's | Catcher | 6,000 | 5.2 | **Line Cast**: 720, range 7.5, reload 1.5. Reels the target 1.2 units toward Dylan (a tug, not a knockback, so carriers keep the ball). | **Fishers of Men**: a net thrown 4.5 units lands after a visible 0.4 s marker. Radius 3: 500 damage, drags rivals to its center, 0.8 s stun. Stops at cover. |
 | Isaac | Admin | Defender | 6,200 | 5.2 | **Stapler**: a burst of 3 staples, 330 each, 0.09 s apart, per ammo. Range 8. A stun or ball pickup cuts the burst short. | **Room Setup**: a 4-unit barrier of folding tables 1.8 ahead for 6 s, 3,000 HP. It blocks enemy shots only, not movement, cones, Supers or the ball. |
 | Tovya | Homeless Outreach | Brawler | 7,600 | 5.2 | **Ladle Swing**: a 110° cone, range 2.6, 1,050 to every rival in it, reload 1.2. | **Dinner's Ready!**: leaps up to 6 units over cover in 0.5 s, then slams down: radius 2.5, 1,200 damage, 1.5 knockback. Cannot act mid-air. |
-| Rosalie | Welcome & Follow-Up | Summoner | 5,400 | 5.2 | **Warm Welcome**: a wide wave (hit width 0.35) that pierces every rival in its path. 800, range 6.5. | **Follow-Up Panda**: throws out a red panda 3 units ahead. It has 3,600 HP, lasts 12 s, chases the nearest visible rival within 9 and swipes for 500 every 0.8 s. Shots and cones can destroy it. It leaves when Rosalie is eliminated, and a new panda replaces the old one. |
+| Rosalie | Welcome & Follow-Up | Summoner | 5,400 | 5.2 | **Warm Welcome**: a wave that widens as it rolls out (hit width 0.18, plus 0.1 per unit traveled) and pierces every rival in its path. 760, range 6.5. (November 19, 2026; was a fixed 0.35 width at 800.) | **Follow-Up Panda**: throws out a red panda 3 units ahead. It has 3,600 HP, lasts 12 s, chases the nearest visible rival within 9 and swipes for 500 every 0.8 s. Shots and cones can destroy it. It leaves when Rosalie is eliminated, and a new panda replaces the old one. |
 | Joelle | Rides | Skirmisher | 5,000 | 5.8 | **Round Trip**: a boomerang that pierces, 560 on the way out and 560 on the way back. Range 7. | **Mix It Up**: a Super shot (speed 20, range 9) deals 500, stuns 0.5 s, and swaps places with the first rival hit. |
-| Susannah | Media | Thrower | 4,800 | 5.2 | **Share Post**: 720, then chains 450 to the nearest other visible rival within 3.5. | **Merch Drop**: a lob 6 units over cover lands after a 0.6 s marker. Radius 2.3, 1,300 damage, 1.5 knockback. |
+| Susannah | Media | Thrower | 4,800 | 5.2 | **Share Post**: 720. On a hit, or at full range, it goes viral: three shares fan out 0.55 rad apart for 3 units, 360 each, skipping the rival it hit. (November 19, 2026; was a 450 chain.) | **Merch Drop**: a lob 6 units over cover lands after a 0.6 s marker. Radius 2.3, 1,300 damage, 1.5 knockback. |
 | Joyce | Care | Support | 5,300 | 5.2 | **Care Note**: 700, range 8.5. It curves up to 2.6 rad/s toward visible rivals ahead. | **Christmas Grams**: 1,800 healing to herself and every teammate anywhere, plus 1 s of protection. |
-| Miriam | Prayer | Peacekeeper | 5,200 | 5.2 | **Peace Dove**: 680, slows 30% for 1.5 s (the strongest slow applies, slows never stack). | **Be Still**: radius 3.5 around her, 400 damage and a 1.25 s stun. |
+| Miriam | Prayer | Peacekeeper | 5,200 | 5.2 | **Peace Dove**: 680, slows 30% for 1.5 s (the strongest slow applies, slows never stack). The dove glides in a gentle arc (0.45 at most), alternating sides. | **Be Still**: radius 3.5 around her, 400 damage and a 1.25 s stun. |
 | Jemuel | Prayer | Guardian | 6,800 | 5.2 | **Morning Light**: a ring of light around him, range 2.8, 900 to every rival in it. | **Prayer Covering**: a 2,000 shield for 6 s on himself and teammates within 4.5. Shields absorb damage first. Absorbed damage still counts as dealt. |
 | Russell | Finance | Disruptor | 5,500 | 5.2 | **Reimbursement**: 760, refunds 35% of the damage dealt as health. | **Budget Cuts**: radius 4.5 around him, 700 damage, and rivals' ammo is emptied. |
 
@@ -114,9 +114,10 @@ shield as well.
 ## How it is built
 
 **Abilities are data.** `shared/definitions.ts` gives every fighter an
-`abilities: { attack, super }` entry built from a few kinds: `shot` and
-`cone` attacks, and `zone`, `frame`, `charge`, `rewind`, `burst`, `leap` and
-`shot` Supers. Options such as `pierce`, `returns`, `homing`, `chain`, `tug`,
+`abilities: { attack, super }` entry built from a few kinds: `shot`, `cone`,
+`beam` and `lob` attacks, and `zone`, `frame`, `charge`, `rewind`, `burst`,
+`leap` and `shot` Supers. Options such as `pierce`, `returns`, `homing`,
+`weave`, `grow`, `split`, `tug`,
 `slow`, `lifesteal`, `pull`, `drain`, `shield` and `protect` configure them.
 Placed objects (Welcome Committee, the snack table, the red panda, the
 barrier) are rows in `AREAS`. `shared/engine.ts` has one resolver per kind

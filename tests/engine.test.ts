@@ -2,7 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Engine } from "../shared/engine";
 import { Room } from "../shared/room";
-import { IDS, FIGHTERS, distance, type FighterId } from "../shared/definitions";
+import {
+  IDS,
+  FIGHTERS,
+  distance,
+  shotPoint,
+  weaveOffset,
+  type FighterId,
+} from "../shared/definitions";
 import type { Member, HostMessage } from "../shared/types";
 const members = (n = 2): Member[] =>
   Array.from({ length: n }, (_, i) => ({
@@ -151,6 +158,37 @@ test("Rich gets the final 20 percent range bonus", () => {
   advance(e, 0.5);
   assert.equal(t.hp, FIGHTERS[t.fighter].hp - 1550);
 });
+test("Rich's Shutter Shot shows its tell, then fires an instant line that stops at the first rival and at cover", () => {
+  const e = engine("rich", "broomball"),
+    [p, , , a, b] = e.playerList;
+  p.pos = { x: 5, y: 10 };
+  a.pos = { x: 9, y: 10 };
+  b.pos = { x: 12, y: 10 };
+  fire(e);
+  e.step();
+  const tell = e.state.effects.find((x) => x.kind === "beam");
+  assert.equal(tell?.value, 0, "the windup tell comes first");
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp, "nothing lands during the windup");
+  assert.equal(e.state.projectiles.length, 0, "a beam is not a projectile");
+  advance(e, 0.25);
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 1350, "instant once it fires");
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp, "it does not pierce");
+  const fired = e.state.effects.find((x) => x.kind === "beam" && x.value);
+  assert.ok(fired && fired.value! > 3 && fired.value! < 4.2, "drawn to the hit");
+  // Cover stops it; a stun during the windup cancels it.
+  a.pos = { x: 20, y: 2 };
+  e.state.walls = [{ id: "cover", x: 8, y: 9, w: 1, h: 2 }];
+  advance(e, 0.4);
+  fire(e);
+  advance(e, 0.4);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp, "blocked by cover");
+  e.state.walls = [];
+  fire(e);
+  e.step();
+  p.stunUntil = e.state.time + 0.5;
+  advance(e, 0.4);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp, "a stun cancels the windup");
+});
 test("Samuel heals only missing ally HP and earns effective charge", () => {
   const e = engine("samuel", "broomball"),
     [p, t] = e.playerList;
@@ -163,15 +201,37 @@ test("Samuel heals only missing ally HP and earns effective charge", () => {
   assert.equal(p.stats.healing, 300);
   assert.equal(p.charge, 180);
 });
-test("full-health allies do not intercept snacks", () => {
+test("Samuel's snack bag arcs over cover to the held distance and splashes everyone there", () => {
   const e = engine("samuel", "broomball"),
-    [p, t, , enemy] = e.playerList;
-  p.pos = { x: 10, y: 10 };
-  t.pos = { x: 12, y: 10 };
-  enemy.pos = { x: 14, y: 10 };
-  fire(e);
-  advance(e, 0.5);
-  assert.equal(enemy.hp, FIGHTERS[enemy.fighter].hp - 800);
+    [p, ally, , a, b] = e.playerList;
+  p.pos = { x: 6, y: 10 };
+  ally.pos = { x: 13, y: 10.8 };
+  a.pos = { x: 13.5, y: 10 };
+  b.pos = { x: 12.6, y: 9.4 };
+  ally.hp -= 2000;
+  // Cover between them: a lob flies over it.
+  e.state.walls = [{ id: "cover", x: 9, y: 6, w: 1, h: 8 }];
+  e.setInput(p.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, attack: true, power: 1 });
+  e.step();
+  const bag = e.state.projectiles[0];
+  assert.ok(bag?.lob, "it is in the air");
+  const marker = e.state.effects.find((x) => x.kind === "lob");
+  assert.ok(marker && Math.abs(marker.pos.x - 13.5) < 1e-6, "the landing spot is shown");
+  advance(e, 0.3);
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp, "nothing lands mid-flight");
+  advance(e, 0.6);
+  assert.equal(e.state.projectiles.length, 0);
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 800);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 800, "a splash hits everyone in it");
+  assert.equal(ally.hp, FIGHTERS[ally.fighter].hp - 2000 + 850, "and feeds teammates");
+  assert.ok(e.state.effects.some((x) => x.kind === "splash"));
+  // A light tap throws a short lob: 35% of the range.
+  p.ammo = 3;
+  advance(e, 0.4);
+  e.setInput(p.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, attack: true, power: 0.2 });
+  e.step();
+  const short = e.state.effects.filter((x) => x.kind === "lob").at(-1)!;
+  assert.ok(Math.abs(short.pos.x - (6 + 7.5 * 0.35)) < 1e-6);
 });
 test("Josh cone hits multiple enemies once and respects walls", () => {
   const e = engine("josh", "broomball");
@@ -194,6 +254,40 @@ test("Elijah ricochets exactly once", () => {
   advance(e, 0.2);
   assert.equal(e.state.projectiles[0]?.bounces, 0);
   assert.ok(e.state.projectiles[0]?.dir.x < 0);
+});
+test("weaving shots fly the shared path: Elijah's zigzag catches a rival a straight shot would miss", () => {
+  const zig = { amp: 0.55, wavelength: 2.4, zigzag: true };
+  assert.equal(weaveOffset(zig, 0), 0);
+  assert.ok(Math.abs(weaveOffset(zig, 0.6) - 0.55) < 1e-9, "peaks at a quarter wave");
+  assert.ok(Math.abs(weaveOffset(zig, 1.2)) < 1e-9, "zero every half wave");
+  assert.ok(Math.abs(weaveOffset(zig, 1.8) + 0.55) < 1e-9);
+  const bent = shotPoint({ x: 2, y: 0 }, { x: 1, y: 0 }, 0.6, zig, -1);
+  assert.ok(Math.abs(bent.y + 0.55) < 1e-9, "side -1 bends right of the heading");
+  const e = engine("elijah"),
+    [p, t] = e.playerList;
+  p.pos = { x: 14, y: 21 };
+  // The zigzag peaks 0.55 to the left every 2.4 units, first at 0.6 and 3.
+  t.pos = { x: 17, y: 21.85 };
+  fire(e);
+  advance(e, 0.5);
+  assert.equal(t.hp, FIGHTERS[t.fighter].hp - 750, "0.85 off the line, inside the zigzag");
+  // Ethan's notes bend apart on opposite sides and both land.
+  const ethan = engine("ethan");
+  ethan.playerList[0].pos = { x: 10, y: 12 };
+  fire(ethan);
+  ethan.step();
+  const sides = ethan.state.projectiles.map((q) => q.side);
+  assert.deepEqual([...sides].sort(), [-1, 1]);
+  // Miriam's dove alternates which way it arcs.
+  const m = engine("miriam");
+  m.playerList[0].pos = { x: 10, y: 12 };
+  fire(m);
+  m.step();
+  advance(m, 0.4);
+  fire(m);
+  m.step();
+  const doves = m.state.projectiles.map((q) => q.side);
+  assert.deepEqual(doves, [1, -1]);
 });
 test("David Mixed Voice rewards the narrow center without changing its outer hit", () => {
   const centered = engine("david"),
@@ -1021,8 +1115,24 @@ test("Rosalie's wave pierces every rival in its path", () => {
   b.pos = { x: 14, y: 10.3 };
   fire(e);
   advance(e, 0.6);
-  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 800);
-  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 800);
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 760);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 760);
+});
+test("Rosalie's wave widens as it rolls out", () => {
+  const near = duel("rosalie", "broomball");
+  const [p, , , a] = near.playerList;
+  p.pos = { x: 10, y: 10 };
+  a.pos = { x: 11.5, y: 10.9 };
+  fire(near);
+  advance(near, 0.6);
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp, "close in it is narrow");
+  const far = duel("rosalie", "broomball");
+  const [q, , , b] = far.playerList;
+  q.pos = { x: 10, y: 10 };
+  b.pos = { x: 16, y: 10.9 };
+  fire(far);
+  advance(far, 0.7);
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 760, "far out the same offset is inside it");
 });
 
 test("Rosalie's red panda chases a rival, can be destroyed, and leaves with her", () => {
@@ -1083,17 +1193,30 @@ test("Joelle's Super swaps places with the first rival hit and stuns them", () =
   assert.ok(t.stunUntil > e.state.time);
 });
 
-test("Susannah's post chains to a second rival; her lob flies over cover", () => {
+test("Susannah's post goes viral into three shares; her lob flies over cover", () => {
   const e = duel("susannah", "broomball");
   const [p, , , a, b] = e.playerList;
   p.pos = { x: 10, y: 10 };
   a.pos = { x: 13, y: 10 };
-  b.pos = { x: 15, y: 11 };
+  b.pos = { x: 14.3, y: 11.15 };
   fire(e);
   advance(e, 0.4);
   assert.equal(a.hp, FIGHTERS[a.fighter].hp - 720);
-  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 450);
-  assert.equal(p.charge, 1170);
+  assert.equal(e.state.projectiles.filter((q) => q.shard).length, 2, "one share hit, two fly on");
+  assert.ok(e.state.effects.some((x) => x.kind === "split" && x.value === 3));
+  advance(e, 0.4);
+  assert.equal(a.hp, FIGHTERS[a.fighter].hp - 720, "shares skip the rival it hit");
+  assert.equal(b.hp, FIGHTERS[b.fighter].hp - 360);
+  assert.equal(p.charge, 1080);
+  // A miss goes viral at full range instead.
+  a.pos = { x: 30, y: 2 };
+  b.pos = { x: 30, y: 18 };
+  advance(e, 0.5);
+  fire(e);
+  advance(e, 0.62);
+  assert.equal(e.state.projectiles.filter((q) => q.shard).length, 3);
+  advance(e, 0.6);
+  assert.equal(e.state.projectiles.length, 0, "shares never split again");
   e.state.walls = [{ id: "cover", x: 12, y: 6, w: 1, h: 8 }];
   b.pos = { x: 16, y: 10 };
   b.hp = FIGHTERS[b.fighter].hp;

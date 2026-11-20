@@ -18,6 +18,8 @@ import {
   Mesh,
   MeshBasicMaterial,
   NormalBlending,
+  NotEqualStencilFunc,
+  ReplaceStencilOp,
   PlaneGeometry,
   Quaternion,
   RingGeometry,
@@ -35,6 +37,7 @@ import {
   FIGHTERS,
   IDS,
   ITEMS,
+  shotPoint,
   type FighterId,
   type Vec,
 } from "../../../shared/definitions";
@@ -51,7 +54,9 @@ import type { ArenaMaterials } from "./materials";
  * - `Billboards`: names, health bars, damage numbers and stun stars as one
  *   instanced draw from a single canvas atlas.
  * - `Markers`: blob shadows and ground rings, two instanced draws.
- * - `Effects`: rings, cones, Super rectangles and release streaks.
+ * - `Effects`: ground rings, flash discs and release streaks.
+ * - `Strikes`: the attacks themselves in 3D (waves, swings, beams, light
+ *   volumes, wavefronts, blast domes) instead of flat floor highlights.
  * - `Projectiles`, `Areas`, `Ball`, `Vans`, `AimArrow`: gameplay objects drawn
  *   from the snapshot, never simulated here.
  */
@@ -64,6 +69,8 @@ const _s = new Vector3();
 const _c = new Color();
 const Z = new Vector3(0, 0, 1);
 const Y = new Vector3(0, 1, 0);
+const X = new Vector3(1, 0, 0);
+const _white = new Color(0xffffff);
 const flatRot = new Quaternion().setFromAxisAngle(
   new Vector3(1, 0, 0),
   -Math.PI / 2,
@@ -437,16 +444,7 @@ export class Markers {
 
 // ------------------------------------------------------------------ effects
 
-type FxKind =
-  | "ring"
-  | "disc"
-  | "cone"
-  | "sweep"
-  | "meleeSweep"
-  | "sweepEdge"
-  | "meleeEdge"
-  | "rect"
-  | "streak";
+type FxKind = "ring" | "disc" | "streak";
 interface Fx {
   kind: FxKind;
   mesh: Mesh;
@@ -461,45 +459,6 @@ interface Fx {
   active: boolean;
 }
 
-/** Unit cone: tip at the origin, base across z = 1 from x = -1 to 1. */
-function coneGeometry() {
-  const g = new BufferGeometry();
-  g.setAttribute(
-    "position",
-    new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 1, -1, 0, 1]), 3),
-  );
-  g.setAttribute(
-    "normal",
-    new BufferAttribute(new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]), 3),
-  );
-  return g;
-}
-
-/** Sector used by Tovya's melee attack. */
-function sweepGeometry(half: number) {
-  const points: number[] = [];
-  const steps = 24;
-  for (let i = 0; i < steps; i++) {
-    const a = -half + (i / steps) * (2 * half);
-    const b = -half + ((i + 1) / steps) * (2 * half);
-    points.push(
-      0,
-      0,
-      0,
-      Math.sin(a),
-      0,
-      Math.cos(a),
-      Math.sin(b),
-      0,
-      Math.cos(b),
-    );
-  }
-  const g = new BufferGeometry();
-  g.setAttribute("position", new BufferAttribute(new Float32Array(points), 3));
-  g.computeVertexNormals();
-  return g;
-}
-
 /**
  * Short-lived effect meshes in fixed pools (standard §5.2). A pool that runs
  * dry recycles its oldest effect instead of allocating.
@@ -511,37 +470,11 @@ export class Effects {
     const geo: Record<FxKind, BufferGeometry> = {
       ring: mats.track(new RingGeometry(0.84, 1, 56).rotateX(-Math.PI / 2)),
       disc: mats.track(new CircleGeometry(1, 40).rotateX(-Math.PI / 2)),
-      cone: mats.track(coneGeometry()),
-      sweep: mats.track(
-        new PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, 0.5),
-      ),
-      meleeSweep: mats.track(
-        sweepGeometry(
-          (FIGHTERS.tovya.abilities.attack as { halfAngle: number }).halfAngle,
-        ),
-      ),
-      sweepEdge: mats.track(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2)),
-      meleeEdge: mats.track(
-        new PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, 0.5),
-      ),
-      rect: mats.track(
-        new PlaneGeometry(2, 1).rotateX(-Math.PI / 2).translate(0, 0, 0.5),
-      ),
       streak: mats.track(
         new PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, 0.5),
       ),
     };
-    const sizes: Record<FxKind, number> = {
-      ring: 40,
-      disc: 10,
-      cone: 8,
-      sweep: 8,
-      meleeSweep: 8,
-      sweepEdge: 8,
-      meleeEdge: 8,
-      rect: 8,
-      streak: 20,
-    };
+    const sizes: Record<FxKind, number> = { ring: 40, disc: 10, streak: 20 };
     for (const kind of Object.keys(sizes) as FxKind[]) {
       const pool: Fx[] = [];
       for (let i = 0; i < sizes[kind]; i++) {
@@ -628,75 +561,6 @@ export class Effects {
     fx.mesh.position.set(at.x, y, at.y);
     return fx;
   }
-  /** Flat cone from `at` along `dir`, `range` long and `half` wide at the end. */
-  cone(
-    at: Vec,
-    dir: Vec,
-    range: number,
-    half: number,
-    color: number,
-    dur: number,
-    now: number,
-    alpha = 0.32,
-  ) {
-    const fx = this.take("cone", now, dur, color, alpha);
-    fx.mesh.position.set(at.x, 0.07, at.y);
-    fx.mesh.rotation.y = Math.atan2(dir.x, dir.y);
-    fx.mesh.scale.set(half, 1, range);
-    return fx;
-  }
-  /** The sweep footprint uses the same angle and radius as the hit test. */
-  sweep(
-    at: Vec,
-    dir: Vec,
-    range: number,
-    color: number,
-    now: number,
-    melee = false,
-  ) {
-    const half = (FIGHTERS.tovya.abilities.attack as { halfAngle: number })
-      .halfAngle;
-    const fx = this.take(melee ? "meleeSweep" : "sweep", now, 0.32, color, 0.4);
-    fx.mesh.position.set(at.x, 0.08, at.y);
-    fx.mesh.rotation.y = Math.atan2(dir.x, dir.y);
-    fx.mesh.scale.set(melee ? range : ITEMS.golden_broom.width, 1, range);
-    const edge = this.take(
-      melee ? "meleeEdge" : "sweepEdge",
-      now,
-      0.32,
-      0xfff4bf,
-      0.85,
-    );
-    edge.r0 = Math.atan2(dir.x, dir.y);
-    edge.r1 = range;
-    edge.x0 = at.x;
-    edge.z0 = at.y;
-    edge.mesh.position.set(at.x, 0.1, at.y);
-    edge.mesh.rotation.y = melee ? edge.r0 - half : edge.r0;
-    edge.mesh.scale.set(
-      melee ? 0.18 : ITEMS.golden_broom.width,
-      1,
-      melee ? range : 0.18,
-    );
-    return fx;
-  }
-  /** Flat rectangle from `at` along `dir`. */
-  rect(
-    at: Vec,
-    dir: Vec,
-    range: number,
-    half: number,
-    color: number,
-    dur: number,
-    now: number,
-    alpha = 0.3,
-  ) {
-    const fx = this.take("rect", now, dur, color, alpha);
-    fx.mesh.position.set(at.x, 0.07, at.y);
-    fx.mesh.rotation.y = Math.atan2(dir.x, dir.y);
-    fx.mesh.scale.set(half, 1, range);
-    return fx;
-  }
   /** A streak along `dir` starting `from` units out, growing to `length`. */
   streak(
     at: Vec,
@@ -733,21 +597,370 @@ export class Effects {
           const r = fx.r0 + (fx.r1 - fx.r0) * out;
           fx.mesh.scale.set(r, 1, r);
           fx.material.opacity = fx.alpha * (1 - k);
-        } else if (fx.kind === "sweepEdge" || fx.kind === "meleeEdge") {
-          if (fx.kind === "meleeEdge") {
-            const half = (
-              FIGHTERS.tovya.abilities.attack as { halfAngle: number }
-            ).halfAngle;
-            fx.mesh.rotation.y = fx.r0 + (2 * out - 1) * half;
-          } else {
-            fx.mesh.position.x = fx.x0 + Math.sin(fx.r0) * fx.r1 * out;
-            fx.mesh.position.z = fx.z0 + Math.cos(fx.r0) * fx.r1 * out;
-          }
-          fx.material.opacity = fx.alpha * (1 - k);
         } else if (fx.kind === "streak") {
           fx.mesh.scale.z = Math.max(0.01, fx.r1 * out);
           fx.material.opacity = fx.alpha * (1 - k);
         } else fx.material.opacity = fx.alpha * (1 - k * k);
+      }
+  }
+}
+
+// ------------------------------------------------------------------ strikes
+
+type StrikeKind = "arc" | "swoosh" | "beam" | "volume" | "front" | "dome";
+interface Strike {
+  kind: StrikeKind;
+  mesh: Mesh;
+  material: MeshBasicMaterial | ShaderMaterial;
+  active: boolean;
+  start: number;
+  dur: number;
+  alpha: number;
+  /** Radius (arcs, domes) from r0 to r1; a front's travel from r0 to r1. */
+  r0: number;
+  r1: number;
+  /** A beam's starting radius; a front's start point and travel direction. */
+  w: number;
+  x0: number;
+  z0: number;
+  dx: number;
+  dz: number;
+  /** A tell pulses instead of fading. */
+  tell: boolean;
+}
+
+const SWOOSH_VERTEX = /* glsl */ `
+attribute vec2 sweep;
+varying vec2 vSweep;
+void main() {
+  vSweep = sweep;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+const SWOOSH_FRAGMENT = /* glsl */ `
+uniform vec3 color;
+uniform float head;
+uniform float fade;
+varying vec2 vSweep;
+void main() {
+  float behind = head - vSweep.x;
+  float a = behind < 0.0 ? 0.0 : exp(-behind * 3.5);
+  float edge = smoothstep(0.0, 0.35, vSweep.y) * (0.55 + 0.45 * smoothstep(0.6, 1.0, vSweep.y));
+  gl_FragColor = vec4(color * (0.7 + 0.6 * vSweep.y), a * edge * fade);
+  #include <colorspace_fragment>
+}`;
+
+/** A horizontal ring sector, `half` either side of +z; sweep.x runs +x side to -x side. */
+function swooshGeometry(half: number) {
+  const steps = 32,
+    pos: number[] = [],
+    sweep: number[] = [],
+    index: number[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const u = i / steps,
+      a = half - u * half * 2;
+    for (const r of [0.35, 1]) {
+      pos.push(Math.sin(a) * r, 0, Math.cos(a) * r);
+      sweep.push(u, r === 1 ? 1 : 0);
+    }
+    if (i < steps) {
+      const k = i * 2;
+      index.push(k, k + 1, k + 3, k, k + 3, k + 2);
+    }
+  }
+  const g = new BufferGeometry();
+  g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute("sweep", new BufferAttribute(new Float32Array(sweep), 2));
+  g.setIndex(index);
+  return g;
+}
+
+/** A torus arc in the ground plane, `half` either side of +z, unit radius. */
+function arcGeometry(half: number) {
+  const full = half >= Math.PI * 0.99;
+  return new TorusGeometry(1, 0.05, 6, full ? 64 : 28, full ? Math.PI * 2 : half * 2)
+    .rotateX(-Math.PI / 2)
+    .rotateY(-Math.PI / 2 - (full ? 0 : half) + (full ? 0 : 0));
+}
+
+/** A light volume from a narrow opening (`near` of the far width) out to z = 1. */
+function volumeGeometry(near: number) {
+  const n = near / 2,
+    f = 0.5;
+  const v = [
+    [-n, 0, 0], [n, 0, 0], [n, 1, 0], [-n, 1, 0],
+    [-f, 0, 1], [f, 0, 1], [f, 1, 1], [-f, 1, 1],
+  ];
+  const faces = [
+    [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5], [4, 5, 6, 7],
+  ];
+  const pos: number[] = [];
+  for (const [a, b, c, d] of faces) pos.push(...v[a], ...v[b], ...v[c], ...v[a], ...v[c], ...v[d]);
+  const g = new BufferGeometry();
+  g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * Real attack visuals in the world, in place of flat highlights on the
+ * floor (standard §6: release and impact): sound waves that roll out, a
+ * weapon trail through a swing, glowing beams, a light volume for a flash,
+ * moving wavefronts and blast domes. Every mesh is pooled and reused; per
+ * frame only transforms, opacity and a shader uniform change (§5.2). They
+ * draw what the authority already decided and never test a hit.
+ */
+export class Strikes {
+  readonly group = new Group();
+  private pools = new Map<StrikeKind, Strike[]>();
+  private swooshes = new Map<number, BufferGeometry>();
+  private arcs = new Map<number, BufferGeometry>();
+  private volumes = new Map<number, BufferGeometry>();
+  constructor(private mats: ArenaMaterials) {
+    const geo: Partial<Record<StrikeKind, BufferGeometry>> = {
+      beam: mats.track(
+        new CylinderGeometry(1, 1, 1, 10, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.5),
+      ),
+      front: mats.track(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2)),
+      dome: mats.track(new SphereGeometry(1, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2)),
+    };
+    const sizes: Record<StrikeKind, number> = {
+      arc: 30,
+      swoosh: 8,
+      beam: 16,
+      volume: 4,
+      front: 16,
+      dome: 8,
+    };
+    for (const kind of Object.keys(sizes) as StrikeKind[]) {
+      const pool: Strike[] = [];
+      for (let i = 0; i < sizes[kind]; i++) {
+        const material =
+          kind === "swoosh"
+            ? mats.track(
+                new ShaderMaterial({
+                  uniforms: {
+                    color: { value: new Color() },
+                    head: { value: 0 },
+                    fade: { value: 1 },
+                  },
+                  vertexShader: SWOOSH_VERTEX,
+                  fragmentShader: SWOOSH_FRAGMENT,
+                  transparent: true,
+                  depthWrite: false,
+                  side: DoubleSide,
+                  blending: AdditiveBlending,
+                }),
+              )
+            : mats.track(
+                new MeshBasicMaterial({
+                  transparent: true,
+                  depthWrite: false,
+                  side: DoubleSide,
+                  fog: false,
+                }),
+              );
+        const mesh = new Mesh(geo[kind] ?? new BufferGeometry(), material);
+        mesh.visible = false;
+        mesh.frustumCulled = false;
+        mesh.renderOrder = 6;
+        this.group.add(mesh);
+        pool.push({
+          kind,
+          mesh,
+          material,
+          active: false,
+          start: 0,
+          dur: 1,
+          alpha: 1,
+          r0: 0,
+          r1: 0,
+          w: 0,
+          x0: 0,
+          z0: 0,
+          dx: 0,
+          dz: 0,
+          tell: false,
+        });
+      }
+      this.pools.set(kind, pool);
+    }
+  }
+  private cached(map: Map<number, BufferGeometry>, key: number, make: () => BufferGeometry) {
+    const k = Math.round(key * 1000) / 1000;
+    let g = map.get(k);
+    if (!g) map.set(k, (g = this.mats.track(make())));
+    return g;
+  }
+  private take(kind: StrikeKind, now: number, dur: number, alpha: number) {
+    const pool = this.pools.get(kind)!;
+    const s =
+      pool.find((x) => !x.active) ??
+      pool.reduce((a, b) => (a.start <= b.start ? a : b));
+    s.active = true;
+    s.start = now;
+    s.dur = Math.max(0.05, dur);
+    s.alpha = alpha;
+    s.tell = false;
+    s.mesh.visible = true;
+    s.mesh.rotation.set(0, 0, 0);
+    s.mesh.scale.set(1, 1, 1);
+    const m = s.material;
+    if (m instanceof MeshBasicMaterial) m.blending = AdditiveBlending;
+    return s;
+  }
+  private tint(s: Strike, color: number, lighten = 0) {
+    const m = s.material;
+    const c = m instanceof ShaderMaterial ? (m.uniforms.color.value as Color) : m.color;
+    c.setHex(color);
+    if (lighten) c.lerp(_white, lighten);
+  }
+
+  /**
+   * Sound or light rolling outward: upright stacks of torus arcs that
+   * spread from the fighter to `range`, `half` radians either side of the
+   * aim (a full ring when `half` is pi).
+   */
+  waves(at: Vec, dir: Vec, range: number, half: number, color: number, now: number, count = 3, dur = 0.32) {
+    const g = this.cached(this.arcs, half, () => arcGeometry(half));
+    const yaw = Math.atan2(dir.x, dir.y);
+    for (let i = 0; i < count; i++)
+      for (const [y, light] of [[0.55, 0.2], [1.05, 0.45], [1.55, 0.2]] as const) {
+        const s = this.take("arc", now + i * 0.06, dur, 0.85 - i * 0.18);
+        s.mesh.geometry = g;
+        this.tint(s, color, light);
+        s.r0 = 0.5;
+        s.r1 = range;
+        s.mesh.position.set(at.x, y, at.y);
+        s.mesh.rotation.y = yaw;
+      }
+  }
+  /** A weapon trail through a swing, at chest height, sweeping `half` either side. */
+  swoosh(at: Vec, dir: Vec, range: number, half: number, color: number, now: number, dur = 0.26, y = 1) {
+    const s = this.take("swoosh", now, dur, 1);
+    s.mesh.geometry = this.cached(this.swooshes, half, () => swooshGeometry(half));
+    this.tint(s, color, 0.35);
+    s.mesh.position.set(at.x, y, at.y);
+    s.mesh.rotation.set(0.12, Math.atan2(dir.x, dir.y), 0);
+    s.mesh.scale.set(range, 1, range);
+  }
+  /**
+   * A beam along `dir` at chest height. A tell is a thin pulsing line for
+   * `dur`; a fired beam is a hot core and a glow that narrow as they fade.
+   * `side` offsets it across the aim (twin eye beams).
+   */
+  beam(at: Vec, dir: Vec, length: number, color: number, now: number, dur: number, fired: boolean, radius = 0.3, y = 1.15, side = 0) {
+    const yaw = Math.atan2(dir.x, dir.y);
+    const ox = dir.y * side,
+      oz = -dir.x * side;
+    const layers: [number, number, number][] = fired
+      ? [[0.12, 0xffffff, 1], [radius, color, 0.5]]
+      : [[0.035, color, 0.9]];
+    for (const [r, c, a] of layers) {
+      const s = this.take("beam", now, dur, a);
+      this.tint(s, c, fired ? 0 : 0.3);
+      s.tell = !fired;
+      s.w = r;
+      s.mesh.position.set(at.x + dir.x * 0.4 + ox, y, at.y + dir.y * 0.4 + oz);
+      s.mesh.rotation.y = yaw;
+      s.mesh.scale.set(r, r, Math.max(0.05, length - 0.4));
+    }
+  }
+  /** A light volume from the fighter: a camera flash, a glare, a blast of sound. */
+  volume(at: Vec, dir: Vec, range: number, near: number, far: number, height: number, color: number, now: number, dur: number, alpha: number, tell = false) {
+    const s = this.take("volume", now, dur, alpha);
+    s.mesh.geometry = this.cached(this.volumes, near / far, () => volumeGeometry(near / far));
+    this.tint(s, color, tell ? 0.2 : 0);
+    s.tell = tell;
+    s.mesh.position.set(at.x, 0.05, at.y);
+    s.mesh.rotation.y = Math.atan2(dir.x, dir.y);
+    s.mesh.scale.set(far, height, range);
+  }
+  /**
+   * Moving wavefronts: bars `span` wide across `dir`, stacked at chest
+   * heights, travelling `travel` along `dir` from `at`.
+   */
+  front(at: Vec, dir: Vec, travel: number, span: number, color: number, now: number, dur: number, heights: readonly number[] = [0.5, 1, 1.5]) {
+    const yaw = Math.atan2(dir.x, dir.y);
+    heights.forEach((y, i) => {
+      const s = this.take("front", now, dur, i === 1 ? 0.75 : 0.5);
+      const m = s.material as MeshBasicMaterial;
+      m.blending = NormalBlending;
+      this.tint(s, color, i === 1 ? 0.6 : 0.3);
+      s.r0 = 0;
+      s.r1 = travel;
+      s.x0 = at.x;
+      s.z0 = at.y;
+      s.dx = dir.x;
+      s.dz = dir.y;
+      s.mesh.position.set(at.x, y, at.y);
+      s.mesh.rotation.y = yaw;
+      s.mesh.scale.set(span, 1, 0.35);
+    });
+  }
+  /** A blast dome swelling to `radius`. */
+  dome(at: Vec, radius: number, color: number, now: number, dur = 0.45) {
+    for (const [k, a, light] of [[1, 0.42, 0], [0.7, 0.35, 0.6]] as const) {
+      const s = this.take("dome", now, dur, a);
+      this.tint(s, color, light);
+      s.r0 = 0.3;
+      s.r1 = radius * k;
+      s.mesh.position.set(at.x, 0.02, at.y);
+    }
+  }
+  update(now: number) {
+    for (const pool of this.pools.values())
+      for (const s of pool) {
+        if (!s.active) continue;
+        const t = now - s.start;
+        if (t < 0) {
+          s.mesh.visible = false;
+          continue;
+        }
+        const k = t / s.dur;
+        if (k >= 1) {
+          s.active = false;
+          s.mesh.visible = false;
+          continue;
+        }
+        s.mesh.visible = true;
+        const out = 1 - (1 - k) ** 3;
+        const fade = s.tell ? 0.55 + 0.45 * Math.sin(t * 40) : 1 - k * k;
+        switch (s.kind) {
+          case "arc": {
+            const r = s.r0 + (s.r1 - s.r0) * out;
+            s.mesh.scale.set(r, 1 + 0.8 * k, r);
+            (s.material as MeshBasicMaterial).opacity = s.alpha * (1 - k);
+            break;
+          }
+          case "swoosh": {
+            const u = (s.material as ShaderMaterial).uniforms;
+            u.head.value = Math.min(1.6, out * 1.6);
+            u.fade.value = 1 - Math.max(0, (k - 0.5) / 0.5);
+            break;
+          }
+          case "beam": {
+            const r = s.tell ? s.w : s.w * (1 - 0.8 * k);
+            s.mesh.scale.x = s.mesh.scale.y = Math.max(0.01, r);
+            (s.material as MeshBasicMaterial).opacity = s.alpha * fade;
+            break;
+          }
+          case "volume":
+            (s.material as MeshBasicMaterial).opacity = s.alpha * fade;
+            break;
+          case "front": {
+            const d = s.r0 + (s.r1 - s.r0) * out;
+            s.mesh.position.x = s.x0 + s.dx * d;
+            s.mesh.position.z = s.z0 + s.dz * d;
+            (s.material as MeshBasicMaterial).opacity = s.alpha * (1 - k);
+            break;
+          }
+          case "dome": {
+            const r = s.r0 + (s.r1 - s.r0) * out;
+            s.mesh.scale.set(r, r * 0.75, r);
+            (s.material as MeshBasicMaterial).opacity = s.alpha * (1 - k) ** 1.5;
+            break;
+          }
+        }
       }
   }
 }
@@ -851,7 +1064,34 @@ export class Items {
 
 // -------------------------------------------------------------- projectiles
 
-const PROJECTILE_Y = 0.85;
+export const PROJECTILE_Y = 0.85;
+/** Drawn height of a lob after `traveled` of `total` units: a parabola. */
+export const lobHeight = (traveled: number, total: number) => {
+  const k = total > 0 ? Math.max(0, Math.min(1, traveled / total)) : 1;
+  return 0.6 + 4 * (1.1 + total * 0.22) * k * (1 - k);
+};
+/** Flat spin rate (rad/s) of each fighter's projectile; 0 flies nose-first. */
+const SPIN: Record<FighterId, number> = {
+  brandon: 14,
+  daniel: 9,
+  rich: 0,
+  samuel: 0,
+  josh: 0,
+  elijah: 0,
+  ethan: 0,
+  david: 0,
+  dylan: 0,
+  isaac: 0,
+  tovya: 0,
+  rosalie: 0,
+  joelle: 16,
+  susannah: 6,
+  joyce: 0,
+  miriam: 0,
+  jemuel: 0,
+  russell: 14,
+  brandon_n: 14,
+};
 /** Presentation-only readability scale; authoritative shot widths are unchanged. */
 const PROJECTILE_VISUAL_SCALE = 1.6;
 type ShotKind = FighterId;
@@ -891,23 +1131,16 @@ function projectileGeometry(kind: ShotKind): BufferGeometry {
           [0.03, 0, 0.3],
         ),
       ]);
-    case "rich":
-      return merge([
-        part(new IcosahedronGeometry(0.13, 1), "#f5f0ff"),
-        part(
-          new IcosahedronGeometry(0.2, 1),
-          "#b9a3ee",
-          [0, 0, -0.05],
-          [0, 0, 0],
-          [0.8, 0.8, 1.4],
-        ),
-      ]);
     case "samuel":
+      // A snack bag: crimped foil top and bottom, a cookie on the label.
       return merge([
-        part(new CylinderGeometry(0.22, 0.22, 0.07, 18), "#d8994c"),
-        part(new SphereGeometry(0.04, 8, 6), "#624534", [0.08, 0.04, 0.05]),
-        part(new SphereGeometry(0.035, 8, 6), "#624534", [-0.07, 0.04, -0.06]),
-        part(new SphereGeometry(0.035, 8, 6), "#624534", [-0.04, 0.04, 0.1]),
+        part(new RoundedBoxGeometry(0.34, 0.42, 0.14, 2, 0.05), "#f5d46e"),
+        part(new RoundedBoxGeometry(0.36, 0.05, 0.1, 1, 0.015), "#d8994c", [0, 0.23, 0]),
+        part(new RoundedBoxGeometry(0.36, 0.05, 0.1, 1, 0.015), "#d8994c", [0, -0.23, 0]),
+        part(new CylinderGeometry(0.1, 0.1, 0.03, 14), "#d8994c", [0, 0, 0.075], [Math.PI / 2, 0, 0]),
+        part(new SphereGeometry(0.022, 6, 4), "#624534", [0.03, 0.02, 0.095]),
+        part(new SphereGeometry(0.02, 6, 4), "#624534", [-0.035, -0.02, 0.095]),
+        part(new RoundedBoxGeometry(0.3, 0.06, 0.02, 1, 0.01), "#e8553a", [0, 0.12, 0.072]),
       ]);
     case "elijah":
       return merge([
@@ -1093,6 +1326,7 @@ function projectileGeometry(kind: ShotKind): BufferGeometry {
           [-0.1, 0.004, 0.04],
         ),
       ]);
+    case "rich":
     case "josh":
     case "tovya":
     case "jemuel":
@@ -1102,8 +1336,18 @@ function projectileGeometry(kind: ShotKind): BufferGeometry {
 
 export interface ProjectileView {
   fighter: FighterId;
+  /** Drawn ground position: the weave applied, extrapolated past the snapshot. */
   pos: Vec;
+  /** Drawn heading: along the actual (weaving) path. */
   dir: Vec;
+  /** Height above the ground; a lob climbs and falls along its arc. */
+  y: number;
+  /** Uniform size: a share is smaller than the shot it split from. */
+  size: number;
+  /** Extra width across the heading: a widening wave. */
+  wide: number;
+  /** Lobbed: tumbles end over end instead of spinning flat. */
+  lob: boolean;
 }
 
 /** One instanced draw per projectile type, plus one for all glow trails. */
@@ -1114,9 +1358,10 @@ export class Projectiles {
   private trails: InstancedMesh;
   private nt = 0;
   constructor(mats: ArenaMaterials) {
-    for (const kind of IDS.filter(
-      (id) => FIGHTERS[id].abilities.attack.kind === "shot",
-    )) {
+    for (const kind of IDS.filter((id) => {
+      const attack = FIGHTERS[id].abilities.attack.kind;
+      return attack === "shot" || attack === "lob";
+    })) {
       const mesh = new InstancedMesh(
         mats.track(projectileGeometry(kind)),
         mats.toon,
@@ -1170,37 +1415,23 @@ export class Projectiles {
       const i = this.counts.get(q.fighter)!;
       if (i >= 24) continue;
       const yaw = Math.atan2(q.dir.x, q.dir.y);
-      // Spinning throwables tumble; the flash and bug fly nose-first.
-      const spin = [
-        "brandon",
-        "samuel",
-        "joelle",
-        "russell",
-        "brandon_n",
-      ].includes(
-        q.fighter,
-      )
-        ? time * 14
-        : q.fighter === "daniel"
-          ? time * 9
-          : 0;
-      _q.setFromAxisAngle(Y, yaw + spin);
+      // Spinning throwables spin flat; lobs tumble end over end; the bug,
+      // notes, dove and waves fly nose-first along their path.
+      const spin = SPIN[q.fighter] * time;
+      _q.setFromAxisAngle(Y, yaw + (q.lob ? 0 : spin));
+      if (q.lob) _q.multiply(_qRoll.setFromAxisAngle(X, time * 11));
       if (q.fighter === "ethan")
         _q.multiply(_qRoll.setFromAxisAngle(Z, Math.sin(time * 12) * 0.3));
-      _m.compose(
-        _p.set(q.pos.x, PROJECTILE_Y, q.pos.y),
-        _q,
-        _s.setScalar(PROJECTILE_VISUAL_SCALE),
-      );
+      const k = PROJECTILE_VISUAL_SCALE * q.size;
+      _m.compose(_p.set(q.pos.x, q.y, q.pos.y), _q, _s.set(k * q.wide, k, k));
       mesh.setMatrixAt(i, _m);
       this.counts.set(q.fighter, i + 1);
-      if (this.nt < 64) {
+      if (this.nt < 64 && !q.lob) {
         _q.setFromAxisAngle(Y, yaw);
-        const len = q.fighter === "rich" ? 1.6 : 0.9;
         _m.compose(
-          _p.set(q.pos.x, PROJECTILE_Y - 0.02, q.pos.y),
+          _p.set(q.pos.x, q.y - 0.02, q.pos.y),
           _q,
-          _s.set(q.fighter === "rich" ? 0.16 : 0.22, 1, len),
+          _s.set(0.22 * q.size * q.wide, 1, 0.9 * q.size),
         );
         this.trails.setMatrixAt(this.nt, _m);
         // The UCLA Swiper throws cards that leave rainbow light trails.
@@ -1501,24 +1732,129 @@ export class Vans {
  * Persistent, local-only action footprint and movement pip. Geometry is
  * allocated once and only transforms/visibility change per frame (§5.2).
  */
+/** Triangle soup builders for footprints, in the guide's local frame (aim +z). */
+type P2 = { x: number; z: number };
+function pushDisc(out: number[], c: P2, r: number, steps = 20) {
+  for (let i = 0; i < steps; i++) {
+    const a = (i / steps) * Math.PI * 2,
+      b = ((i + 1) / steps) * Math.PI * 2;
+    out.push(c.x, 0, c.z, c.x + Math.sin(a) * r, 0, c.z + Math.cos(a) * r, c.x + Math.sin(b) * r, 0, c.z + Math.cos(b) * r);
+  }
+}
+/** A polyline thickened to `half` either side, with round ends: a capsule chain. */
+function pushRibbon(out: number[], pts: P2[], half: number) {
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i],
+      b = pts[i + 1],
+      dx = b.x - a.x,
+      dz = b.z - a.z,
+      l = Math.hypot(dx, dz) || 1,
+      nx = (-dz / l) * half,
+      nz = (dx / l) * half;
+    out.push(a.x + nx, 0, a.z + nz, a.x - nx, 0, a.z - nz, b.x - nx, 0, b.z - nz);
+    out.push(a.x + nx, 0, a.z + nz, b.x - nx, 0, b.z - nz, b.x + nx, 0, b.z + nz);
+    // Joints and ends stay round, as a moving body reach is.
+    pushDisc(out, b, half, 12);
+  }
+  if (pts.length) pushDisc(out, pts[0], half, 12);
+}
+/** A spread angle's direction in the local frame, as the authority turns it. */
+const headingOf = (angle: number): P2 => ({ x: -Math.sin(angle), z: Math.cos(angle) });
+
+function footprintGeometry(shape: AimShape): BufferGeometry {
+  const out: number[] = [];
+  switch (shape.kind) {
+    case "fan":
+      for (const a of shape.angles) {
+        const h = headingOf(a);
+        pushRibbon(out, [{ x: 0, z: 0 }, { x: h.x * shape.range, z: h.z * shape.range }], shape.width / 2);
+      }
+      break;
+    case "path":
+      // Sampled from the authority's own path function, aim (0, 1): map x
+      // is local x and map y is local z in that frame.
+      for (const path of shape.paths) {
+        const dir = { x: -Math.sin(path.angle), y: Math.cos(path.angle) };
+        const pts: P2[] = [];
+        for (let t = 0; t <= shape.range + 1e-9; t += 0.08) {
+          const at = shotPoint({ x: dir.x * t, y: dir.y * t }, dir, t, shape.weave, path.side);
+          pts.push({ x: at.x, z: at.y });
+        }
+        pushRibbon(out, pts, shape.width / 2);
+      }
+      break;
+    case "taper": {
+      const n = shape.near / 2,
+        f = shape.far / 2,
+        r = shape.range;
+      out.push(-n, 0, 0, n, 0, 0, f, 0, r, -n, 0, 0, f, 0, r, -f, 0, r);
+      pushDisc(out, { x: 0, z: r }, f, 24);
+      break;
+    }
+    case "lane": {
+      const end = { x: 0, z: shape.range };
+      for (const a of shape.tail?.angles ?? []) {
+        const h = headingOf(a);
+        pushRibbon(out, [end, { x: end.x + h.x * shape.tail!.range, z: end.z + h.z * shape.tail!.range }], shape.tail!.width / 2);
+      }
+      break;
+    }
+    case "sector": {
+      const steps = 40;
+      for (let i = 0; i < steps; i++) {
+        const a = -shape.half + (i / steps) * shape.half * 2,
+          b = -shape.half + ((i + 1) / steps) * shape.half * 2;
+        out.push(0, 0, 0, Math.sin(a), 0, Math.cos(a), Math.sin(b), 0, Math.cos(b));
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  const g = new BufferGeometry();
+  g.setAttribute("position", new BufferAttribute(new Float32Array(out), 3));
+  const normals = new Float32Array(out.length);
+  for (let i = 1; i < normals.length; i += 3) normals[i] = 1;
+  g.setAttribute("normal", new BufferAttribute(normals, 3));
+  return g;
+}
+
+/**
+ * The held aim footprint (aimPreview.ts) drawn on the ground: exactly the
+ * area a rival's center must be in for the action to hit. Unions of lanes,
+ * paths and caps are drawn through the stencil, so overlapping parts never
+ * stack into darker patches.
+ */
 export class AimGuide {
   readonly group = new Group();
   private aimMaterial: MeshBasicMaterial;
+  private unionMaterial: MeshBasicMaterial;
   private coreMaterial: MeshBasicMaterial;
   private lane: Mesh;
-  private cone: Mesh;
+  private cap: Mesh;
   private circle: Mesh;
   private bar: Mesh;
   private core: Mesh;
+  private shaped: Mesh;
   private moveDisc: Mesh;
   private moveRing: Mesh;
   private white = new Color(0xffffff);
+  /** Built once per static footprint, or per sector angle (scaled to radius). */
+  private built = new Map<unknown, BufferGeometry>();
 
-  constructor(mats: ArenaMaterials) {
+  constructor(private mats: ArenaMaterials) {
     this.aimMaterial = mats.flat(0xffffff, {
       opacity: 0.2,
       doubleSided: true,
     });
+    // Each pixel of a union is drawn once: the first fragment marks the
+    // stencil and overlapping ones (fan lanes, helix paths, zigzag joints)
+    // are skipped, so overlaps never stack darker.
+    this.unionMaterial = mats.flat(0xffffff, { opacity: 0.2, doubleSided: true });
+    this.unionMaterial.stencilWrite = true;
+    this.unionMaterial.stencilRef = 1;
+    this.unionMaterial.stencilFunc = NotEqualStencilFunc;
+    this.unionMaterial.stencilZPass = ReplaceStencilOp;
     this.coreMaterial = mats.flat(0xffffff, {
       opacity: 0.48,
       doubleSided: true,
@@ -1528,7 +1864,11 @@ export class AimGuide {
     );
     this.lane = new Mesh(laneGeo, this.aimMaterial);
     this.core = new Mesh(laneGeo, this.coreMaterial);
-    this.cone = new Mesh(mats.track(coneGeometry()), this.aimMaterial);
+    // A half disc reaching forward: the rounded end of a projectile lane.
+    this.cap = new Mesh(
+      mats.track(new CircleGeometry(1, 24, Math.PI, Math.PI).rotateX(-Math.PI / 2)),
+      this.aimMaterial,
+    );
     this.circle = new Mesh(
       mats.track(new CircleGeometry(1, 48).rotateX(-Math.PI / 2)),
       this.aimMaterial,
@@ -1537,6 +1877,7 @@ export class AimGuide {
       mats.track(new PlaneGeometry(2, 1).rotateX(-Math.PI / 2)),
       this.aimMaterial,
     );
+    this.shaped = new Mesh(new BufferGeometry(), this.unionMaterial);
     this.moveDisc = new Mesh(
       mats.track(new CircleGeometry(0.1, 20).rotateX(-Math.PI / 2)),
       mats.flat(0xe8ffd0, { opacity: 0.92, doubleSided: true }),
@@ -1547,10 +1888,11 @@ export class AimGuide {
     );
     for (const mesh of [
       this.lane,
+      this.cap,
       this.core,
-      this.cone,
       this.circle,
       this.bar,
+      this.shaped,
       this.moveDisc,
       this.moveRing,
     ]) {
@@ -1558,6 +1900,23 @@ export class AimGuide {
       mesh.renderOrder = 5;
       this.group.add(mesh);
     }
+    this.shaped.renderOrder = 4;
+  }
+
+  private geometry(shape: AimShape) {
+    const key = shape.kind === "sector" ? `sector:${shape.half}` : shape;
+    let g = this.built.get(key);
+    if (!g) {
+      const unit = shape.kind === "sector" ? { ...shape, radius: 1 } : shape;
+      this.built.set(key, (g = this.mats.track(footprintGeometry(unit))));
+    }
+    return g;
+  }
+
+  private place(mesh: Mesh, at: Vec, angle: number, y: number) {
+    mesh.visible = true;
+    mesh.position.set(at.x, y, at.y);
+    mesh.rotation.y = angle;
   }
 
   update(
@@ -1569,10 +1928,11 @@ export class AimGuide {
     shape: AimShape | null,
   ) {
     this.lane.visible = false;
+    this.cap.visible = false;
     this.core.visible = false;
-    this.cone.visible = false;
     this.circle.visible = false;
     this.bar.visible = false;
+    this.shaped.visible = false;
 
     const moving = Math.hypot(move.x, move.y);
     this.moveDisc.visible = this.moveRing.visible = moving > 0.08;
@@ -1584,29 +1944,42 @@ export class AimGuide {
       this.moveRing.position.set(x, 0.085, y);
     }
 
-    if (!intent || !shape) return;
+    if (!intent || !shape || shape.kind === "global") return;
     this.aimMaterial.color.setHex(color).lerp(this.white, 0.55);
     this.aimMaterial.opacity = intent === "super" ? 0.28 : 0.3;
+    this.unionMaterial.color.copy(this.aimMaterial.color);
+    this.unionMaterial.opacity = this.aimMaterial.opacity;
     this.coreMaterial.color.setHex(intent === "super" ? 0xfff2a8 : 0xffffff);
     const angle = Math.atan2(dir.x, dir.y);
     if (shape.kind === "lane") {
-      this.lane.visible = true;
-      this.lane.position.set(at.x, 0.065, at.y);
-      this.lane.rotation.y = angle;
-      this.lane.scale.set(shape.width / 2, 1, shape.range);
+      const from = shape.from ?? 0;
+      this.place(this.lane, { x: at.x + dir.x * from, y: at.y + dir.y * from }, angle, 0.065);
+      this.lane.scale.set(shape.width / 2, 1, shape.range - from);
+      if (shape.cap) {
+        this.place(this.cap, { x: at.x + dir.x * shape.range, y: at.y + dir.y * shape.range }, angle, 0.065);
+        this.cap.scale.set(shape.width / 2, 1, shape.width / 2);
+      }
       if (shape.coreWidth) {
-        this.core.visible = true;
-        this.core.position.set(at.x, 0.072, at.y);
-        this.core.rotation.y = angle;
+        this.place(this.core, at, angle, 0.072);
         this.core.scale.set(shape.coreWidth / 2, 1, shape.range);
+      }
+      if (shape.tail) {
+        this.shaped.geometry = this.geometry(shape);
+        this.place(this.shaped, at, angle, 0.06);
+        this.shaped.scale.set(1, 1, 1);
       }
       return;
     }
-    if (shape.kind === "cone") {
-      this.cone.visible = true;
-      this.cone.position.set(at.x, 0.065, at.y);
-      this.cone.rotation.y = angle;
-      this.cone.scale.set(shape.halfWidth, 1, shape.range);
+    if (shape.kind === "sector") {
+      this.shaped.geometry = this.geometry(shape);
+      this.place(this.shaped, at, angle, 0.065);
+      this.shaped.scale.set(shape.radius, 1, shape.radius);
+      return;
+    }
+    if (shape.kind === "fan" || shape.kind === "path" || shape.kind === "taper") {
+      this.shaped.geometry = this.geometry(shape);
+      this.place(this.shaped, at, angle, 0.065);
+      this.shaped.scale.set(1, 1, 1);
       return;
     }
     const x = at.x + dir.x * shape.distance;

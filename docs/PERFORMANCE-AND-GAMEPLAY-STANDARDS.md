@@ -350,13 +350,20 @@ preferred conventions:
   skipped rather than replayed, and a stalled fighter visibly holds and then
   catches up at up to 2x for other viewers.
 - Local attack and Super intent is shown immediately with data-driven held aim
-  footprints, followed by predicted release cues (sound, muzzle flash, cone,
-  or Super anticipation). Projectiles themselves are not predicted: they appear
-  when the authoritative snapshot arrives, about one RTT after the release
-  flash. Predicted cues are not yet animation clips.
-- The arena is a single Three.js renderer (`client/src/arena/`). All 18
+  footprints, followed by predicted release cues (sound, the fighter's attack
+  clip and its 3D release: waves, a swing trail, a beam tell, a lob's landing
+  ring, Super anticipation). Footprints are the authority's exact hit areas,
+  checked against real hits for every attack and damaging Super in
+  `tests/aimPreview.test.ts`; homing notes are the one exception (the straight
+  lane is drawn, the note may curve further). Projectiles themselves are not
+  predicted: they appear when the authoritative snapshot arrives, about one
+  RTT after the release flash.
+- The arena is a single Three.js renderer (`client/src/arena/`). All 19
   fighters use procedural placeholder models whose clip set is authored as
-  code, not as validated animation assets with manifests. The older Brandon
+  code, not as validated animation assets with manifests. Each fighter picks
+  its own attack, Super, hit, knockout, landing and victory styles from one
+  table (`client/src/arena/motion.ts`), so these are distinct per fighter but
+  still procedural. The older Brandon
   GLB studies are redacted, deprecated, and deliberately unavailable to the
   live runtime. Release
   timing is still taken from the authoritative event, not from clip markers.

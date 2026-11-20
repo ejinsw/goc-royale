@@ -85,6 +85,8 @@ export const metrics = {
   anim: { predicted: 0, skipped: 0, authoritative: 0 },
   /** The UCLA Swiper showcase this match: "", "on", or "failed: <why>". */
   showcase: "",
+  /** The roster showcase this match: "", "on", or "failed: <why>". */
+  roster: "",
   private: { lastRtt: NaN },
 
   recordFrame(deltaMs: number) {

@@ -1226,3 +1226,104 @@ cutscene was re-captured after the refactor; a swipe aimed away from a rival
 
 Not verified: any phone, two networked clients, a human playtest, or the
 bot balance report (`npm run balance` lives on the unmerged PR 4 branch).
+
+## November 20, 2026 — Fighter attack overhaul (`feature/fighter-attack-overhaul`)
+
+User requests: bring every fighter up to Brandon Nguyen's level of
+presentation (a landing, fully fleshed-out attacks, hit and hurt reactions, a
+Super and a knockout each), diversify the attacks away from identical
+straight-line projectiles, replace flat "highlight" attacks with real
+animations and attacks, and make every aiming highlight accurate.
+
+**These are deliberate rules and balance changes**, requested explicitly
+(`AGENTS.md` §2). They were not reviewed by the repository owner first.
+
+**New attack kinds and options** (`shared/definitions.ts`, one resolver
+each in `shared/engine.ts`, still no fighter-id branches):
+
+| Fighter | Was | Now |
+|---|---|---|
+| Rich | Shutter Shot: a fast projectile | `beam`: a 0.2 s visible tell, then an instant line that hits the first rival and stops at cover; +200 past 80% range kept. A stun or ball pickup cancels it. |
+| Samuel | Munchie Toss: a projectile that heals allies it touches | `lob`: thrown over cover to 35–100% of range by the held power (mouse: cursor distance; touch: drag, or the auto-aim target on a tap). Splash radius 1.2 hits every rival in it for 800 and feeds injured teammates 850. The landing spot shows to everyone while it flies. |
+| Elijah | A bug that ricochets once | Zigzag `weave` (0.55 either side every 2.4 units) and still one ricochet; the wave restarts cleanly from a bounce. |
+| Ethan | Two notes 0.055 rad apart | Two notes that spiral around each other (`weave` 0.32), each still 2,000. |
+| Miriam | A straight dove | The dove arcs up to 0.45 to one side, alternating each shot; slow unchanged. |
+| Rosalie | A fixed 0.35-wide piercing wave, 800 | `grow`: 0.18 wide plus 0.1 per unit traveled, 760, still piercing. |
+| Susannah | 720, then a 450 chain | `split`: 720, then on a hit or at full range three shares fan out 0.55 rad apart for 3 units, 360 each, skipping the rival hit. `chain` was removed (no other user). |
+
+`ShotSpec.healAllies` and `farBonus` moved to `lob` and `beam`. New effect
+kinds `beam`, `lob`, `splash` and `split` replace `chain`. Projectiles carry
+optional `side`, `lob` and `shard` flags; the delta codec needed no change.
+The weave path is one shared function (`weaveOffset`/`shotPoint`) used by
+the authority's hit tests, the renderer, the trails and the aim preview.
+
+**Animation** (`client/src/arena/motion.ts`): the procedural clip set was
+one shared set of poses (plus a Tovya special case). Now one table gives
+each fighter its own attack (20 styles: frisbee flick, key fling, camera
+raise and recoil, underhand lob, speaker shout, laptop slam, guitar strum,
+mic belt, fishing cast, stapler bursts, ladle sweep, welcome wave, sidearm
+spin, phone post, paper-plane dart, dove release, lantern flare, coin
+flick...), Super (18 styles), hit reaction (6), knockout (8: faceplant, spin
+fall, kneel and topple, swoon, launch, glitch melt, float...), landing (6:
+drop, hero landing, front flip, spin drop, rise from the floor, bounce) and
+victory (4). Standing still, a one-shot also drives the legs (crouches,
+lunges, braced stances); on the run the legs keep running. The knockout
+hold follows each fighter's clip length. The landing also plays at the match
+start, not only on respawn.
+
+**Showcase** (`client/src/arena/roster.ts`, on the new shared
+`client/src/arena/showkit.ts`): every fighter except Brandon Nguyen gets a
+themed version of each beat from one theme table (icons, words, sounds) plus
+short per-fighter scripts: landing with a dust shockwave and, on their own
+screen, a spotlight with their name and team slammed in; release bursts and
+words; themed projectile trails (Dylan's line stays tied to his rod); impact
+sprites and words; hurt scatter that flies back; Super windup and payoff
+banners and flourishes; a knockout with a rising soul; knockout and goal
+fireworks; movement trails, a Super-ready orbit, low-health sweat; and
+Brandon's nametags stuck above rivals he has revealed. Brandon Nguyen's
+show (`swiper.ts`) was moved onto the same base class without changing what
+it plays; its generic sprite, particle and overlay code now lives in
+`showkit.ts` instead of being copied.
+
+**Real attacks instead of floor highlights** (`Strikes` in
+`client/src/arena/fx.ts`): the flat translucent cone, sector and rectangle
+effects were removed. Josh's sound now rolls out as stacked wave arcs,
+Jemuel's light as a ring wall, Tovya's ladle and the golden broom leave a
+weapon trail and a dust wavefront, Rich fires a real beam after a laser
+sight, Group Photo is a camera-flash light volume, Soundcheck a marching
+wall of sound, Side Eye twin eye beams then a glare that shoves sideways,
+and burst Supers swell a blast dome. Brandon Nguyen's swipe arc is now
+in-air streaks. Choice is by attack data (full ring, wide melee arc, narrow
+cone), not fighter id.
+
+**Accurate aim previews** (`client/src/arena/aimPreview.ts`): new exact
+footprints: arc sectors for cones (were triangles that overstated Tovya's
+side reach by about 1.7 units), a fan of lanes for spreads, the real weave
+paths, a widening taper, a split's tail, rounded lane ends for projectiles,
+a full seek radius for Brandon Nguyen's aimbot cards, a 2-unit lane for
+Daniel's van (was 1.26), body-padded broom sweeps, and no footprint for
+Joyce's team-wide heal. Overlapping footprints draw through the stencil so
+they never stack darker (the arena renderer now requests a stencil buffer).
+
+Verification:
+
+- `npm test` and `npm run build` pass (146 tests).
+- `tests/aimPreview.test.ts` fires every attack (36 sampled rival positions
+  per fighter) and every damaging Super (24 each) in the engine and checks
+  the preview predicts each hit and miss. Joyce's homing note is excluded:
+  the straight lane is drawn, and the note may curve beyond it.
+- Engine tests cover each new kind and option.
+- In a desktop browser (Chrome for Testing, 1100x680, DPR 1) the real
+  `mountGame` was driven from a local engine on a virtual 60 Hz clock and
+  captured from the game camera: match-start landings, every changed
+  attack, the 3D strikes, Supers, own and others' knockouts, a Broomball
+  goal, the aim previews, Brandon Nguyen's show and Ethan's cutscene after
+  the refactor, and the reduced-motion path, with no frame errors.
+- Stepped CPU cost (simulation, snapshots and render submission together)
+  with ten fighters all attacking and casting Supers: 3.2 ms per frame on
+  that desktop. The roster atlas is built only for the fighters in a match.
+
+Not verified: any phone, two networked clients, real-time frame pacing or
+GPU time, audio by ear, a human playtest, or balance beyond the numbers
+above. The new sounds are synthesized cues in the existing table. Emoji
+icons fall back to colored badges on devices that cannot draw emoji.

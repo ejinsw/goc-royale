@@ -21,6 +21,7 @@ import {
   ITEMS,
   MAPS,
   clamp,
+  shotPoint,
   type FighterId,
   type Mode,
   type Vec,
@@ -44,8 +45,11 @@ import {
   Items,
   Markers,
   Projectiles,
+  Strikes,
   Vans,
   aimArrow,
+  PROJECTILE_Y,
+  lobHeight,
   type ProjectileView,
 } from "./fx";
 import { aimPreviewFor, itemAimPreviewFor, type AimIntent } from "./aimPreview";
@@ -53,6 +57,7 @@ import { cameraFocusId } from "./cameraFocus";
 import { buildArenaMap, type ArenaMap } from "./map";
 import { createArenaMaterials } from "./materials";
 import { SwiperShow, hasSwiper } from "./swiper";
+import { RosterShow, hasRoster } from "./roster";
 
 /**
  * The live 3D arena renderer (performance standard §3 "Arena presentation",
@@ -152,7 +157,11 @@ export type CueKind =
   | "release"
   | "super"
   | "item_sweep"
-  | "melee_sweep";
+  | "melee_sweep"
+  /** A beam's windup tell; shape = { range, half: hit width }. */
+  | "beam"
+  /** A lob's landing spot; shape = { range: distance, half: radius }. */
+  | "lob";
 
 export interface ArenaView {
   frame(f: ArenaFrame): void;
@@ -175,6 +184,8 @@ export interface ArenaView {
   shake(ms: number, intensity: number, now: number): void;
   /** Ground aim from a client point toward a fighter's drawn position. */
   aim(clientX: number, clientY: number, from: Vec): Vec | null;
+  /** Ground distance from a fighter's drawn position to a client point. */
+  reach(clientX: number, clientY: number, from: Vec): number | null;
   dispose(): void;
 }
 
@@ -205,6 +216,8 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       canvas,
       antialias: true,
       powerPreference: "high-performance",
+      // Aim footprints draw each pixel once through the stencil (fx.ts).
+      stencil: true,
     });
   } catch {
     canvas.remove();
@@ -233,6 +246,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   const billboards = new Billboards(mats);
   const markers = new Markers(mats);
   const effects = new Effects(mats);
+  const strikes = new Strikes(mats);
   const items = new Items(mats);
   const projectiles = new Projectiles(mats);
   const areas = new Areas(mats);
@@ -245,6 +259,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     markers.shadows,
     markers.rings,
     effects.group,
+    strikes.group,
     items.group,
     projectiles.group,
     areas.group,
@@ -362,6 +377,41 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       });
     return show;
   };
+  // The roster showcase: every other fighter's themed beats. Built for the
+  // fighters in the match; rebuilt if one appears that its atlas lacks.
+  // Like the Swiper show it is decoration, dropped on its first error.
+  let roster: RosterShow | null = null;
+  let rosterOff = false;
+  const dropRoster = (error: unknown) => {
+    console.warn("Roster showcase disabled:", error);
+    if (roster) scene.remove(roster.group);
+    roster = null;
+    rosterOff = true;
+    metrics.roster = "failed: " + String(error).slice(0, 90);
+  };
+  const safeRoster = (run: () => void) => {
+    try {
+      run();
+    } catch (error) {
+      dropRoster(error);
+    }
+  };
+  const rosterFor = (match: Match) => {
+    if (rosterOff || !hasRoster(match)) return roster;
+    if (roster && !roster.covers(match)) {
+      scene.remove(roster.group);
+      roster = null;
+    }
+    if (!roster)
+      safeRoster(() => {
+        const made = new RosterShow(mats, camera, effects, shakeBy, match);
+        made.group.traverse((o) => o.layers.set(1));
+        scene.add(made.group);
+        roster = made;
+        metrics.roster = "on";
+      });
+    return roster;
+  };
   let labelPx = 0.02;
   /** Runs on resize and mode change only, never per frame (standard §5.2). */
   const fit = () => {
@@ -413,7 +463,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       sz = (Math.random() * 2 - 1) * shake.amp * k;
     }
     // A zoom punch moves the camera along its own view line (presentation only).
-    const zoom = show ? show.zoomAt(now) : 1;
+    const zoom = (show ? show.zoomAt(now) : 1) * (roster ? roster.zoomAt(now) : 1);
     billboards.px = labelPx * zoom;
     camera.position.set(
       cam.x + sx,
@@ -549,6 +599,15 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
   const raycaster = new Raycaster();
   const ndc = new Vector2();
   const aimPlane = new Plane(new Vector3(0, 1, 0), -AIM_HEIGHT);
+  const groundPlane = new Plane(new Vector3(0, 1, 0), 0);
+  const pick = (clientX: number, clientY: number, plane: Plane) => {
+    ndc.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    raycaster.setFromCamera(ndc, camera);
+    return raycaster.ray.intersectPlane(plane, hitPoint);
+  };
   const hitPoint = new Vector3();
   let time = 0;
 
@@ -573,19 +632,14 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     const local = f.localId;
     const focusId = cameraFocusId(s.players, local, f.spectateId);
     const showcase = showFor(s);
+    const cast = rosterFor(s);
     // Hit-stop holds the picture for a few frames. Input, prediction and the
     // authoritative simulation are untouched (standard section 6.1).
-    if (showcase && f.now < showcase.freezeUntil) {
-      safely(() =>
-        showcase.frame({
-          now: f.now,
-          dt: 0,
-          match: s,
-          localId: local,
-          focusId,
-          actors,
-        }),
-      );
+    const held = Math.max(showcase?.freezeUntil ?? 0, cast?.freezeUntil ?? 0);
+    if (f.now < held) {
+      const still = { now: f.now, dt: 0, match: s, localId: local, focusId, actors };
+      if (showcase) safely(() => showcase.frame(still));
+      if (cast) safeRoster(() => cast.frame(still));
       if (!lost) draw();
       return;
     }
@@ -618,12 +672,12 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
         turn: p.id === local ? 30 : 14,
       });
       if (s.phase === "playing") actor.graph.releaseHeld();
-      if (showcase && p.fighter === "brandon_n") {
-        // Squash and stretch, volume preserved.
-        const tall = showcase.squashOf(p.id, f.now);
-        const wide = 1 / Math.sqrt(tall);
-        actor.group.scale.set(wide, tall, wide);
-      }
+      // Squash and stretch from the shows, volume preserved.
+      const tall =
+        (showcase ? showcase.squashOf(p.id, f.now) : 1) *
+        (cast ? cast.squashOf(p.id, f.now) : 1);
+      const wide = 1 / Math.sqrt(tall);
+      actor.group.scale.set(wide, tall, wide);
     }
     // Concealed in a bush (not in this viewer's snapshot): not drawn.
     for (const [id, a] of actors) if (!present.has(id)) a.hide();
@@ -644,18 +698,51 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     place(focus, f.dt, f.now);
 
     // Projectiles move fast; extrapolate a little past the snapshot so they
-    // glide between 18 Hz updates instead of stepping.
+    // glide between 18 Hz updates instead of stepping. Weaving shots are
+    // drawn off their center line by the same path the authority tests.
     const ext = Math.min(f.age, 0.08);
     shots.length = 0;
     for (const q of s.projectiles) {
-      const d = Math.min(
-        ext * FIGHTERS[q.fighter].projectileSpeed,
-        q.remaining,
-      );
+      const fighter = FIGHTERS[q.fighter];
+      const attack = fighter.abilities.attack;
+      const sup = q.super && fighter.abilities.super.kind === "shot";
+      const speed = sup
+        ? (fighter.abilities.super as { speed: number }).speed
+        : fighter.projectileSpeed;
+      const d = Math.min(ext * speed, q.remaining);
+      const traveled = q.traveled + d;
+      const plain = sup || q.shard || attack.kind !== "shot";
+      const weave = plain || attack.kind !== "shot" ? undefined : attack.weave;
+      const base = { x: q.pos.x + q.dir.x * d, y: q.pos.y + q.dir.y * d };
+      const pos = shotPoint(base, q.dir, traveled, weave, q.side);
+      let dir = q.dir;
+      if (weave) {
+        // Nose along the bend: the tangent of the drawn path.
+        const ahead = shotPoint(
+          { x: base.x + q.dir.x * 0.05, y: base.y + q.dir.y * 0.05 },
+          q.dir,
+          traveled + 0.05,
+          weave,
+          q.side,
+        );
+        const dx = ahead.x - pos.x,
+          dy = ahead.y - pos.y,
+          l = Math.hypot(dx, dy) || 1;
+        dir = { x: dx / l, y: dy / l };
+      }
+      const y = q.lob
+        ? lobHeight(traveled, q.traveled + q.remaining)
+        : PROJECTILE_Y;
+      const grow = !plain && attack.kind === "shot" ? (attack.grow ?? 0) : 0;
+      const width = !plain && attack.kind === "shot" ? (attack.width ?? 0.13) : 0.13;
       shots.push({
         fighter: q.fighter,
-        pos: { x: q.pos.x + q.dir.x * d, y: q.pos.y + q.dir.y * d },
-        dir: q.dir,
+        pos,
+        dir,
+        y,
+        size: q.shard ? 0.62 : 1,
+        wide: grow ? 1 + (grow * traveled) / (width + 0.42) : 1,
+        lob: !!q.lob,
       });
     }
     projectiles.update(shots, time);
@@ -666,6 +753,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       return a?.shown ? a.at : null;
     });
     effects.update(f.now);
+    strikes.update(f.now);
 
     markers.begin();
     billboards.begin(camera);
@@ -861,17 +949,9 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
 
     markers.end();
     billboards.end();
-    if (showcase)
-      safely(() =>
-        showcase.frame({
-          now: f.now,
-          dt: f.dt,
-          match: s,
-          localId: local,
-          focusId,
-          actors,
-        }),
-      );
+    const live = { now: f.now, dt: f.dt, match: s, localId: local, focusId, actors };
+    if (showcase) safely(() => showcase.frame(live));
+    if (cast) safeRoster(() => cast.frame(live));
     if (!lost) draw();
     const info = renderer.info;
     metrics.gpu.calls = info.render.calls;
@@ -880,6 +960,80 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     metrics.gpu.textures = info.memory.textures;
   }
 
+  /**
+   * The real attack visuals (standard §6 release and impact), shared by
+   * the locally predicted cue and the authoritative effect. Chosen from the
+   * attack's data: a full ring of light, a wide melee swing, or sound waves.
+   */
+  const play = {
+    cone(fighter: FighterId, from: Vec, dir: Vec, color: number, now: number) {
+      const f = FIGHTERS[fighter],
+        attack = f.abilities.attack;
+      const half = attack.kind === "cone" ? attack.halfAngle : 0.5;
+      const reach = f.range + 0.42;
+      if (half >= Math.PI * 0.99) {
+        strikes.waves(from, dir, reach, Math.PI, color, now, 2, 0.36);
+        effects.ring(from, 0.4, reach, color, 0.36, now, 0.8);
+      } else if (half > 0.6) {
+        // Two trail layers at different heights read as a swing in the air.
+        strikes.swoosh(from, dir, reach, half, color, now, 0.26, 1.15);
+        strikes.swoosh(from, dir, reach * 0.8, half, 0xffffff, now + 0.02, 0.22, 0.7);
+      } else strikes.waves(from, dir, reach, half, color, now, 3, 0.3);
+    },
+    beamTell(fighter: FighterId, from: Vec, dir: Vec, color: number, now: number, dur: number) {
+      strikes.beam(from, dir, FIGHTERS[fighter].range, color, now, dur, false);
+      effects.ring({ x: from.x + dir.x * 0.55, y: from.y + dir.y * 0.55 }, 0.5, 0.15, 0xffffff, dur, now, 0.8, 1.1);
+    },
+    beamFire(fighter: FighterId, from: Vec, dir: Vec, length: number, color: number, now: number) {
+      const attack = FIGHTERS[fighter].abilities.attack;
+      const width = attack.kind === "beam" ? attack.width : 0.16;
+      strikes.beam(from, dir, length, color, now, 0.26, true, width + 0.2);
+      effects.ring({ x: from.x + dir.x * 0.55, y: from.y + dir.y * 0.55 }, 0.2, 1.1, 0xffffff, 0.22, now, 0.9, 1.1);
+      effects.ring({ x: from.x + dir.x * length, y: from.y + dir.y * length }, 0.2, 0.9, color, 0.3, now, 0.8, 1.1);
+    },
+    /** Group Photo: the camera's light volume; the flash fills it white. */
+    photo(fighter: FighterId, from: Vec, dir: Vec, flash: boolean, color: number, now: number, dur: number) {
+      const spec = FIGHTERS[fighter].abilities.super;
+      const range = spec.kind === "frame" ? spec.range : 8,
+        width = spec.kind === "frame" ? spec.width : 5;
+      if (!flash) {
+        strikes.volume(from, dir, range, 0.5, width, 1.8, color, now, dur, 0.22, true);
+        return;
+      }
+      strikes.volume(from, dir, range, 0.5, width, 2.2, 0xffffff, now, 0.4, 0.6);
+      strikes.front(from, dir, range, width, 0xffffff, now, 0.3, [0.4, 1, 1.6]);
+    },
+    /** Soundcheck: a wall of sound marching down its lane. */
+    sound(fighter: FighterId, from: Vec, dir: Vec, color: number, now: number) {
+      const spec = FIGHTERS[fighter].abilities.super;
+      const range = spec.kind === "frame" ? spec.range : 10,
+        width = spec.kind === "frame" ? spec.width : 4;
+      strikes.volume(from, dir, range, 1, width, 1.9, color, now, 0.5, 0.25);
+      strikes.front(from, dir, range, width, color, now, 0.42);
+      strikes.waves(from, dir, range, Math.atan2(width / 2, range), color, now, 3, 0.4);
+    },
+    /** Side Eye: twin eye beams as the tell; the glare shoves out sideways. */
+    gaze(fighter: FighterId, from: Vec, dir: Vec, resolve: boolean, color: number, now: number, dur: number) {
+      const spec = FIGHTERS[fighter].abilities.super;
+      const range = spec.kind === "frame" ? spec.range : 6.5,
+        width = spec.kind === "frame" ? spec.width : 4.5;
+      if (!resolve) {
+        for (const side of [-0.13, 0.13])
+          strikes.beam(from, dir, range, 0xfff2a8, now, dur, false, 0.3, 1.95, side);
+        return;
+      }
+      strikes.volume(from, dir, range, 0.6, width, 1.6, 0xfff2a8, now, 0.35, 0.35);
+      const mid = { x: from.x + dir.x * range * 0.5, y: from.y + dir.y * range * 0.5 };
+      for (const k of [-1, 1])
+        strikes.front(mid, { x: -dir.y * k, y: dir.x * k }, width / 2, range, color, now, 0.35, [0.6, 1.3]);
+    },
+    /** A blast: a dome and its shockwave ring. */
+    blast(at: Vec, radius: number, color: number, now: number, dur = 0.5) {
+      strikes.dome(at, radius, color, now, dur);
+      effects.ring(at, 0.5, radius, color, dur, now);
+    },
+  };
+
   return {
     frame,
     effect(e, match, now) {
@@ -887,6 +1041,8 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       const color = owner ? hex(FIGHTERS[owner.fighter].color) : 0xffe3b0;
       const showcase = showFor(match);
       const swiper = owner?.fighter === "brandon_n" ? showcase : null;
+      const cast = owner && owner.fighter !== "brandon_n" ? rosterFor(match) : null;
+      if (cast) safeRoster(() => cast.effect(e, match, now));
       const dur = clamp(e.end - match.time, 0.08, 3);
       const muzzle = {
         x: e.pos.x + e.dir.x * 0.55,
@@ -910,53 +1066,20 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
           if (e.value) pushNumber(`+${e.value}`, 0xb4ffd3, e.pos, now);
           break;
         case "cone":
-          if (owner) {
-            const attack = FIGHTERS[owner.fighter].abilities.attack;
-            if (owner.fighter === "tovya") {
-              effects.sweep(
-                e.pos,
-                e.dir,
-                FIGHTERS.tovya.range,
-                color,
-                now,
-                true,
-              );
-              break;
-            }
-            effects.cone(
-              e.pos,
-              e.dir,
-              FIGHTERS[owner.fighter].range,
-              attack.kind === "cone" ? attack.halfAngle : 0.5,
-              color,
-              dur,
-              now,
-            );
-          }
+          if (owner) play.cone(owner.fighter, e.pos, e.dir, color, now);
           break;
         case "photo":
-          // The resolving flash (value 1) is brighter than the framing tell.
-          effects.rect(
-            e.pos,
-            e.dir,
-            8,
-            2.5,
-            e.value ? 0xffffff : color,
-            dur,
-            now,
-            e.value ? 0.5 : 0.24,
-          );
+          // The framing tell, then the flash (value 1).
+          if (owner) play.photo(owner.fighter, e.pos, e.dir, !!e.value, color, now, dur);
           break;
         case "sound":
-          effects.rect(e.pos, e.dir, 10, 2, color, dur, now, 0.32);
+          if (owner) play.sound(owner.fighter, e.pos, e.dir, color, now);
           break;
         case "aura":
-          effects.ring(e.pos, 1, 4, color, dur, now);
-          effects.disc(e.pos, 0.5, 4, color, dur, now, 0.28);
+          play.blast(e.pos, 4, color, now, dur);
           break;
         case "glitch":
-          effects.ring(e.pos, 0.6, 3, color, dur, now);
-          effects.disc(e.pos, 0.3, 3, 0x77d5b9, dur, now, 0.32);
+          play.blast(e.pos, 3, 0x77d5b9, now, dur);
           break;
         case "van":
           vans.show(e.owner, e.dir, now + dur);
@@ -971,8 +1094,7 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
           effects.disc(e.pos, 0.2, 1.2, color, 0.45, now, 0.4);
           break;
         case "burst":
-          effects.ring(e.pos, 0.5, e.value ?? 3, color, dur, now);
-          effects.disc(e.pos, 0.3, e.value ?? 3, color, dur, now, 0.28);
+          play.blast(e.pos, e.value ?? 3, color, now, dur);
           safely(() => swiper?.payoff(e.owner, e.pos, e.value ?? 4, match, now));
           break;
         case "marker":
@@ -988,7 +1110,23 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
             0.12,
           );
           break;
-        case "chain":
+        case "beam":
+          if (!owner) break;
+          if (!e.value) play.beamTell(owner.fighter, e.pos, e.dir, color, now, dur);
+          else play.beamFire(owner.fighter, e.pos, e.dir, e.value, color, now);
+          break;
+        case "lob":
+          // Where it will land, held for the flight.
+          effects.ring(e.pos, e.value ?? 1, e.value ?? 1, color, dur, now, 0.85, 0.12);
+          break;
+        case "splash":
+          play.blast(e.pos, (e.value ?? 1) + 0.4, color, now, 0.42);
+          effects.ring(e.pos, 0.2, (e.value ?? 1) * 0.7, 0xffffff, 0.3, now, 0.8);
+          break;
+        case "split":
+          effects.ring(e.pos, 0.2, 1.3, color, 0.3, now, 0.9, 0.85);
+          effects.ring(e.pos, 0.1, 0.7, 0xffffff, 0.22, now, 0.9, 0.85);
+          break;
         case "swap":
           effects.streak(
             e.pos,
@@ -1010,53 +1148,9 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
           effects.ring(e.pos, 0.18, 0.85, 0xf2c65d, dur, now, 0.9, 0.08);
           effects.ring(e.pos, 0.08, 0.62, 0x4f7fd1, dur, now, 0.9, 0.08);
           break;
-        case "gaze": {
-          const superSpec = owner
-            ? FIGHTERS[owner.fighter].abilities.super
-            : null;
-          const range = superSpec?.kind === "frame" ? superSpec.range : 6.5;
-          const width = superSpec?.kind === "frame" ? superSpec.width : 4.5;
-          effects.rect(
-            e.pos,
-            e.dir,
-            range,
-            width,
-            e.value ? 0xfff2a8 : color,
-            dur,
-            now,
-            e.value ? 0.5 : 0.22,
-          );
-          if (e.value) {
-            const center = {
-              x: e.pos.x + e.dir.x * range * 0.55,
-              y: e.pos.y + e.dir.y * range * 0.55,
-            };
-            const side = { x: -e.dir.y, y: e.dir.x };
-            effects.streak(
-              center,
-              side,
-              0,
-              width * 0.45,
-              0.12,
-              0xfff2a8,
-              dur,
-              now,
-              0.9,
-            );
-            effects.streak(
-              center,
-              { x: -side.x, y: -side.y },
-              0,
-              width * 0.45,
-              0.12,
-              0xfff2a8,
-              dur,
-              now,
-              0.9,
-            );
-          }
+        case "gaze":
+          if (owner) play.gaze(owner.fighter, e.pos, e.dir, !!e.value, color, now, dur);
           break;
-        }
       }
     },
     cue(kind, from, dir, color, now, shape, by) {
@@ -1067,42 +1161,36 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
           else if (kind === "super") live.windup(by.id, from, now);
         });
       }
-      if (kind === "melee_sweep") {
-        effects.sweep(from, dir, FIGHTERS.tovya.range, color, now, true);
+      if (roster && by && by.fighter !== "brandon_n") {
+        const cast = roster;
+        safeRoster(() => cast.cue(kind, by.id, from, dir, now));
+      }
+      if ((kind === "melee_sweep" || kind === "cone") && by) {
+        play.cone(by.fighter, from, dir, color, now);
         return;
       }
       if (kind === "item_sweep") {
-        effects.sweep(from, dir, ITEMS.golden_broom.range, color, now);
+        // The broom kicks up a wall of golden dust down its rectangle.
+        strikes.front(from, dir, ITEMS.golden_broom.range, ITEMS.golden_broom.width, color, now, 0.32, [0.3, 0.75]);
         return;
       }
       if (kind === "super") {
         effects.ring(from, 0.7, 1.3, color, 0.25, now);
         return;
       }
-      if (kind === "cone") {
-        effects.cone(
-          from,
-          dir,
-          shape?.range ?? 6.5,
-          shape?.half ?? 0.5,
-          color,
-          0.25,
-          now,
-          0.28,
-        );
+      if (kind === "beam" && by) {
+        const attack = FIGHTERS[by.fighter].abilities.attack;
+        play.beamTell(by.fighter, from, dir, color, now, attack.kind === "beam" ? attack.windup : 0.2);
         return;
       }
-      if (kind === "gaze") {
-        effects.rect(
-          from,
-          dir,
-          shape?.range ?? 6.5,
-          (shape?.half ?? 2.25) * 2,
-          color,
-          0.4,
-          now,
-          0.22,
-        );
+      if (kind === "lob") {
+        const at = { x: from.x + dir.x * (shape?.range ?? 4), y: from.y + dir.y * (shape?.range ?? 4) };
+        const r = shape?.half ?? 1;
+        effects.ring(at, r * 0.4, r, color, 0.5, now, 0.85, 0.12);
+        return;
+      }
+      if (kind === "gaze" && by) {
+        play.gaze(by.fighter, from, dir, false, color, now, 0.4);
         return;
       }
       const muzzle = { x: from.x + dir.x * 0.55, y: from.y + dir.y * 0.55 };
@@ -1128,6 +1216,11 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
       );
     },
     action(id, clip, now) {
+      // A remote Super's windup plays from its super_started event.
+      if (clip === "super" && roster) {
+        const cast = roster;
+        safeRoster(() => cast.windup(id, now));
+      }
       return actors.get(id)?.trigger(clip, now) ?? false;
     },
     hit(id, strength) {
@@ -1135,16 +1228,15 @@ export function createArenaView(container: HTMLElement): ArenaView | null {
     },
     shake: shakeBy,
     aim(clientX, clientY, from) {
-      ndc.set(
-        ((clientX - rect.left) / rect.width) * 2 - 1,
-        -((clientY - rect.top) / rect.height) * 2 + 1,
-      );
-      raycaster.setFromCamera(ndc, camera);
-      if (!raycaster.ray.intersectPlane(aimPlane, hitPoint)) return null;
+      if (!pick(clientX, clientY, aimPlane)) return null;
       const dx = hitPoint.x - from.x,
         dz = hitPoint.z - from.y,
         l = Math.hypot(dx, dz);
       return l < 0.05 ? null : { x: dx / l, y: dz / l };
+    },
+    reach(clientX, clientY, from) {
+      if (!pick(clientX, clientY, groundPlane)) return null;
+      return Math.hypot(hitPoint.x - from.x, hitPoint.z - from.y);
     },
     dispose() {
       if (disposed) return;

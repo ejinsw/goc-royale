@@ -56,7 +56,21 @@ export type ItemKind = keyof typeof ITEMS;
  * A basic attack's damage, range and projectile speed are the fighter's
  * top-level `damage`, `range` and `projectileSpeed`.
  */
-export type AttackSpec = ShotSpec | ConeSpec;
+export type AttackSpec = ShotSpec | ConeSpec | BeamSpec | LobSpec;
+
+/**
+ * A weaving flight path: the shot's center line advances along its
+ * heading, and the shot itself sits `amp` units to the side at most,
+ * repeating every `wavelength` units of travel (see `weaveOffset`).
+ */
+export interface WeaveSpec {
+  amp: number;
+  wavelength: number;
+  /** A sharp triangle wave instead of a sine: a glitchy zigzag. */
+  zigzag?: boolean;
+  /** Each shot bends the other way first. Spread shots bend away from the aim. */
+  alternate?: boolean;
+}
 
 /** Projectiles: one per `spread` angle, optionally fired as a timed burst. */
 export interface ShotSpec {
@@ -83,20 +97,24 @@ export interface ShotSpec {
   seek?: boolean;
   /** Seconds a hit rival stays visible inside bushes. */
   reveal?: number;
-  /** Heals an injured teammate it touches by this much. */
-  healAllies?: number;
-  /** Bonus damage when the hit lands past `from` of the full range. */
-  farBonus?: { from: number; damage: number };
   /** Bonus damage inside a narrower, clearly presented center hit radius. */
   centerBonus?: { width: number; damage: number };
-  /** After a hit, jumps to the nearest other rival within `range`. */
-  chain?: { range: number; damage: number };
   /** Drags a hit rival this far toward the shooter. Not a knockback. */
   tug?: number;
   /** Slows a hit rival (the strongest slow applies). */
   slow?: { amount: number; duration: number };
   /** Share of the damage dealt returned to the shooter as health. */
   lifesteal?: number;
+  /** Flies a wavy path instead of a straight line. */
+  weave?: WeaveSpec;
+  /** Hit radius gained per unit traveled: a wave that widens as it goes. */
+  grow?: number;
+  /**
+   * On a rival hit, or at full range, bursts into `count` smaller shots
+   * fanned `spread` radians apart, each flying `range` for `damage`. They
+   * skip the rival the parent hit and never split again.
+   */
+  split?: { count: number; spread: number; range: number; damage: number };
 }
 
 /** An instant cone (or full ring) from the fighter; hits each rival once. */
@@ -104,6 +122,64 @@ export interface ConeSpec {
   kind: "cone";
   /** Half the cone angle in radians; Math.PI is a full ring. */
   halfAngle: number;
+}
+
+/**
+ * An instant line after a visible windup. The aim is fixed on the press;
+ * the line fires from where the fighter stands when the windup ends, hits
+ * the first rival along it and stops at cover. A stun or a ball pickup
+ * during the windup cancels it.
+ */
+export interface BeamSpec {
+  kind: "beam";
+  windup: number;
+  /** Hit radius beyond the target's body. */
+  width: number;
+  /** Bonus damage when the hit lands past `from` of the full range. */
+  farBonus?: { from: number; damage: number };
+}
+
+/**
+ * Thrown in an arc over cover to a point along the aim, bursting on
+ * landing. The landing point is shown to everyone while it flies. The
+ * distance is the attack's power (hold or drag) share of the fighter's
+ * range, 35% to 100%, at the fighter's projectile speed.
+ */
+export interface LobSpec {
+  kind: "lob";
+  /** Splash radius around the landing point, beyond the target's body. */
+  radius: number;
+  /** Injured teammates in the splash recover this much. */
+  healAllies?: number;
+}
+
+/**
+ * Lateral offset of a weaving shot after `traveled` units: positive is to
+ * the left of its heading. Zero at every multiple of half a wavelength, so
+ * a ricochet can restart the wave without a visible jump. Shared by the
+ * authority (hit tests) and the renderer (drawn position).
+ */
+export function weaveOffset(w: WeaveSpec, traveled: number) {
+  const u = traveled / w.wavelength;
+  if (!w.zigzag) return w.amp * Math.sin(2 * Math.PI * u);
+  const f = u - Math.floor(u);
+  return w.amp * (f < 0.25 ? f * 4 : f < 0.75 ? 2 - f * 4 : f * 4 - 4);
+}
+
+/**
+ * Where a shot actually flies: its center line `pos`, bent sideways by its
+ * weave. `side` (+1 or -1) says which way it bends first.
+ */
+export function shotPoint(
+  pos: Vec,
+  dir: Vec,
+  traveled: number,
+  weave: WeaveSpec | undefined,
+  side = 1,
+): Vec {
+  if (!weave) return pos;
+  const off = weaveOffset(weave, traveled) * side;
+  return { x: pos.x - dir.y * off, y: pos.y + dir.x * off };
 }
 
 /**
@@ -331,15 +407,21 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     reload: 1.7,
     damage: 1350,
     range: 11,
-    projectileSpeed: 22,
+    projectileSpeed: 0,
     attack: "Shutter Shot",
     super: "Group Photo!",
     color: "#b9a3ee",
-    description: "A precision flash with bonus damage at long range.",
+    description:
+      "Focus for a blink, then fire an instant flash down the line. Bonus damage at long range.",
     superDescription:
       "Frame the crowd, then stun everyone caught in the photo.",
     abilities: {
-      attack: { kind: "shot", farBonus: { from: 0.8, damage: 200 } },
+      attack: {
+        kind: "beam",
+        windup: 0.2,
+        width: 0.16,
+        farBonus: { from: 0.8, damage: 200 },
+      },
       super: {
         kind: "frame",
         windup: 0.35,
@@ -363,15 +445,16 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     reload: 1.4,
     damage: 800,
     range: 7.5,
-    projectileSpeed: 12,
+    projectileSpeed: 11,
     attack: "Munchie Toss",
     super: "Midterm Munchies",
     color: "#f5d46e",
-    description: "Snacks hurt rivals and heal injured teammates.",
+    description:
+      "Lob a snack bag over cover. It bursts on landing: rivals get hurt, teammates get fed.",
     superDescription:
       "Deploy a destructible snack table that heals nearby allies.",
     abilities: {
-      attack: { kind: "shot", healAllies: 850 },
+      attack: { kind: "lob", radius: 1.2, healAllies: 850 },
       super: { kind: "zone", area: "table", distance: 4 },
     },
   },
@@ -422,11 +505,15 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     attack: "Bug Report",
     super: "Production Rollback",
     color: "#77d5b9",
-    description: "A software bug ricochets once off a wall.",
+    description: "A glitching bug zigzags across the floor and ricochets once.",
     superDescription:
       "Rewind two seconds, recover up to 2,500 HP, leave an explosive glitch.",
     abilities: {
-      attack: { kind: "shot", bounces: 1 },
+      attack: {
+        kind: "shot",
+        bounces: 1,
+        weave: { amp: 0.55, wavelength: 2.4, zigzag: true },
+      },
       super: {
         kind: "rewind",
         seconds: 2,
@@ -450,11 +537,16 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     attack: "Rizz",
     super: "Aura Pulse",
     color: "#df83c8",
-    description: "Strum two notes, each dealing 2,000 damage.",
+    description:
+      "Strum two notes that spiral around each other, each dealing 2,000 damage.",
     superDescription:
       "Instantly knock out rivals within 4 units. Walls and spawn protection block it.",
     abilities: {
-      attack: { kind: "shot", spread: [-0.055, 0.055] },
+      attack: {
+        kind: "shot",
+        spread: [-0.03, 0.03],
+        weave: { amp: 0.32, wavelength: 3.2 },
+      },
       super: {
         kind: "burst",
         at: 0,
@@ -595,16 +687,17 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     speed: 5.2,
     ammo: 3,
     reload: 1.4,
-    damage: 800,
+    damage: 760,
     range: 6.5,
     projectileSpeed: 13,
     attack: "Warm Welcome",
     super: "Follow-Up Panda",
     color: "#e8553a",
-    description: "A wide wave that passes through every rival in its path.",
+    description:
+      "A welcome wave that widens as it rolls out and passes through every rival.",
     superDescription: "Throw out a giant red panda that chases rivals down.",
     abilities: {
-      attack: { kind: "shot", pierce: true, width: 0.35 },
+      attack: { kind: "shot", pierce: true, width: 0.18, grow: 0.1 },
       super: { kind: "zone", area: "panda", distance: 3 },
     },
   },
@@ -653,10 +746,14 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     attack: "Share Post",
     super: "Merch Drop",
     color: "#ff6f91",
-    description: "A post that hits a rival, then gets shared to the next one.",
+    description:
+      "A post that goes viral: on a hit or at full range it splits into three shares.",
     superDescription: "Lob a bundle of tees over cover. It bursts on landing.",
     abilities: {
-      attack: { kind: "shot", chain: { range: 3.5, damage: 450 } },
+      attack: {
+        kind: "shot",
+        split: { count: 3, spread: 0.55, range: 3, damage: 360 },
+      },
       super: {
         kind: "burst",
         at: 6,
@@ -706,10 +803,15 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     attack: "Peace Dove",
     super: "Be Still",
     color: "#7e57c2",
-    description: "A dove that slows rivals by 30% for 1.5 seconds.",
+    description:
+      "A dove glides out in a gentle arc and slows rivals by 30% for 1.5 seconds.",
     superDescription: "Stun every rival around you for 1.25 seconds.",
     abilities: {
-      attack: { kind: "shot", slow: { amount: 0.3, duration: 1.5 } },
+      attack: {
+        kind: "shot",
+        slow: { amount: 0.3, duration: 1.5 },
+        weave: { amp: 0.45, wavelength: 16, alternate: true },
+      },
       super: { kind: "burst", at: 0, radius: 3.5, damage: 400, stun: 1.25 },
     },
   },

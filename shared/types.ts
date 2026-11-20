@@ -112,6 +112,12 @@ export interface Projectile {
   back?: boolean;
   /** Fired by a Super: uses the fighter's Super spec, never charges. */
   super?: boolean;
+  /** A weaving shot's first bend: +1 to the left of its heading, -1 right. */
+  side?: 1 | -1;
+  /** Lobbed in an arc over cover; bursts where `remaining` runs out. */
+  lob?: boolean;
+  /** A share from a split shot: smaller, and it never splits again. */
+  shard?: boolean;
 }
 export interface Area {
   id: number;
@@ -144,8 +150,14 @@ export interface Effect {
     | "burst"
     /** Where a thrown Super will land; value = radius. */
     | "marker"
-    /** A chained hit: from pos along dir for value units. */
-    | "chain"
+    /** A beam: value 0 is the windup tell, value > 0 the fired line's length. */
+    | "beam"
+    /** Where a lob will land (pos); value = splash radius. */
+    | "lob"
+    /** A lob burst on landing; value = splash radius. */
+    | "splash"
+    /** A shot split into shares at pos; value = how many. */
+    | "split"
     /** Two fighters traded places: from pos along dir for value units. */
     | "swap"
     /** A companion's swipe. */
