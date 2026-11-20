@@ -49,14 +49,18 @@ const pickup = (
 };
 
 test("item spawning is seeded, bounded and avoids obstacles, other items and spawns", () => {
-  for (const mode of ["showdown", "broomball"] as const) {
+  for (const mode of ["showdown", "broomball", "fishing"] as const) {
     const a = new Engine(mode, members, seeded(3));
     const b = new Engine(mode, members, seeded(3));
     assert.deepEqual(a.state.items, b.state.items);
     assert.equal(a.state.items.length, 6);
     for (const item of a.state.items) {
       assert.ok(a.valid(item.pos, 0.65));
-      assert.ok(MAPS[mode].spawns.every((p) => distance(p, item.pos) >= 2));
+      assert.ok(
+        [...MAPS[mode].spawns, ...(MAPS[mode].respawns?.flat() ?? [])].every(
+          (p) => distance(p, item.pos) >= 2,
+        ),
+      );
       assert.ok(
         a.state.items.every(
           (other) => other.id === item.id || distance(other.pos, item.pos) >= 2,

@@ -18,7 +18,7 @@ export type FighterId =
   | "jemuel"
   | "russell"
   | "brandon_n";
-export type Mode = "showdown" | "broomball";
+export type Mode = "showdown" | "broomball" | "fishing";
 export type Vec = { x: number; y: number };
 
 /** Shared simulation item catalogue. Behavior is resolved by kind, not item ID. */
@@ -910,6 +910,64 @@ export const RULES = {
   respawn: 3,
   protection: 1.5,
 };
+/**
+ * Per-mode rules as data, read by the authority, the room and the client
+ * alike, so a mode is a row here rather than a branch at every call site.
+ */
+export interface ModeRules {
+  name: string;
+  /** Lobby chip label when `name` is too long for it. */
+  short?: string;
+  capacity: number;
+  /** Regulation length (s) after the 3 s countdown. */
+  length: number;
+  /** Same-team fighters are allies: no friendly fire, shared heals. */
+  teams: boolean;
+  /** Seconds until an eliminated fighter is back; null means out for the match. */
+  respawn: number | null;
+  /** Movement speed multiplier by team. */
+  teamSpeed?: readonly [number, number];
+}
+export const MODES: Record<Mode, ModeRules> = {
+  showdown: {
+    name: "Showdown",
+    capacity: 10,
+    length: 210,
+    teams: false,
+    respawn: null,
+  },
+  broomball: {
+    name: "Broomball",
+    capacity: 6,
+    length: 150,
+    teams: true,
+    respawn: RULES.respawn,
+  },
+  fishing: {
+    name: "Fishers of Men",
+    short: "Fishers",
+    capacity: 10,
+    length: 150,
+    teams: true,
+    respawn: 2,
+    teamSpeed: [1, 1.1],
+  },
+};
+export const isMode = (m: unknown): m is Mode =>
+  typeof m === "string" && Object.hasOwn(MODES, m);
+/**
+ * Fishers of Men (infection): team 0 are the Fish still free, team 1 the
+ * Fishers. A caught Fish joins the Fishers. First-pass playtest values.
+ */
+export const FISH = 0;
+export const FISHERS = 1;
+export const FISHING = {
+  /** Share of the party that starts as Fishers (rounded, at least one). */
+  starters: 0.25,
+};
+/** A fighter's movement speed before slows, in this mode and on this team. */
+export const moveSpeed = (mode: Mode, p: { fighter: FighterId; team: 0 | 1 }) =>
+  FIGHTERS[p.fighter].speed * (MODES[mode].teamSpeed?.[p.team] ?? 1);
 export interface Wall {
   id: string;
   x: number;
@@ -924,44 +982,113 @@ export interface Arena {
   walls: Wall[];
   bushes: { x: number; y: number; w: number; h: number }[];
   spawns: Vec[];
+  /**
+   * Where each team comes back in modes that respawn; the point farthest
+   * from living rivals is used. Fishers of Men also starts its Fishers here.
+   */
+  respawns?: readonly [Vec[], Vec[]];
+  /**
+   * The area the camera fits to the screen; the whole field by default. A
+   * larger field keeps Central Lawn's frame so fighters stay the same size.
+   */
+  frame?: { w: number; h: number };
 }
+const LAWN: Arena = {
+  w: 36,
+  h: 24,
+  walls: [
+    { id: "a", x: 8, y: 7, w: 3, h: 1 },
+    { id: "b", x: 25, y: 16, w: 3, h: 1 },
+    { id: "c", x: 8, y: 16, w: 3, h: 1 },
+    { id: "d", x: 25, y: 7, w: 3, h: 1 },
+    { id: "e", x: 16, y: 9, w: 1, h: 2 },
+    { id: "f", x: 19, y: 13, w: 1, h: 2 },
+    ...[
+      [12, 5],
+      [23, 18],
+      [12, 18],
+      [23, 5],
+    ].map(([x, y], i) => ({ id: "crate" + i, x, y, w: 1, h: 1, hp: 1800 })),
+  ],
+  bushes: [
+    { x: 4, y: 10, w: 3, h: 4 },
+    { x: 29, y: 10, w: 3, h: 4 },
+    { x: 14, y: 3, w: 4, h: 2 },
+    { x: 18, y: 19, w: 4, h: 2 },
+  ],
+  spawns: [
+    { x: 3, y: 3 },
+    { x: 33, y: 21 },
+    { x: 33, y: 3 },
+    { x: 3, y: 21 },
+    { x: 18, y: 3 },
+    { x: 18, y: 21 },
+    { x: 3, y: 12 },
+    { x: 33, y: 12 },
+    { x: 10, y: 12 },
+    { x: 26, y: 12 },
+  ],
+};
+/** The Fishers' dock at the middle of Lakeside. */
+const DOCK: Vec[] = [
+  { x: 21, y: 14 },
+  { x: 20.2, y: 14.6 },
+  { x: 21.8, y: 13.4 },
+];
+/**
+ * Lakeside, Fishers of Men's field: a lawn running out into a lake, about a
+ * third larger than Central Lawn in the same proportions, and the same under
+ * a half turn. Short walls ring the Fishers' dock with open corners; cover
+ * lines and bushes give the Fish somewhere to run on every flank.
+ */
+const LAKESIDE: Arena = {
+  w: 42,
+  h: 28,
+  frame: { w: LAWN.w, h: LAWN.h },
+  walls: [
+    { id: "a", x: 19, y: 10, w: 4, h: 1 },
+    { id: "b", x: 19, y: 17, w: 4, h: 1 },
+    { id: "c", x: 16, y: 12, w: 1, h: 4 },
+    { id: "d", x: 25, y: 12, w: 1, h: 4 },
+    { id: "e", x: 8, y: 6, w: 4, h: 1 },
+    { id: "f", x: 30, y: 21, w: 4, h: 1 },
+    { id: "g", x: 30, y: 6, w: 4, h: 1 },
+    { id: "h", x: 8, y: 21, w: 4, h: 1 },
+    { id: "i", x: 10, y: 11, w: 1, h: 3 },
+    { id: "j", x: 31, y: 14, w: 1, h: 3 },
+    ...[
+      [15, 5],
+      [26, 22],
+      [14, 20],
+      [27, 7],
+    ].map(([x, y], i) => ({ id: "crate" + i, x, y, w: 1, h: 1, hp: 1800 })),
+  ],
+  bushes: [
+    { x: 4, y: 12, w: 3, h: 4 },
+    { x: 35, y: 12, w: 3, h: 4 },
+    { x: 12, y: 2, w: 4, h: 2 },
+    { x: 26, y: 24, w: 4, h: 2 },
+    { x: 26, y: 2, w: 4, h: 2 },
+    { x: 12, y: 24, w: 4, h: 2 },
+    { x: 12, y: 8, w: 2, h: 2 },
+    { x: 28, y: 18, w: 2, h: 2 },
+  ],
+  spawns: [
+    { x: 3, y: 3 },
+    { x: 39, y: 25 },
+    { x: 39, y: 3 },
+    { x: 3, y: 25 },
+    { x: 21, y: 3 },
+    { x: 21, y: 25 },
+    { x: 2, y: 14 },
+    { x: 40, y: 14 },
+    { x: 7, y: 9 },
+    { x: 35, y: 19 },
+  ],
+  respawns: [DOCK, DOCK],
+};
 export const MAPS: Record<Mode, Arena> = {
-  showdown: {
-    w: 36,
-    h: 24,
-    walls: [
-      { id: "a", x: 8, y: 7, w: 3, h: 1 },
-      { id: "b", x: 25, y: 16, w: 3, h: 1 },
-      { id: "c", x: 8, y: 16, w: 3, h: 1 },
-      { id: "d", x: 25, y: 7, w: 3, h: 1 },
-      { id: "e", x: 16, y: 9, w: 1, h: 2 },
-      { id: "f", x: 19, y: 13, w: 1, h: 2 },
-      ...[
-        [12, 5],
-        [23, 18],
-        [12, 18],
-        [23, 5],
-      ].map(([x, y], i) => ({ id: "crate" + i, x, y, w: 1, h: 1, hp: 1800 })),
-    ],
-    bushes: [
-      { x: 4, y: 10, w: 3, h: 4 },
-      { x: 29, y: 10, w: 3, h: 4 },
-      { x: 14, y: 3, w: 4, h: 2 },
-      { x: 18, y: 19, w: 4, h: 2 },
-    ],
-    spawns: [
-      { x: 3, y: 3 },
-      { x: 33, y: 21 },
-      { x: 33, y: 3 },
-      { x: 3, y: 21 },
-      { x: 18, y: 3 },
-      { x: 18, y: 21 },
-      { x: 3, y: 12 },
-      { x: 33, y: 12 },
-      { x: 10, y: 12 },
-      { x: 26, y: 12 },
-    ],
-  },
+  showdown: LAWN,
   broomball: {
     w: 34,
     h: 20,
@@ -975,7 +1102,9 @@ export const MAPS: Record<Mode, Arena> = {
       { x: 27, y: 5 },
       { x: 27, y: 15 },
     ],
+    respawns: [[{ x: 4, y: 10 }], [{ x: 30, y: 10 }]],
   },
+  fishing: LAKESIDE,
 };
 export const add = (a: Vec, b: Vec): Vec => ({ x: a.x + b.x, y: a.y + b.y });
 export const sub = (a: Vec, b: Vec): Vec => ({ x: a.x - b.x, y: a.y - b.y });

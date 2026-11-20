@@ -1,4 +1,4 @@
-import { FIGHTERS, ITEMS, clamp, distance, type Vec } from "../../../../shared/definitions";
+import { FIGHTERS, ITEMS, MODES, clamp, distance, type Vec } from "../../../../shared/definitions";
 import type { GameBridge } from "../../game";
 import { feedback } from "../core/feedback";
 
@@ -145,7 +145,7 @@ export function installStickRouter(o: StickRouterOptions): () => void {
         (p) =>
           p.id !== me.id &&
           p.alive &&
-          (m.mode === "showdown" || p.team !== me.team) &&
+          (!MODES[m.mode].teams || p.team !== me.team) &&
           distance(p.pos, me.pos) <= range &&
           clear(me.pos, p.pos),
       )

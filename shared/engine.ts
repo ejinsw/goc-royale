@@ -1,9 +1,14 @@
 import {
   AREAS,
   FIGHTERS,
+  FISH,
+  FISHERS,
+  FISHING,
   ITEMS,
   MAPS,
+  MODES,
   RULES,
+  moveSpeed,
   add,
   sub,
   mul,
@@ -47,6 +52,7 @@ const emptyStats = () => ({
   goals: 0,
   assists: 0,
   survived: 0,
+  catches: 0,
 });
 interface History {
   t: number;
@@ -86,6 +92,8 @@ interface Leap {
 }
 /** Projectile hit tolerance beyond the target's body when a spec omits it. */
 const SHOT_WIDTH = 0.13;
+/** Broomball's golden-goal overtime (s). */
+const OVERTIME = 30;
 /** Factory for authority-owned items; presentation consumes the same state. */
 export function createItem(id: number, kind: ItemKind, pos: Vec): Item {
   return {
@@ -99,6 +107,20 @@ export function createItem(id: number, kind: ItemKind, pos: Vec): Item {
     remaining: 0,
     cooldownUntil: 0,
   };
+}
+/** Fishers of Men's starting Fishers: a seeded shuffle, at least one. */
+function pickFishers(members: Member[], random: () => number) {
+  const order = members.map((m) => m.id);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(clamp(random(), 0, 0.999999) * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const count = clamp(
+    Math.round(members.length * FISHING.starters),
+    1,
+    members.length,
+  );
+  return new Set(order.slice(0, count));
 }
 /**
  * A player's timestamped movement timeline on the authority. Segment i is
@@ -133,27 +155,46 @@ export class Engine {
   dashes: Dash[] = [];
   leaps: Leap[] = [];
   private serial = 0;
+  /** Fishers of Men: the Fish already announced as the last one free. */
+  private lastFish = "";
   constructor(
     mode: Mode,
     members: Member[],
     random: () => number = Math.random,
   ) {
     const map = MAPS[mode];
+    // Fishers of Men ignores lobby teams: a random share starts as Fishers.
+    const starters = mode === "fishing" ? pickFishers(members, random) : null;
     let blue = 0,
-      red = 3;
+      red = 3,
+      fish = 0,
+      docked = 0;
     const players = members.map((m, i): Player => {
       const f = FIGHTERS[m.fighter];
-      const spawnIndex =
-        mode === "showdown" ? i : m.team === 0 ? blue++ : red++;
+      const team = starters ? (starters.has(m.id) ? FISHERS : FISH) : m.team;
+      const dock = map.respawns?.[FISHERS] ?? map.spawns;
+      const spawnIndex = starters
+        ? team === FISH
+          ? fish++
+          : -1
+        : mode === "showdown"
+          ? i
+          : m.team === 0
+            ? blue++
+            : red++;
       // Fall back to a valid spawn if a roster ever exceeds the authored
       // spawn points (e.g. uneven broomball teams with no minimum).
       const spawn =
-        map.spawns[spawnIndex] ?? map.spawns[spawnIndex % map.spawns.length];
+        spawnIndex < 0
+          ? dock[docked++ % dock.length]
+          : (map.spawns[spawnIndex] ??
+            map.spawns[spawnIndex % map.spawns.length]);
       return {
         ...m,
+        team,
         heldItem: null,
         pos: { ...spawn },
-        aim: { x: m.team === 0 ? 1 : -1, y: 0 },
+        aim: { x: team === 0 ? 1 : -1, y: 0 },
         hp: f.hp,
         ammo: f.ammo,
         reload: 0,
@@ -189,7 +230,13 @@ export class Engine {
       events: [],
       walls: structuredClone(map.walls),
       zone: 22,
-      score: [0, 0],
+      score:
+        mode === "fishing"
+          ? [
+              players.filter((p) => p.team === FISH).length,
+              players.filter((p) => p.team === FISHERS).length,
+            ]
+          : [0, 0],
       overtime: false,
       ball: {
         pos: { x: 17, y: 10 },
@@ -222,7 +269,9 @@ export class Engine {
     ];
     const available = (pos: Vec) =>
       this.valid(pos, 0.65) &&
-      map.spawns.every((spawn) => distance(spawn, pos) >= 2) &&
+      [...map.spawns, ...(map.respawns?.flat() ?? [])].every(
+        (spawn) => distance(spawn, pos) >= 2,
+      ) &&
       (mode !== "broomball" || distance(pos, this.state.ball.pos) >= 2) &&
       this.state.items.every((item) => distance(item.pos, pos) >= 2);
     for (const kind of kinds) {
@@ -249,9 +298,7 @@ export class Engine {
     return this.state.players;
   }
   allies(a: Player, b: Player) {
-    return (
-      a.id === b.id || (this.state.mode === "broomball" && a.team === b.team)
-    );
+    return a.id === b.id || (MODES[this.state.mode].teams && a.team === b.team);
   }
   setInput(id: string, input: Input) {
     if (!input || !finiteVec(input.move) || !finiteVec(input.aim)) return false;
@@ -348,7 +395,7 @@ export class Engine {
     const used = target - track.c;
     track.bank = clamp(track.bank + dt - used, 0, TIMELINE.bankMax);
     if (moves) {
-      const speed = FIGHTERS[p.fighter].speed * (1 - p.slow);
+      const speed = moveSpeed(this.state.mode, p) * (1 - p.slow);
       for (let i = 0; i < segs.length; i++) {
         const start = Math.max(segs[i].t, track.c);
         const end = Math.min(
@@ -424,14 +471,14 @@ export class Engine {
     };
   }
   /**
-   * Hidden in a bush from someone at `from`: the Showdown concealment rule
-   * that snapshot() applies per viewer, reused so homing shots, chains and
-   * companions cannot find fighters their owner cannot see.
+   * Hidden in a bush from someone at `from`: the concealment rule that
+   * snapshot() applies per viewer, reused so homing shots, chains and
+   * companions cannot find fighters their owner cannot see. Maps without
+   * bushes (Broomball Night) never conceal.
    */
   concealed(t: Player, from: Vec) {
     const s = this.state;
     return (
-      s.mode === "showdown" &&
       t.revealUntil <= s.time &&
       distance(t.pos, from) >= 2.5 &&
       MAPS[s.mode].bushes.some(
@@ -569,16 +616,86 @@ export class Engine {
     this.state.areas = this.state.areas.filter(
       (a) => !(a.owner === p.id && AREAS[a.kind].bound),
     );
+    const s = this.state;
     p.stats.deaths++;
-    p.stats.survived = Math.max(0, this.state.time - 3);
-    p.respawn = this.state.time + 3;
-    p.placement = this.state.players.filter((x) => x.alive).length + 1;
+    p.respawn = s.time + (MODES[s.mode].respawn ?? RULES.respawn);
+    if (s.mode !== "fishing") {
+      p.stats.survived = Math.max(0, s.time - 3);
+      p.placement = s.players.filter((x) => x.alive).length + 1;
+    }
     if (source && source.id !== p.id) source.stats.kills++;
     this.dropBall(p);
     this.dropItem(p);
     this.effect("eliminated", p.pos, p.id);
     this.emit("fighter_eliminated", p.pos, p.id, undefined, source?.id ? 1 : 0);
-    this.state.notice = `${p.name} eliminated`;
+    s.notice = `${p.name} eliminated`;
+    if (s.mode === "fishing" && p.team === FISH) this.catchFish(p, source);
+  }
+  /**
+   * Fishers of Men: a caught Fish joins the Fishers and comes back on the
+   * dock. What it still has in play would change sides with it, so it is
+   * withdrawn instead of being turned on its old team.
+   */
+  private catchFish(p: Player, source?: Player) {
+    const s = this.state;
+    // Fish still free, counting this one: the last one caught places best.
+    p.placement = s.players.filter((x) => x.team === FISH).length;
+    p.stats.survived = Math.max(0, s.time - 3);
+    p.team = FISHERS;
+    s.projectiles = s.projectiles.filter((q) => q.owner !== p.id);
+    s.areas = s.areas.filter((a) => a.owner !== p.id);
+    s.items = s.items.filter(
+      (i) => !(i.state === "flight" && i.owner === p.id),
+    );
+    this.pending = this.pending.filter((x) => x.id !== p.id);
+    const catcher =
+      source && source.id !== p.id && source.team === FISHERS
+        ? source
+        : undefined;
+    if (catcher) catcher.stats.catches++;
+    this.effect(
+      "caught",
+      p.pos,
+      catcher?.id ?? p.id,
+      catcher ? unit(sub(catcher.pos, p.pos)) : { x: 0, y: -1 },
+      catcher ? distance(catcher.pos, p.pos) : 0,
+      0.8,
+    );
+    this.emit(
+      "fighter_caught",
+      p.pos,
+      catcher?.id ?? "",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      p.id,
+    );
+    s.notice = catcher
+      ? `${catcher.name} caught ${p.name}!`
+      : `${p.name} got caught`;
+  }
+  /** Where a fighter comes back: the team's point farthest from living rivals. */
+  private respawnPoint(p: Player): Vec {
+    const s = this.state,
+      map = MAPS[s.mode];
+    const points = map.respawns?.[p.team]?.length
+      ? map.respawns[p.team]
+      : map.spawns;
+    const rivals = s.players.filter((r) => r.alive && !this.allies(p, r));
+    let best = points[0],
+      bestD = -1;
+    for (const point of points) {
+      const d = Math.min(
+        Infinity,
+        ...rivals.map((r) => distance(r.pos, point)),
+      );
+      if (d > bestD) {
+        bestD = d;
+        best = point;
+      }
+    }
+    return { ...best };
   }
   disconnect(id: string) {
     const p = this.state.players.find((x) => x.id === id);
@@ -1853,9 +1970,38 @@ export class Engine {
           b.stats.damage - a.stats.damage ||
           a.id.localeCompare(b.id),
       );
+    if (s.mode === "fishing") return this.placeFishing(survivors);
     if (s.mode === "showdown")
       survivors.forEach((p, i) => (p.placement = i + 1));
     for (const p of survivors) p.stats.survived = Math.max(0, s.time - 3);
+  }
+  /**
+   * Fishers of Men placement: Fish still free place first, then caught Fish
+   * from last caught to first (set when caught), then the starting Fishers
+   * by catches.
+   */
+  private placeFishing(survivors: Player[]) {
+    const s = this.state;
+    // Elimination always converts a Fish, so every Fish is a survivor.
+    const free = survivors.filter((p) => p.team === FISH);
+    free.forEach((p, i) => {
+      p.placement = i + 1;
+      p.stats.survived = Math.max(0, s.time - 3);
+    });
+    const caught = s.players.filter(
+      (p) => p.team === FISHERS && p.placement > 0,
+    );
+    const starters = s.players
+      .filter((p) => p.team === FISHERS && p.placement === 0)
+      .sort(
+        (a, b) =>
+          b.stats.catches - a.stats.catches ||
+          b.stats.damage - a.stats.damage ||
+          a.id.localeCompare(b.id),
+      );
+    starters.forEach(
+      (p, i) => (p.placement = free.length + caught.length + i + 1),
+    );
   }
   /**
    * A Super's cinematic pause. The match clock is stopped, and every rule
@@ -1937,9 +2083,12 @@ export class Engine {
             staleInput.itemUse =
               false;
         this.itemUseSeq.delete(p.id);
-        if (s.mode === "broomball" && p.connected && s.time >= p.respawn) {
-          const sp = MAPS.broomball.spawns[p.team === 0 ? 0 : 3];
-          p.pos = { ...sp };
+        if (
+          MODES[s.mode].respawn !== null &&
+          p.connected &&
+          s.time >= p.respawn
+        ) {
+          p.pos = this.respawnPoint(p);
           p.hp = FIGHTERS[p.fighter].hp;
           p.ammo = FIGHTERS[p.fighter].ammo;
           p.reload = 0;
@@ -1975,7 +2124,11 @@ export class Engine {
       if (track) this.consumeTimeline(p, track, dt, canAct);
       if (input && canAct) {
         p.aim = input.aim;
-        if (!track) this.move(p, mul(input.move, f.speed * (1 - p.slow) * dt));
+        if (!track)
+          this.move(
+            p,
+            mul(input.move, moveSpeed(s.mode, p) * (1 - p.slow) * dt),
+          );
         if (input.itemDrop) this.dropItem(p);
         if (input.itemPickup) this.pickupItem(p);
         if (input.itemUse) this.useItem(p);
@@ -2142,7 +2295,7 @@ export class Engine {
           );
       const alive = s.players.filter((p) => p.alive);
       if (alive.length <= 1) this.finish(alive[0]?.id || null);
-      else if (elapsed >= 210) {
+      else if (elapsed >= MODES.showdown.length) {
         const sorted = alive.sort(
           (a, b) =>
             b.hp / FIGHTERS[b.fighter].hp - a.hp / FIGHTERS[a.fighter].hp ||
@@ -2151,22 +2304,58 @@ export class Engine {
         );
         this.finish(sorted[0].id);
       }
-    } else if (elapsed >= 150 && !s.overtime) {
+    } else if (s.mode === "fishing") this.fishing(elapsed);
+    else if (elapsed >= MODES.broomball.length && !s.overtime) {
       if (s.score[0] === s.score[1]) {
         s.overtime = true;
         s.notice = "Golden goal • 30 seconds";
       } else this.finish(s.score[0] > s.score[1] ? "blue" : "red");
-    } else if (s.overtime && elapsed >= 180) this.finish(null);
+    } else if (s.overtime && elapsed >= MODES.broomball.length + OVERTIME)
+      this.finish(null);
   }
-  /** Conceal enemies in bushes, except near allies or while marked. Dead participants spectate all. */
+  /**
+   * Fishers of Men's end rules: the Fishers win once every Fish is caught,
+   * the Fish win if any are still free at the final whistle. The last Fish
+   * cannot hide in a bush.
+   */
+  private fishing(elapsed: number) {
+    const s = this.state;
+    const free = s.players.filter((p) => p.team === FISH);
+    // Team sizes ride in the score so the HUD sees Fish hidden in bushes.
+    s.score = [free.length, s.players.length - free.length];
+    if (!free.length) return this.finish("fishers");
+    if (elapsed >= MODES.fishing.length) return this.finish("fish");
+    if (free.length !== 1) return;
+    const last = free[0];
+    last.revealUntil = Math.max(last.revealUntil, s.time + 0.25);
+    if (this.lastFish !== last.id) {
+      this.lastFish = last.id;
+      s.notice = `${last.name} is the last fish!`;
+    }
+  }
+  /**
+   * Conceal rivals in bushes unless the viewer or a living teammate is close,
+   * or the rival is marked. Dead participants spectate all.
+   */
   snapshot(viewerId: string): Match {
     const s = this.state,
       viewer = s.players.find((p) => p.id === viewerId);
     const snap = structuredClone(s);
-    if (viewer?.alive && s.mode === "showdown" && s.phase !== "finished")
-      snap.players = snap.players.filter(
-        (p) => p.id === viewer.id || !p.alive || !this.concealed(p, viewer.pos),
+    if (viewer?.alive && s.phase !== "finished") {
+      const eyes = s.players.filter((a) => a.alive && this.allies(viewer, a));
+      const hidden = new Set(
+        s.players
+          .filter(
+            (p) =>
+              p.alive &&
+              !this.allies(viewer, p) &&
+              eyes.every((a) => this.concealed(p, a.pos)),
+          )
+          .map((p) => p.id),
       );
+      if (hidden.size)
+        snap.players = snap.players.filter((p) => !hidden.has(p.id));
+    }
     // A carried item must not expose an otherwise concealed fighter.
     const visiblePlayers = new Set(snap.players.map((p) => p.id));
     snap.items = snap.items.filter(

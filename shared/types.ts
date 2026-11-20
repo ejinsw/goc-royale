@@ -30,6 +30,8 @@ export interface Stats {
   goals: number;
   assists: number;
   survived: number;
+  /** Fishers of Men: Fish this player caught as a Fisher. */
+  catches: number;
 }
 export interface Player extends Member {
   /** One carried item, identified in Match.items. */
@@ -166,7 +168,9 @@ export interface Effect {
     | "leap"
     /** David's center-hit harmony and Side Eye warning/release. */
     | "harmony"
-    | "gaze";
+    | "gaze"
+    /** A Fish reeled in: toward the catcher along dir for value units. */
+    | "caught";
   pos: Vec;
   dir: Vec;
   owner: string;
@@ -205,6 +209,8 @@ export type GameEventType =
   | "ball_released"
   | "goal_scored"
   | "fighter_eliminated"
+  /** Fishers of Men: owner caught `target`, who now joins the Fishers. */
+  | "fighter_caught"
   | "fighter_respawned"
   | "item_picked_up"
   | "item_dropped"
@@ -242,9 +248,14 @@ export interface Match {
   events: GameEvent[];
   walls: Wall[];
   zone: number;
+  /** Broomball goals. Fishers of Men: [Fish still free, Fishers]. */
   score: [number, number];
   overtime: boolean;
   ball: Ball;
+  /**
+   * Showdown: the winning player's id. Broomball: "blue" or "red".
+   * Fishers of Men: "fish" or "fishers". null for a draw.
+   */
   winner: string | null;
   notice: string;
   tick: number;

@@ -13,16 +13,16 @@ import {
   ShaderMaterial,
   type BufferGeometry,
 } from "three";
-import { MAPS, type Mode, type Vec, type Wall } from "../../../shared/definitions";
+import { FISHERS, MAPS, type Arena, type Mode, type Vec, type Wall } from "../../../shared/definitions";
 import type { Match } from "../../../shared/types";
 import { merge, part } from "../ui/scene/geometry";
 import type { ArenaMaterials } from "./materials";
 
 /**
  * Arena presentation layer (performance standard §3, §5.2): the 3D treatment
- * of Central Lawn and Broomball Night. Footprints come straight from
- * `MAPS` (walls, bushes, bounds, goal mouths), so the art cannot drift from
- * collision. Static art is merged once per match into a few meshes; per
+ * of Central Lawn, Lakeside (Fishers of Men) and Broomball Night. Footprints
+ * come straight from `MAPS` (walls, bushes, bounds, goal mouths), so the art
+ * cannot drift from collision. Static art is merged once per match into a few meshes; per
  * frame only the shrinking zone (a uniform), crate visibility and the
  * occupied-bush fade change.
  *
@@ -122,35 +122,130 @@ function bush(b: { x: number; y: number; w: number; h: number }, seed: number): 
   return merge(parts);
 }
 
-function lawnArt(): BufferGeometry {
-  const m = MAPS.showdown;
-  const parts: BufferGeometry[] = [
-    flat("#5f8f4f", -40, -40, m.w + 80, m.h + 80, -0.02),
-    flat("#83b66a", 0, 0, m.w, m.h, 0),
+/** The Fishers' dock: a plank deck under the points they start and return on. */
+function dock(points: readonly Vec[]): BufferGeometry[] {
+  const cx = points.reduce((n, p) => n + p.x, 0) / points.length,
+    cz = points.reduce((n, p) => n + p.y, 0) / points.length;
+  const w = 3.4,
+    d = 2.4,
+    planks = 6;
+  const parts = [flat("#6e4a2b", cx - w / 2 - 0.1, cz - d / 2 - 0.1, w + 0.2, d + 0.2, 0.01)];
+  for (let i = 0; i < planks; i++)
+    parts.push(
+      flat(i % 2 ? "#c99155" : "#b98247", cx - w / 2, cz - d / 2 + (i * d) / planks + 0.025, w, d / planks - 0.05, 0.014),
+    );
+  // Short corner posts, low enough that fighters never look stuck on them.
+  for (const [x, z] of [
+    [cx - w / 2, cz - d / 2],
+    [cx + w / 2, cz - d / 2],
+    [cx - w / 2, cz + d / 2],
+    [cx + w / 2, cz + d / 2],
+  ])
+    parts.push(part(new CylinderGeometry(0.09, 0.11, 0.24, 6), "#7b5532", [x, 0.12, z]));
+  return parts;
+}
+
+/** A clump of reeds at the waterline. */
+function reeds(x: number, z: number, seed: number): BufferGeometry[] {
+  const parts: BufferGeometry[] = [];
+  for (let k = 0; k < 4; k++) {
+    const h = 0.5 + noise(seed + k) * 0.45;
+    const at: [number, number, number] = [
+      x + (noise(seed + k + 7) - 0.5) * 0.6,
+      h / 2 - 0.06,
+      z + (noise(seed + k + 13) - 0.5) * 0.6,
+    ];
+    parts.push(part(new CylinderGeometry(0.025, 0.04, h, 4), k % 2 ? "#6f8f3e" : "#8aa553", at));
+  }
+  return parts;
+}
+
+/**
+ * Lakeside's three water sides: sand, then lake, with a rope line on short
+ * posts marking the playable edge. A pier runs off the far edge in line with
+ * the path, with a rowboat moored beside it. The camera side is land.
+ */
+function shore(m: Arena): BufferGeometry[] {
+  const parts = [
+    flat("#3f86b5", -40, -40, m.w + 80, m.h + 80, -0.1),
+    flat("#cdb98a", -2.6, -2.6, m.w + 5.2, m.h + 2.6, -0.05),
+    flat("#e3d29e", -2, -2, m.w + 4, m.h + 2, -0.03),
+    flat("#5f8f4f", -40, m.h, m.w + 80, 40, -0.02),
   ];
+  let seed = 500;
+  const open = (x: number, z: number) => z < -3 || ((x < -3 || x > m.w + 3) && z < m.h - 0.5);
+  for (let i = 0; i < 90; i++) {
+    const x = -14 + noise(seed++) * (m.w + 28),
+      z = -14 + noise(seed++) * (m.h + 14),
+      k = noise(seed++);
+    if (!open(x, z)) continue;
+    parts.push(i % 5 ? flat("#79b4d8", x, z, 0.8 + k * 1.2, 0.07, -0.09) : disc("#5f9b4b", x, z, 0.22 + k * 0.18, -0.09));
+  }
+  for (let x = -2.4; x <= m.w + 2.4; x += 3.1) parts.push(...reeds(x + noise(seed++) * 0.8, -2.75, seed++));
+  for (let z = 0; z <= m.h - 2; z += 3.1) {
+    parts.push(...reeds(-2.75, z + noise(seed++) * 0.8, seed++));
+    parts.push(...reeds(m.w + 2.75, z + noise(seed++) * 0.8, seed++));
+  }
+  // Rope line on posts along the three water sides.
+  const o = 0.35,
+    post = (x: number, z: number) => part(new CylinderGeometry(0.06, 0.08, 0.62, 6), "#7b5532", [x, 0.31, z]);
+  for (let i = 0; i <= 21; i++) parts.push(post(-o + (i * (m.w + 2 * o)) / 21, -o));
+  for (let i = 1; i <= 14; i++) parts.push(post(-o, -o + (i * (m.h + o)) / 14), post(m.w + o, -o + (i * (m.h + o)) / 14));
+  parts.push(
+    block("#e6d9b8", -o - 0.03, -o - 0.03, m.w + 2 * o + 0.06, 0.06, 0.05, 0.46),
+    block("#e6d9b8", -o - 0.03, -o, 0.06, m.h + o, 0.05, 0.46),
+    block("#e6d9b8", m.w + o - 0.03, -o, 0.06, m.h + o, 0.05, 0.46),
+  );
+  const px = m.w / 2;
+  parts.push(block("#a7764a", px - 0.9, -9, 1.8, 6.4, 0.08, 0.04));
+  for (let z = -8.6; z < -2.6; z += 0.45) parts.push(flat("#6e4a2b", px - 0.9, z, 1.8, 0.04, 0.125));
+  for (const z of [-8.9, -6.6, -4.3])
+    for (const x of [px - 0.95, px + 0.95]) parts.push(part(new CylinderGeometry(0.1, 0.1, 0.7, 6), "#6e4a2b", [x, 0.15, z]));
+  parts.push(
+    block("#c4553f", px + 1.3, -8.4, 1, 2.4, 0.32, -0.08),
+    block("#e9d8b4", px + 1.42, -8.25, 0.76, 2.1, 0.06, 0.2),
+    block("#8a5d36", px + 1.3, -7.3, 1, 0.22, 0.06, 0.26),
+  );
+  return parts;
+}
+
+/**
+ * Central Lawn, and with `lakeside` Fishers of Men's Lakeside: the same lawn
+ * running out into a lake, with the Fishers' dock at its middle.
+ */
+function lawnArt(m: Arena, lakeside: boolean): BufferGeometry {
+  const parts: BufferGeometry[] = lakeside ? shore(m) : [flat("#5f8f4f", -40, -40, m.w + 80, m.h + 80, -0.02)];
+  parts.push(flat("#83b66a", 0, 0, m.w, m.h, 0));
   for (let x = 0; x < m.w; x += 2)
     for (let y = 0; y < m.h; y += 2) if ((x + y) % 4 === 0) parts.push(flat("#7aab61", x, y, 2, 2, 0.004));
-  parts.push(flat("#dccf98", 0, 11, m.w, 2, 0.008), flat("#dccf98", 17, 0, 2, m.h, 0.008));
-  // Hedge border just outside the playable bounds.
+  parts.push(flat("#dccf98", 0, m.h / 2 - 1, m.w, 2, 0.008), flat("#dccf98", m.w / 2 - 1, 0, 2, m.h, 0.008));
+  if (lakeside && m.respawns) parts.push(...dock(m.respawns[FISHERS]));
+  // Hedge border just outside the playable bounds; on Lakeside only the
+  // camera side, where the field meets land.
   const e = 0.7;
-  for (const [x, z, w, d] of [
-    [-e, -e, m.w + 2 * e, e],
-    [-e, m.h, m.w + 2 * e, e],
-    [-e, 0, e, m.h],
-    [m.w, 0, e, m.h],
-  ])
+  const hedges = [[-e, m.h, m.w + 2 * e, e]];
+  if (!lakeside)
+    hedges.push(
+      [-e, -e, m.w + 2 * e, e],
+      [-e, 0, e, m.h],
+      [m.w, 0, e, m.h],
+    );
+  for (const [x, z, w, d] of hedges)
     parts.push(block("#3f7a4b", x, z, w, d, 0.62), block("#4f9259", x - 0.03, z - 0.03, w + 0.06, d + 0.06, 0.1, 0.6));
   for (const w of m.walls) if (w.hp === undefined) parts.push(...wall(w));
   // Trees beyond the hedge; kept short and further out on the camera side.
+  // Lakeside has water on the other three sides.
   let seed = 0;
   for (let x = -3; x <= m.w + 3; x += 3.1) {
-    parts.push(...tree(x + noise(seed) * 1.2, -2.6 - noise(seed + 1) * 2.4, 2.8 + noise(seed + 2) * 0.9, seed++));
+    if (!lakeside) parts.push(...tree(x + noise(seed) * 1.2, -2.6 - noise(seed + 1) * 2.4, 2.8 + noise(seed + 2) * 0.9, seed));
+    seed++;
     parts.push(...tree(x + noise(seed) * 1.2, m.h + 4.4 + noise(seed + 1) * 2, 2.2 + noise(seed + 2) * 0.5, seed++));
   }
-  for (let z = 0; z <= m.h; z += 3.2) {
-    parts.push(...tree(-2.6 - noise(seed) * 2.2, z + noise(seed + 1), 2.8 + noise(seed + 2) * 0.9, seed++));
-    parts.push(...tree(m.w + 2.6 + noise(seed) * 2.2, z + noise(seed + 1), 2.8 + noise(seed + 2) * 0.9, seed++));
-  }
+  if (!lakeside)
+    for (let z = 0; z <= m.h; z += 3.2) {
+      parts.push(...tree(-2.6 - noise(seed) * 2.2, z + noise(seed + 1), 2.8 + noise(seed + 2) * 0.9, seed++));
+      parts.push(...tree(m.w + 2.6 + noise(seed) * 2.2, z + noise(seed + 1), 2.8 + noise(seed + 2) * 0.9, seed++));
+    }
   return merge(parts);
 }
 
@@ -291,11 +386,21 @@ export interface ArenaMap {
   dispose(): void;
 }
 
+/** Each mode's static field art. */
+const SCENERY: Record<Mode, () => BufferGeometry> = {
+  showdown: () => lawnArt(MAPS.showdown, false),
+  broomball: rinkArt,
+  fishing: () => lawnArt(MAPS.fishing, true),
+};
+
 export function buildArenaMap(mode: Mode, mats: ArenaMaterials): ArenaMap {
   const group = new Group();
   const owned: { dispose(): void }[] = [];
   const own = <T extends { dispose(): void }>(r: T) => (owned.push(r), r);
-  const base = new Mesh(own(mode === "showdown" ? lawnArt() : rinkArt()), mats.toon);
+  const base = new Mesh(
+    own(SCENERY[mode]()),
+    mats.toon,
+  );
   group.add(base);
 
   // Bushes: one mesh each, so only the one the viewed fighter stands in fades.

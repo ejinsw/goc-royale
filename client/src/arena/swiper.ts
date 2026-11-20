@@ -9,6 +9,7 @@ import {
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import {
   FIGHTERS,
+  MODES,
   type FighterId,
   type Vec,
 } from "../../../shared/definitions";
@@ -1153,7 +1154,7 @@ export class SwiperShow extends SpriteShow {
         p.alive &&
         Math.hypot(p.pos.x - at.x, p.pos.y - at.y) <= radius &&
         (p.id === id ||
-          (match.mode !== "showdown" && !!caster && p.team === caster.team)),
+          (MODES[match.mode].teams && !!caster && p.team === caster.team)),
     );
     this.after(0.25, () => this.sound("kaching", 200));
     const each = Math.max(5, Math.floor(this.count(54) / Math.max(1, fed.length)));

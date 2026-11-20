@@ -1,5 +1,5 @@
 import { Engine } from "./engine";
-import { IDS, type Mode } from "./definitions";
+import { IDS, MODES, isMode } from "./definitions";
 import type { Command, HostMessage, Lobby, Member, Input } from "./types";
 interface Session {
   id: string;
@@ -59,7 +59,7 @@ export class Room {
       throw Error(
         "This match has started. Join after the host returns to the lobby.",
       );
-    if (this.lobby.members.length >= (this.lobby.mode === "broomball" ? 6 : 10))
+    if (this.lobby.members.length >= MODES[this.lobby.mode].capacity)
       throw Error("Room is full.");
     const clean = String(name)
       .trim()
@@ -107,12 +107,11 @@ export class Room {
     if (m.some((p) => !p.connected))
       return "Wait for disconnected players to reconnect or expire.";
     if (m.some((p) => !p.ready)) return "Everyone needs to ready up.";
-    // No minimum player count by product decision. Caps only: Showdown 10,
-    // Broomball 6. Broomball teams may be any split and may share fighters.
-    if (l.mode === "showdown" && m.length > 10)
-      return "Showdown is capped at 10 players.";
-    if (l.mode === "broomball" && m.length > 6)
-      return "Broomball is capped at 6 players.";
+    // No minimum player count by product decision. Caps only (MODES).
+    // Broomball teams may be any split and may share fighters.
+    const rules = MODES[l.mode];
+    if (m.length > rules.capacity)
+      return `${rules.name} is capped at ${rules.capacity} players.`;
     return null;
   }
   command(id: string, c: Command) {
@@ -158,12 +157,8 @@ export class Room {
       member.fighter = c.fighter;
       member.ready = false;
     } else if (c.type === "ready") member.ready = c.ready === true;
-    else if (
-      c.type === "mode" &&
-      host &&
-      ["showdown", "broomball"].includes(c.mode)
-    ) {
-      this.lobby.mode = c.mode as Mode;
+    else if (c.type === "mode" && host && isMode(c.mode)) {
+      this.lobby.mode = c.mode;
       this.lobby.members.forEach((p, i) => {
         p.ready = false;
         p.team = i < 3 ? 0 : 1;

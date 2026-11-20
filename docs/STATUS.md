@@ -1327,3 +1327,78 @@ Not verified: any phone, two networked clients, real-time frame pacing or
 GPU time, audio by ear, a human playtest, or balance beyond the numbers
 above. The new sounds are synthesized cues in the existing table. Emoji
 icons fall back to colored badges on devices that cannot draw emoji.
+
+## November 20, 2026 — Fishers of Men (`feature/fishers-of-men`)
+
+User requests: a new GOC-themed mode, chosen from a brainstorm as "Fishers of
+Men" (infection); a functionality pass first, then a slightly bigger map.
+This is the one mode added beyond the pilot specification (§2.2), by user
+decision. Design brief and rules: `docs/FISHERS-OF-MEN.md`.
+
+**Rules (new mode only).** A quarter of the party (at least one) starts as
+Fishers on a dock in the middle; everyone else is a Fish. A Fish eliminated
+by anything joins the Fishers and comes back on the dock after 2 s. Fishers
+move 10% faster. Bushes hide rivals unless the viewer or a living teammate
+is close; the last Fish cannot hide. The Fishers win when every Fish is
+caught; the Fish win if any is free when 2:30 runs out. No zone.
+
+**Showdown and Broomball are unchanged.** Per-mode rules moved into one
+`MODES` table (name, capacity, length, allies, respawn delay, team speed),
+read by the engine, room, lobby, HUD, arena and touch aim in place of
+`mode === "broomball"` checks, with each existing mode's previous values.
+All 146 earlier tests pass; only the item-spawn test changed, to also cover
+the new mode. Concealment is now team-aware, which is the old rule when a
+viewer's only teammate is itself.
+
+**Lakeside**, the mode's map: 42 x 28 (Central Lawn is 36 x 24), the same
+under a half turn, with the Fishers' dock inside a ring of four short walls
+with open corners. `Arena.frame` makes the camera fit Central Lawn's 36 x 24,
+so fighters are the same size on screen. Art: a lawn running out into a
+lake (sand, a rope line, reeds, a pier and a rowboat on three sides; hedge
+and trees on the camera side), merged into the one static base mesh.
+
+Verification:
+
+- `npm test` (161 tests) and `npm run build` pass.
+- `tests/fishing.test.ts` (11): starting split and spawns, allies, catch
+  conversion and credit, withdrawn projectiles, respawn on the dock point
+  farthest from Fish, both win conditions with placements, a one-player
+  match, team vision and the last-Fish reveal, Fisher speed matching client
+  prediction, the room (capacity, unknown modes rejected), and every
+  fighter's attack and Super as a Fisher producing finite wire values.
+- `tests/maps.test.ts` (4) checks every map: half-turn symmetry, wall gaps
+  wider than a fighter, no cover overlapping a bush, every spawn and respawn
+  a free standing spot, and every open spot reachable. Lakeside also: 1.36x
+  Central Lawn's area in the same proportions, the camera frame, Fish spawns
+  at least 8 units from the dock, and nobody starting in a bush.
+- Three real WebRTC clients over the Vite dev server (headless Chromium on an
+  Apple M2 via ANGLE/Metal, 960x540, DPR 1, ordinary keyboard and mouse
+  input), one full match on Lakeside:
+  - The mode reached the guests; HUDs showed each role and
+    `▲ 2 FISH 1 FISHERS ◆`.
+  - A Fisher caught a Fish after 40 shots. The caught player saw
+    `BACK IN 2 · ◆ On the dock, as a Fisher`; all three saw
+    `JOYCE IS THE LAST FISH!` and `▲ 1 FISH 2 FISHERS ◆`. The caught player
+    came back on the dock as a Fisher.
+  - At the final whistle: `A FISH GOT AWAY!`. Places: the free Fish #1, the
+    caught Fish #2 (free 0:19), the starting Fisher #3 with 1 catch and the
+    MVP star.
+  - The lobby chip reads `FISHERS` (the full name was cut off).
+  - 0 console errors on any client.
+- Host frame time on that machine over the last 300 frames: p50 16.7 ms,
+  p95 18.2 ms, no frames over 33 ms. Renderer: 15-20 draw calls and about
+  27.6k triangles with three fighters; 36 calls and 42k during the catch
+  effects. Snapshots in at 18 Hz, simulation at 30 Hz, prediction
+  corrections p95 0.11 units.
+- Static map art: Lakeside 9,976 triangles in 13 meshes (base, 8 bushes, 4
+  crates); Central Lawn 7,126 in 11.
+
+Found, not changed: Central Lawn's spawns (18, 3) and (18, 21) sit exactly
+on bush corners, and the engine's inclusive bush bounds count that as
+inside, so a Showdown fighter starting there starts hidden.
+
+Not verified: any phone or touch device, controlled latency or loss, GPU
+time, a complete-match memory trend or rematch teardown stress test, audio
+by ear, and any human playtest. The catch has no authored animation clip
+(standard §10). Starting share, respawn delay, Fisher speed, match length
+and Lakeside's layout are first-pass values.
