@@ -90,23 +90,23 @@ test("every open spot on every map can be walked to from every spawn", () => {
   }
 });
 
-test("Lakeside is a slightly larger field framed like Central Lawn, with Fish spawning away from the dock", () => {
-  const lake = MAPS.fishing,
+test("Bruin Plaza is a much larger field framed like Central Lawn, with Fish spawning away from the Bear", () => {
+  const campus = MAPS.fishing,
     lawn = MAPS.showdown;
-  const area = (lake.w * lake.h) / (lawn.w * lawn.h);
-  assert.ok(area > 1.2 && area < 1.5, `area ratio ${area.toFixed(2)}`);
-  assert.ok(Math.abs(lake.w / lake.h - lawn.w / lawn.h) < 0.05, "same proportions");
+  const area = (campus.w * campus.h) / (lawn.w * lawn.h);
+  assert.ok(area > 2.5 && area < 3, `area ratio ${area.toFixed(2)}`);
+  assert.ok(Math.abs(campus.w / campus.h - lawn.w / lawn.h) < 0.05, "same proportions");
   // The camera fits the frame, not the field, so fighters keep their size on screen.
-  assert.deepEqual(lake.frame, { w: lawn.w, h: lawn.h });
-  assert.equal(lake.spawns.length, 10);
-  const dock = lake.respawns![FISHERS];
-  for (const s of lake.spawns)
-    assert.ok(Math.min(...dock.map((d) => distance(d, s))) >= 8, `spawn ${pointKey(s)} is too close to the dock`);
+  assert.deepEqual(campus.frame, { w: lawn.w, h: lawn.h });
+  assert.equal(campus.spawns.length, 10);
+  const bear = campus.respawns![FISHERS];
+  for (const s of campus.spawns)
+    assert.ok(Math.min(...bear.map((d) => distance(d, s))) >= 8, `spawn ${pointKey(s)} is too close to the Bear`);
   // Nobody starts hidden. (Central Lawn's (18, 3) and (18, 21) sit on bush
   // corners, which the engine's inclusive bounds count as inside.)
   for (const p of points("fishing"))
     assert.ok(
-      !lake.bushes.some((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h),
+      !campus.bushes.some((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h),
       `${pointKey(p)} starts in a bush`,
     );
 });

@@ -427,7 +427,7 @@ export function MatchHud({
             className="hud-respawn"
             icon="timer"
             text={`Back in ${hud.respawnIn}`}
-            sub={hud.role === "fisher" ? "◆ On the dock, as a Fisher" : undefined}
+            sub={hud.role === "fisher" ? "◆ At the Bruin Bear, as a Fisher" : undefined}
             pulseKey={hud.respawnIn}
           />
         )}

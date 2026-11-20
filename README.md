@@ -1,6 +1,6 @@
 # GOC Royale
 
-A browser-hosted arena brawler for private groups. React menus, a Three.js 3D arena, TypeScript simulation, and PeerJS/WebRTC data channels. **No application server, Socket.IO, accounts, or database.** Eighteen fighters: the 17 GOC ministry team leaders—the pilot seven (Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, Ethan Ha) plus Dylan, Isaac, Tovya, Rosalie, Joelle, Susannah, Joyce, Miriam, Jemuel and Russell (see docs/MINISTRY-TEAMS-BRIEF.md)—and David, a Music-team Vocal Controller. Three modes: Showdown FFA (up to 10 players), Broomball (up to 6) and Fishers of Men, an infection mode on its own Lakeside map (up to 10; see docs/FISHERS-OF-MEN.md). No mode enforces a minimum player count.
+A browser-hosted arena brawler for private groups. React menus, a Three.js 3D arena, TypeScript simulation, and PeerJS/WebRTC data channels. **No application server, Socket.IO, accounts, or database.** Eighteen fighters: the 17 GOC ministry team leaders—the pilot seven (Brandon Kam, Daniel, Rich, Samuel, Josh, Elijah, Ethan Ha) plus Dylan, Isaac, Tovya, Rosalie, Joelle, Susannah, Joyce, Miriam, Jemuel and Russell (see docs/MINISTRY-TEAMS-BRIEF.md)—and David, a Music-team Vocal Controller. Three modes: Showdown FFA (up to 10 players), Broomball (up to 6) and Fishers of Men, an infection mode on Bruin Plaza, a UCLA campus map around Ackerman Union (up to 10; see docs/FISHERS-OF-MEN.md). No mode enforces a minimum player count.
 
 ## Run it
 
@@ -34,7 +34,7 @@ The default network uses the public PeerJS Cloud signaling service and a Google 
 - Carrying the Broomball: hold left click to charge; release toward the cursor to pass/shoot. A carrier cannot attack or use a Super.
 - Touch: left stick moves. Dragging the right or Super stick previews the ability footprint; release to fire. Short attack taps auto-aim at an enemy in range and line of sight. Right-stick drag length controls ball power.
 - Portrait mobile gameplay shows a landscape prompt. Settings include independent music/sound and screen shake.
-- Eliminated Showdown participants watch the arena; Next Survivor highlights another surviving fighter. Broomball respawns after three seconds. In Fishers of Men a caught Fish returns on the dock as a Fisher after two seconds.
+- Eliminated Showdown participants watch the arena; Next Survivor highlights another surviving fighter. Broomball respawns after three seconds. In Fishers of Men a caught Fish returns at the Bruin Bear as a Fisher after two seconds.
 
 ### Room rules
 

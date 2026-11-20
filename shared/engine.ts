@@ -168,11 +168,11 @@ export class Engine {
     let blue = 0,
       red = 3,
       fish = 0,
-      docked = 0;
+      started = 0;
     const players = members.map((m, i): Player => {
       const f = FIGHTERS[m.fighter];
       const team = starters ? (starters.has(m.id) ? FISHERS : FISH) : m.team;
-      const dock = map.respawns?.[FISHERS] ?? map.spawns;
+      const starts = map.respawns?.[FISHERS] ?? map.spawns;
       const spawnIndex = starters
         ? team === FISH
           ? fish++
@@ -186,7 +186,7 @@ export class Engine {
       // spawn points (e.g. uneven broomball teams with no minimum).
       const spawn =
         spawnIndex < 0
-          ? dock[docked++ % dock.length]
+          ? starts[started++ % starts.length]
           : (map.spawns[spawnIndex] ??
             map.spawns[spawnIndex % map.spawns.length]);
       return {
@@ -632,8 +632,8 @@ export class Engine {
     if (s.mode === "fishing" && p.team === FISH) this.catchFish(p, source);
   }
   /**
-   * Fishers of Men: a caught Fish joins the Fishers and comes back on the
-   * dock. What it still has in play would change sides with it, so it is
+   * Fishers of Men: a caught Fish joins the Fishers and comes back at their
+   * respawn. What it still has in play would change sides with it, so it is
    * withdrawn instead of being turned on its old team.
    */
   private catchFish(p: Player, source?: Player) {

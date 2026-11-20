@@ -1029,63 +1029,92 @@ const LAWN: Arena = {
     { x: 26, y: 12 },
   ],
 };
-/** The Fishers' dock at the middle of Lakeside. */
-const DOCK: Vec[] = [
-  { x: 21, y: 14 },
-  { x: 20.2, y: 14.6 },
-  { x: 21.8, y: 13.4 },
+/** Where the Fishers start and come back: around the Bruin Bear. */
+const BEAR: Vec[] = [
+  { x: 30, y: 17.3 },
+  { x: 27.3, y: 20 },
+  { x: 32.7, y: 20 },
+  { x: 30, y: 22.7 },
 ];
 /**
- * Lakeside, Fishers of Men's field: a lawn running out into a lake, about a
- * third larger than Central Lawn in the same proportions, and the same under
- * a half turn. Short walls ring the Fishers' dock with open corners; cover
- * lines and bushes give the Fish somewhere to run on every flank.
+ * Bruin Plaza, Fishers of Men's field: UCLA's central campus around Ackerman
+ * Union, an original low-poly interpretation. Bruin Walk runs east-west and
+ * Westwood Plaza north-south, crossing at the Bruin Bear. Ackerman Union and
+ * Kerckhoff Hall stand to the south-east, Pauley Pavilion to the south-west,
+ * the John Wooden Center and JD Morgan Center to the north-west and the
+ * Student Activities Center to the north-east; Janss Steps close Bruin Walk's
+ * east end. 2.8x Central Lawn's area in the same proportions, and the same
+ * under a half turn (so Ackerman's footprint is the Wooden Center's,
+ * Pauley's is the Student Activities Center's, and so on). Wall ids name the
+ * art the client draws for them.
  */
-const LAKESIDE: Arena = {
-  w: 42,
-  h: 28,
+const BRUIN_PLAZA: Arena = {
+  w: 60,
+  h: 40,
   frame: { w: LAWN.w, h: LAWN.h },
   walls: [
-    { id: "a", x: 19, y: 10, w: 4, h: 1 },
-    { id: "b", x: 19, y: 17, w: 4, h: 1 },
-    { id: "c", x: 16, y: 12, w: 1, h: 4 },
-    { id: "d", x: 25, y: 12, w: 1, h: 4 },
-    { id: "e", x: 8, y: 6, w: 4, h: 1 },
-    { id: "f", x: 30, y: 21, w: 4, h: 1 },
-    { id: "g", x: 30, y: 6, w: 4, h: 1 },
-    { id: "h", x: 8, y: 21, w: 4, h: 1 },
-    { id: "i", x: 10, y: 11, w: 1, h: 3 },
-    { id: "j", x: 31, y: 14, w: 1, h: 3 },
+    { id: "ackerman", x: 36, y: 28, w: 12, h: 8 },
+    { id: "wooden", x: 12, y: 4, w: 12, h: 8 },
+    { id: "kerckhoff", x: 52, y: 29, w: 6, h: 7 },
+    { id: "morgan", x: 2, y: 4, w: 6, h: 7 },
+    { id: "pauley", x: 7, y: 28, w: 14, h: 9 },
+    { id: "sac", x: 39, y: 3, w: 14, h: 9 },
+    { id: "bear", x: 29, y: 19, w: 2, h: 2 },
+    { id: "bus0", x: 28.5, y: 30, w: 2, h: 5.5 },
+    { id: "bus1", x: 29.5, y: 4.5, w: 2, h: 5.5 },
+    // Club tables along both sides of Bruin Walk.
     ...[
-      [15, 5],
-      [26, 22],
-      [14, 20],
-      [27, 7],
+      [8, 23.2],
+      [14, 23.2],
+      [40, 23.2],
+      [46, 23.2],
+      [49.6, 16],
+      [43.6, 16],
+      [17.6, 16],
+      [11.6, 16],
+    ].map(([x, y], i) => ({ id: "table" + i, x, y, w: 2.4, h: 0.8 })),
+    // Brick planters down the middle of Bruin Walk.
+    ...[6, 16, 42.4, 52.4].map((x, i) => ({ id: "planter" + i, x, y: 19.2, w: 1.6, h: 1.6 })),
+    ...[
+      [44, 38],
+      [15, 1],
+      [3, 26],
+      [56, 13],
+      [24.5, 34],
+      [34.5, 5],
     ].map(([x, y], i) => ({ id: "crate" + i, x, y, w: 1, h: 1, hp: 1800 })),
   ],
   bushes: [
-    { x: 4, y: 12, w: 3, h: 4 },
-    { x: 35, y: 12, w: 3, h: 4 },
-    { x: 12, y: 2, w: 4, h: 2 },
-    { x: 26, y: 24, w: 4, h: 2 },
-    { x: 26, y: 2, w: 4, h: 2 },
-    { x: 12, y: 24, w: 4, h: 2 },
-    { x: 12, y: 8, w: 2, h: 2 },
-    { x: 28, y: 18, w: 2, h: 2 },
+    { x: 34, y: 30, w: 2, h: 4 },
+    { x: 24, y: 6, w: 2, h: 4 },
+    { x: 52, y: 25, w: 5, h: 2 },
+    { x: 3, y: 13, w: 5, h: 2 },
+    { x: 23, y: 30, w: 2, h: 3 },
+    { x: 35, y: 7, w: 2, h: 3 },
+    { x: 2, y: 31, w: 3, h: 3 },
+    { x: 55, y: 6, w: 3, h: 3 },
+    { x: 49, y: 37, w: 2, h: 2 },
+    { x: 9, y: 1, w: 2, h: 2 },
+    { x: 12, y: 38, w: 4, h: 1.6 },
+    { x: 44, y: 0.4, w: 4, h: 1.6 },
+    { x: 34, y: 23.5, w: 3, h: 2 },
+    { x: 23, y: 14.5, w: 3, h: 2 },
+    { x: 23, y: 23.5, w: 3, h: 2 },
+    { x: 34, y: 14.5, w: 3, h: 2 },
   ],
   spawns: [
-    { x: 3, y: 3 },
-    { x: 39, y: 25 },
-    { x: 39, y: 3 },
-    { x: 3, y: 25 },
-    { x: 21, y: 3 },
-    { x: 21, y: 25 },
-    { x: 2, y: 14 },
-    { x: 40, y: 14 },
-    { x: 7, y: 9 },
-    { x: 35, y: 19 },
+    { x: 2, y: 2 },
+    { x: 58, y: 38 },
+    { x: 58, y: 2 },
+    { x: 2, y: 38 },
+    { x: 4, y: 20 },
+    { x: 56, y: 20 },
+    { x: 18.5, y: 38.8 },
+    { x: 41.5, y: 1.2 },
+    { x: 44, y: 26 },
+    { x: 16, y: 14 },
   ],
-  respawns: [DOCK, DOCK],
+  respawns: [BEAR, BEAR],
 };
 export const MAPS: Record<Mode, Arena> = {
   showdown: LAWN,
@@ -1104,7 +1133,7 @@ export const MAPS: Record<Mode, Arena> = {
     ],
     respawns: [[{ x: 4, y: 10 }], [{ x: 30, y: 10 }]],
   },
-  fishing: LAKESIDE,
+  fishing: BRUIN_PLAZA,
 };
 export const add = (a: Vec, b: Vec): Vec => ({ x: a.x + b.x, y: a.y + b.y });
 export const sub = (a: Vec, b: Vec): Vec => ({ x: a.x - b.x, y: a.y - b.y });

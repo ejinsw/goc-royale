@@ -40,13 +40,13 @@ const match = (n = 6, seed = 7, fighter?: FighterId) => {
 };
 const fishOf = (e: Engine) => e.playerList.filter((p) => p.team === FISH);
 const fishersOf = (e: Engine) => e.playerList.filter((p) => p.team === FISHERS);
-const dock = MAPS.fishing.respawns![FISHERS];
-const onDock = (p: Player) => dock.some((d) => distance(d, p.pos) < 0.01);
+const bear = MAPS.fishing.respawns![FISHERS];
+const atBear = (p: Player) => bear.some((d) => distance(d, p.pos) < 0.01);
 /** Park everyone far apart so nothing but the test's own actions lands. */
 const spread = (e: Engine) =>
   e.playerList.forEach((p, i) => (p.pos = { ...MAPS.fishing.spawns[i] }));
 
-test("fishing: a quarter of the party starts as Fishers on the dock, the rest as Fish on spawns", () => {
+test("fishing: a quarter of the party starts as Fishers at the Bruin Bear, the rest as Fish on spawns", () => {
   for (const [n, fishers] of [
     [1, 1],
     [2, 1],
@@ -58,7 +58,7 @@ test("fishing: a quarter of the party starts as Fishers on the dock, the rest as
     const e = new Engine("fishing", members(n), seeded(n));
     assert.equal(fishersOf(e).length, fishers, `${n} players`);
     assert.equal(fishOf(e).length, n - fishers);
-    for (const p of fishersOf(e)) assert.ok(onDock(p), `${p.id} starts on the dock`);
+    for (const p of fishersOf(e)) assert.ok(atBear(p), `${p.id} starts at the Bruin Bear`);
     for (const p of fishOf(e))
       assert.ok(MAPS.fishing.spawns.some((s) => distance(s, p.pos) < 0.01));
     assert.deepEqual(e.state.score, [n - fishers, fishers]);
@@ -81,8 +81,8 @@ test("fishing: Fish are allies of Fish and Fishers of Fishers", () => {
   assert.ok(e.allies(f0, f1) && e.allies(h0, h1));
   assert.ok(!e.allies(f0, h0));
   const shoot = (from: Player, at: Player) => {
-    from.pos = { x: 4, y: 20 };
-    at.pos = { x: 7, y: 20 };
+    from.pos = { x: 4, y: 22 };
+    at.pos = { x: 7, y: 22 };
     e.setInput(from.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, attack: true });
     advance(e, 1);
     const hurt = at.hp < FIGHTERS[at.fighter].hp;
@@ -94,7 +94,7 @@ test("fishing: Fish are allies of Fish and Fishers of Fishers", () => {
   assert.equal(shoot(f0, h0), true, "Fish can fight back");
 });
 
-test("fishing: a caught Fish joins the Fishers, is credited to its catcher and returns on the dock", () => {
+test("fishing: a caught Fish joins the Fishers, is credited to its catcher and returns at the Bruin Bear", () => {
   const e = match(6);
   spread(e);
   const fish = fishOf(e);
@@ -131,7 +131,7 @@ test("fishing: a caught Fish joins the Fishers, is credited to its catcher and r
   advance(e, 0.2);
   assert.equal(target.alive, true);
   assert.equal(target.team, FISHERS);
-  assert.ok(onDock(target));
+  assert.ok(atBear(target));
   assert.ok(target.protectedUntil > e.state.time, "spawn protection");
   assert.equal(target.hp, FIGHTERS[target.fighter].hp);
 });
@@ -146,11 +146,11 @@ test("fishing: a knocked-out Fisher comes back as a Fisher; Fish never come back
   assert.equal(fisher.placement, 0, "a Fisher's knockout does not place it");
   assert.equal(fish.stats.catches, 0);
   advance(e, MODES.fishing.respawn! + 0.1);
-  assert.ok(fisher.alive && onDock(fisher));
-  // The dock point farthest from living Fish is used.
+  assert.ok(fisher.alive && atBear(fisher));
+  // The point by the Bear farthest from living Fish is used.
   const far = (p: { x: number; y: number }) =>
     Math.min(...fishOf(e).map((f) => distance(f.pos, p)));
-  assert.equal(far(fisher.pos), Math.max(...dock.map(far)));
+  assert.equal(far(fisher.pos), Math.max(...bear.map(far)));
 });
 
 test("fishing: the Fishers win when every Fish is caught, with placements by how long each stayed free", () => {
@@ -231,7 +231,7 @@ test("fishing: Fishers move faster, and local prediction uses the same speed", (
   spread(e);
   const [fish] = fishOf(e);
   const [fisher] = fishersOf(e);
-  fish.pos = { x: 4, y: 20 };
+  fish.pos = { x: 4, y: 22 };
   fisher.pos = { x: 4, y: 3 };
   const from = { fish: { ...fish.pos }, fisher: { ...fisher.pos } };
   for (const p of [fish, fisher]) e.setInput(p.id, { move: { x: 1, y: 0 }, aim: { x: 1, y: 0 } });
@@ -276,9 +276,9 @@ test("fishing: every fighter can attack and Super as a Fisher without breaking t
     advance(e, 3.1);
     const p = fishersOf(e)[0];
     const rival = fishOf(e)[0];
-    // An open lane on Lakeside's lower-left flank.
-    p.pos = { x: 3, y: 19 };
-    rival.pos = { x: 6, y: 19 };
+    // An open lane along Bruin Walk's south side.
+    p.pos = { x: 10, y: 22 };
+    rival.pos = { x: 13, y: 22 };
     advance(e, 2.2);
     p.charge = 5000;
     e.setInput(p.id, { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, attack: true, super: true });

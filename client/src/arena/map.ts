@@ -2,6 +2,7 @@ import {
   BoxGeometry,
   CircleGeometry,
   Color,
+  ConeGeometry,
   CylinderGeometry,
   DoubleSide,
   Group,
@@ -13,14 +14,14 @@ import {
   ShaderMaterial,
   type BufferGeometry,
 } from "three";
-import { FISHERS, MAPS, type Arena, type Mode, type Vec, type Wall } from "../../../shared/definitions";
+import { MAPS, type Arena, type Mode, type Vec, type Wall } from "../../../shared/definitions";
 import type { Match } from "../../../shared/types";
 import { merge, part } from "../ui/scene/geometry";
 import type { ArenaMaterials } from "./materials";
 
 /**
  * Arena presentation layer (performance standard §3, §5.2): the 3D treatment
- * of Central Lawn, Lakeside (Fishers of Men) and Broomball Night. Footprints
+ * of Central Lawn, Bruin Plaza (Fishers of Men) and Broomball Night. Footprints
  * come straight from `MAPS` (walls, bushes, bounds, goal mouths), so the art
  * cannot drift from collision. Static art is merged once per match into a few meshes; per
  * frame only the shrinking zone (a uniform), crate visibility and the
@@ -122,130 +123,424 @@ function bush(b: { x: number; y: number; w: number; h: number }, seed: number): 
   return merge(parts);
 }
 
-/** The Fishers' dock: a plank deck under the points they start and return on. */
-function dock(points: readonly Vec[]): BufferGeometry[] {
-  const cx = points.reduce((n, p) => n + p.x, 0) / points.length,
-    cz = points.reduce((n, p) => n + p.y, 0) / points.length;
-  const w = 3.4,
-    d = 2.4,
-    planks = 6;
-  const parts = [flat("#6e4a2b", cx - w / 2 - 0.1, cz - d / 2 - 0.1, w + 0.2, d + 0.2, 0.01)];
-  for (let i = 0; i < planks; i++)
-    parts.push(
-      flat(i % 2 ? "#c99155" : "#b98247", cx - w / 2, cz - d / 2 + (i * d) / planks + 0.025, w, d / planks - 0.05, 0.014),
-    );
-  // Short corner posts, low enough that fighters never look stuck on them.
-  for (const [x, z] of [
-    [cx - w / 2, cz - d / 2],
-    [cx + w / 2, cz - d / 2],
-    [cx - w / 2, cz + d / 2],
-    [cx + w / 2, cz + d / 2],
-  ])
-    parts.push(part(new CylinderGeometry(0.09, 0.11, 0.24, 6), "#7b5532", [x, 0.12, z]));
-  return parts;
-}
-
-/** A clump of reeds at the waterline. */
-function reeds(x: number, z: number, seed: number): BufferGeometry[] {
-  const parts: BufferGeometry[] = [];
-  for (let k = 0; k < 4; k++) {
-    const h = 0.5 + noise(seed + k) * 0.45;
-    const at: [number, number, number] = [
-      x + (noise(seed + k + 7) - 0.5) * 0.6,
-      h / 2 - 0.06,
-      z + (noise(seed + k + 13) - 0.5) * 0.6,
-    ];
-    parts.push(part(new CylinderGeometry(0.025, 0.04, h, 4), k % 2 ? "#6f8f3e" : "#8aa553", at));
-  }
-  return parts;
-}
-
-/**
- * Lakeside's three water sides: sand, then lake, with a rope line on short
- * posts marking the playable edge. A pier runs off the far edge in line with
- * the path, with a rowboat moored beside it. The camera side is land.
- */
-function shore(m: Arena): BufferGeometry[] {
-  const parts = [
-    flat("#3f86b5", -40, -40, m.w + 80, m.h + 80, -0.1),
-    flat("#cdb98a", -2.6, -2.6, m.w + 5.2, m.h + 2.6, -0.05),
-    flat("#e3d29e", -2, -2, m.w + 4, m.h + 2, -0.03),
-    flat("#5f8f4f", -40, m.h, m.w + 80, 40, -0.02),
+function lawnArt(): BufferGeometry {
+  const m = MAPS.showdown;
+  const parts: BufferGeometry[] = [
+    flat("#5f8f4f", -40, -40, m.w + 80, m.h + 80, -0.02),
+    flat("#83b66a", 0, 0, m.w, m.h, 0),
   ];
-  let seed = 500;
-  const open = (x: number, z: number) => z < -3 || ((x < -3 || x > m.w + 3) && z < m.h - 0.5);
-  for (let i = 0; i < 90; i++) {
-    const x = -14 + noise(seed++) * (m.w + 28),
-      z = -14 + noise(seed++) * (m.h + 14),
-      k = noise(seed++);
-    if (!open(x, z)) continue;
-    parts.push(i % 5 ? flat("#79b4d8", x, z, 0.8 + k * 1.2, 0.07, -0.09) : disc("#5f9b4b", x, z, 0.22 + k * 0.18, -0.09));
-  }
-  for (let x = -2.4; x <= m.w + 2.4; x += 3.1) parts.push(...reeds(x + noise(seed++) * 0.8, -2.75, seed++));
-  for (let z = 0; z <= m.h - 2; z += 3.1) {
-    parts.push(...reeds(-2.75, z + noise(seed++) * 0.8, seed++));
-    parts.push(...reeds(m.w + 2.75, z + noise(seed++) * 0.8, seed++));
-  }
-  // Rope line on posts along the three water sides.
-  const o = 0.35,
-    post = (x: number, z: number) => part(new CylinderGeometry(0.06, 0.08, 0.62, 6), "#7b5532", [x, 0.31, z]);
-  for (let i = 0; i <= 21; i++) parts.push(post(-o + (i * (m.w + 2 * o)) / 21, -o));
-  for (let i = 1; i <= 14; i++) parts.push(post(-o, -o + (i * (m.h + o)) / 14), post(m.w + o, -o + (i * (m.h + o)) / 14));
-  parts.push(
-    block("#e6d9b8", -o - 0.03, -o - 0.03, m.w + 2 * o + 0.06, 0.06, 0.05, 0.46),
-    block("#e6d9b8", -o - 0.03, -o, 0.06, m.h + o, 0.05, 0.46),
-    block("#e6d9b8", m.w + o - 0.03, -o, 0.06, m.h + o, 0.05, 0.46),
-  );
-  const px = m.w / 2;
-  parts.push(block("#a7764a", px - 0.9, -9, 1.8, 6.4, 0.08, 0.04));
-  for (let z = -8.6; z < -2.6; z += 0.45) parts.push(flat("#6e4a2b", px - 0.9, z, 1.8, 0.04, 0.125));
-  for (const z of [-8.9, -6.6, -4.3])
-    for (const x of [px - 0.95, px + 0.95]) parts.push(part(new CylinderGeometry(0.1, 0.1, 0.7, 6), "#6e4a2b", [x, 0.15, z]));
-  parts.push(
-    block("#c4553f", px + 1.3, -8.4, 1, 2.4, 0.32, -0.08),
-    block("#e9d8b4", px + 1.42, -8.25, 0.76, 2.1, 0.06, 0.2),
-    block("#8a5d36", px + 1.3, -7.3, 1, 0.22, 0.06, 0.26),
-  );
-  return parts;
-}
-
-/**
- * Central Lawn, and with `lakeside` Fishers of Men's Lakeside: the same lawn
- * running out into a lake, with the Fishers' dock at its middle.
- */
-function lawnArt(m: Arena, lakeside: boolean): BufferGeometry {
-  const parts: BufferGeometry[] = lakeside ? shore(m) : [flat("#5f8f4f", -40, -40, m.w + 80, m.h + 80, -0.02)];
-  parts.push(flat("#83b66a", 0, 0, m.w, m.h, 0));
   for (let x = 0; x < m.w; x += 2)
     for (let y = 0; y < m.h; y += 2) if ((x + y) % 4 === 0) parts.push(flat("#7aab61", x, y, 2, 2, 0.004));
-  parts.push(flat("#dccf98", 0, m.h / 2 - 1, m.w, 2, 0.008), flat("#dccf98", m.w / 2 - 1, 0, 2, m.h, 0.008));
-  if (lakeside && m.respawns) parts.push(...dock(m.respawns[FISHERS]));
-  // Hedge border just outside the playable bounds; on Lakeside only the
-  // camera side, where the field meets land.
+  parts.push(flat("#dccf98", 0, 11, m.w, 2, 0.008), flat("#dccf98", 17, 0, 2, m.h, 0.008));
+  // Hedge border just outside the playable bounds.
   const e = 0.7;
-  const hedges = [[-e, m.h, m.w + 2 * e, e]];
-  if (!lakeside)
-    hedges.push(
-      [-e, -e, m.w + 2 * e, e],
-      [-e, 0, e, m.h],
-      [m.w, 0, e, m.h],
-    );
-  for (const [x, z, w, d] of hedges)
+  for (const [x, z, w, d] of [
+    [-e, -e, m.w + 2 * e, e],
+    [-e, m.h, m.w + 2 * e, e],
+    [-e, 0, e, m.h],
+    [m.w, 0, e, m.h],
+  ])
     parts.push(block("#3f7a4b", x, z, w, d, 0.62), block("#4f9259", x - 0.03, z - 0.03, w + 0.06, d + 0.06, 0.1, 0.6));
   for (const w of m.walls) if (w.hp === undefined) parts.push(...wall(w));
   // Trees beyond the hedge; kept short and further out on the camera side.
-  // Lakeside has water on the other three sides.
   let seed = 0;
   for (let x = -3; x <= m.w + 3; x += 3.1) {
-    if (!lakeside) parts.push(...tree(x + noise(seed) * 1.2, -2.6 - noise(seed + 1) * 2.4, 2.8 + noise(seed + 2) * 0.9, seed));
-    seed++;
+    parts.push(...tree(x + noise(seed) * 1.2, -2.6 - noise(seed + 1) * 2.4, 2.8 + noise(seed + 2) * 0.9, seed++));
     parts.push(...tree(x + noise(seed) * 1.2, m.h + 4.4 + noise(seed + 1) * 2, 2.2 + noise(seed + 2) * 0.5, seed++));
   }
-  if (!lakeside)
-    for (let z = 0; z <= m.h; z += 3.2) {
-      parts.push(...tree(-2.6 - noise(seed) * 2.2, z + noise(seed + 1), 2.8 + noise(seed + 2) * 0.9, seed++));
-      parts.push(...tree(m.w + 2.6 + noise(seed) * 2.2, z + noise(seed + 1), 2.8 + noise(seed + 2) * 0.9, seed++));
+  for (let z = 0; z <= m.h; z += 3.2) {
+    parts.push(...tree(-2.6 - noise(seed) * 2.2, z + noise(seed + 1), 2.8 + noise(seed + 2) * 0.9, seed++));
+    parts.push(...tree(m.w + 2.6 + noise(seed) * 2.2, z + noise(seed + 1), 2.8 + noise(seed + 2) * 0.9, seed++));
+  }
+  return merge(parts);
+}
+
+/*
+ * Bruin Plaza (Fishers of Men): UCLA's central campus around Ackerman Union,
+ * an original low-poly interpretation built from primitives, with no photo
+ * texture, traced geometry or scanned asset (as the menu plaza).
+ *
+ * The camera always looks north at a fixed pitch, so anything tall hides
+ * whoever stands just north of it. Every building is therefore a body at
+ * cover height whose tall part is its south facade, the side the camera
+ * sees, and nothing on it rises faster than `SIGHT` per unit south of its
+ * north face, which sight lines toward the camera clear even at the top of
+ * the screen. The statue, buses, tables and planters stay near cover height.
+ */
+const CAMPUS_BODY = 1.3;
+const SIGHT = 0.6;
+/** The tallest a building may be `d` units south of its north face. */
+const sightLimit = (d: number) => CAMPUS_BODY + SIGHT * d;
+/** Bruin Walk (y range), Westwood Plaza (x range) and Bruin Plaza where they cross. */
+const WALK = [17, 23] as const;
+const ROAD = [27, 33] as const;
+const PLAZA = { x: 22, y: 14, w: 16, h: 12 };
+const BRICK = "#b0644b";
+const STONE = "#e8dcc2";
+const PAVING = "#cfc9bb";
+
+interface BuildingStyle {
+  body: string;
+  roof: string;
+  trim: string;
+  glass: string;
+  /** South facade height, before the sight-line limit. */
+  facade: number;
+  windows: "bands" | "grid" | "arches";
+  /** A banner stripe across the top of the facade. */
+  stripe?: string;
+  /** A central tower in the facade (Kerckhoff Hall). */
+  tower?: number;
+  /** A raised arena roof (Pauley Pavilion). */
+  dome?: number;
+  /** A skylight down the roof (Ackerman Union). */
+  skylight?: boolean;
+}
+
+/** Building art by wall id; footprints come from `MAPS.fishing`. */
+const CAMPUS_BUILDINGS: Record<string, BuildingStyle> = {
+  ackerman: { body: "#d8c8a8", roof: "#bdb6aa", trim: "#efe6d2", glass: "#56718a", facade: 2.9, windows: "bands", skylight: true },
+  kerckhoff: { body: "#a8604a", roof: "#7d6a5c", trim: STONE, glass: "#4f6378", facade: 2.6, windows: "arches", tower: 3.9 },
+  pauley: { body: "#c9ccd0", roof: "#eceeef", trim: "#2f5fa8", glass: "#55697e", facade: 2.4, windows: "bands", stripe: "#f2c65d", dome: 2.3 },
+  wooden: { body: "#d9d6cf", roof: "#a9adb2", trim: "#2f5fa8", glass: "#5a7894", facade: 2.6, windows: "bands", stripe: "#f2c65d" },
+  sac: { body: "#b56b52", roof: "#9a8f84", trim: "#ece2cc", glass: "#50657a", facade: 2.8, windows: "grid" },
+  morgan: { body: "#cfc6b4", roof: "#9fa3a6", trim: "#2f5fa8", glass: "#4d6a86", facade: 2.3, windows: "grid", stripe: "#f2c65d" },
+};
+
+/** A pane on a south face at `z` (facing the camera). */
+const pane = (hex: string, cx: number, cy: number, w: number, h: number, z: number) =>
+  part(new PlaneGeometry(w, h), hex, [cx, cy, z]);
+
+/** Window rows on a south face spanning x0..x1, up to `top`. */
+function windows(st: Pick<BuildingStyle, "windows" | "glass" | "trim">, x0: number, x1: number, top: number, z: number): BufferGeometry[] {
+  const parts: BufferGeometry[] = [];
+  if (st.windows === "bands") {
+    for (let y = 0.55; y + 0.4 < top - 0.2; y += 0.8) parts.push(pane(st.glass, (x0 + x1) / 2, y + 0.19, x1 - x0 - 0.6, 0.38, z));
+    for (let x = x0 + 0.6; x < x1 - 0.4; x += 1.1) parts.push(pane(st.trim, x, (top - 0.1) / 2 + 0.2, 0.06, top - 0.7, z + 0.002));
+  } else
+    for (let y = st.windows === "arches" ? 0.5 : 0.45; y + (st.windows === "arches" ? 0.95 : 0.5) < top - 0.2; y += st.windows === "arches" ? 1.05 : 0.8)
+      for (let x = x0 + 0.65; x < x1 - 0.45; x += 1)
+        if (st.windows === "grid") parts.push(pane(st.glass, x, y + 0.22, 0.46, 0.44, z));
+        else
+          parts.push(
+            pane(st.glass, x, y + 0.38, 0.36, 0.76, z),
+            part(new PlaneGeometry(0.255, 0.255), st.glass, [x, y + 0.76, z], [0, 0, Math.PI / 4]),
+          );
+  return parts;
+}
+
+/** A campus building over a wall footprint: see the sight-line note above. */
+function building(w: Wall, st: BuildingStyle): BufferGeometry[] {
+  const { x, y } = w,
+    south = y + w.h,
+    face = south + 0.012,
+    fd = 1,
+    fh = Math.min(st.facade, sightLimit(w.h - fd));
+  const parts = [
+    flat(PAVING, x - 0.8, y - 0.8, w.w + 1.6, w.h + 1.6, 0.006),
+    block(st.body, x, y, w.w, w.h, CAMPUS_BODY),
+    block(st.trim, x - 0.04, y - 0.04, w.w + 0.08, w.h + 0.08, 0.08, CAMPUS_BODY - 0.08),
+    block(st.roof, x + 0.12, y + 0.12, w.w - 0.24, w.h - 0.24, 0.04, CAMPUS_BODY),
+    block(st.body, x, south - fd, w.w, fd, fh),
+    block(st.trim, x - 0.05, south - fd - 0.05, w.w + 0.1, fd + 0.1, 0.1, fh - 0.1),
+    block(st.trim, x - 0.03, south - 0.05, w.w + 0.06, 0.08, 0.22),
+    ...windows(st, x, x + w.w, fh, face),
+    pane("#2f3a46", x + w.w / 2, 0.5, 1.4, 1, face + 0.004),
+    // Rooftop plant near the north face, under the sight-line limit there.
+    block("#a3a8ad", x + w.w * 0.2, y + 0.8, 1, 0.7, 0.32, CAMPUS_BODY),
+    block("#a3a8ad", x + w.w * 0.62, y + 1.2, 0.8, 0.8, 0.28, CAMPUS_BODY),
+  ];
+  if (st.stripe) parts.push(pane(st.stripe, x + w.w / 2, fh - 0.42, w.w, 0.16, face + 0.004));
+  if (st.skylight) parts.push(flat("#8fb4cc", x + 1.5, y + 2.2, w.w - 3, 1.2, CAMPUS_BODY + 0.045));
+  if (st.tower) {
+    const tw = 1.8,
+      tx = x + w.w / 2 - tw / 2,
+      tz = south - tw,
+      th = Math.min(st.tower, sightLimit(w.h - tw));
+    parts.push(
+      block(st.body, tx, tz, tw, tw, th),
+      block(st.trim, tx - 0.06, tz - 0.06, tw + 0.12, tw + 0.12, 0.12, th - 0.12),
+      ...[
+        [tx, tz],
+        [tx + tw - 0.4, tz],
+        [tx, tz + tw - 0.4],
+        [tx + tw - 0.4, tz + tw - 0.4],
+      ].map(([cx, cz]) => block(st.trim, cx, cz, 0.4, 0.4, 0.28, th)),
+      pane(st.glass, tx + tw / 2, th - 0.75, 0.4, 0.7, face + 0.004),
+      part(new PlaneGeometry(0.28, 0.28), st.glass, [tx + tw / 2, th - 0.4, face + 0.004], [0, 0, Math.PI / 4]),
+    );
+  }
+  if (st.dome) {
+    const i = 2.4,
+      dd = w.h - i - 1.6,
+      dh = Math.min(st.dome, sightLimit(i));
+    parts.push(
+      block(st.roof, x + i, y + i, w.w - 2 * i, dd, dh),
+      block(st.trim, x + i - 0.05, y + i - 0.05, w.w - 2 * i + 0.1, dd + 0.1, 0.12, dh - 0.12),
+      block(st.roof, x + i + 0.7, y + i + 0.7, w.w - 2 * i - 1.4, dd - 1.4, Math.min(dh + 0.3, sightLimit(i + 0.7))),
+    );
+  }
+  return parts;
+}
+
+/** The Bruin Bear: a bronze bear walking on all fours on a granite plinth. */
+function bruinBear(w: Wall): BufferGeometry[] {
+  const cx = w.x + w.w / 2,
+    cz = w.y + w.h / 2,
+    p = 0.62,
+    bronze = "#6e4b2f",
+    dark = "#4a3120";
+  const ball = (r: number, hex: string, at: [number, number, number], scale: [number, number, number] = [1, 1, 1]) =>
+    part(new IcosahedronGeometry(r, 1), hex, at, [0, 0, 0], scale);
+  const parts = [
+    block("#8f8a82", w.x, w.y, w.w, w.h, p - 0.1),
+    block("#bdb7ac", w.x - 0.06, w.y - 0.06, w.w + 0.12, w.h + 0.12, 0.1, p - 0.1),
+    ball(0.5, bronze, [cx - 0.08, p + 0.62, cz], [1.45, 0.78, 0.82]),
+    ball(0.32, bronze, [cx + 0.18, p + 0.82, cz], [1, 0.7, 0.9]),
+    ball(0.3, bronze, [cx + 0.62, p + 0.74, cz], [1, 0.9, 0.85]),
+    ball(0.15, dark, [cx + 0.9, p + 0.66, cz], [1.2, 0.8, 0.9]),
+    ball(0.09, bronze, [cx + 0.56, p + 1, cz - 0.17]),
+    ball(0.09, bronze, [cx + 0.56, p + 1, cz + 0.17]),
+  ];
+  // Legs mid-stride.
+  for (const [dx, dz, lean] of [
+    [0.42, -0.2, 0.25],
+    [0.38, 0.2, -0.1],
+    [-0.5, -0.2, -0.2],
+    [-0.46, 0.2, 0.15],
+  ])
+    parts.push(part(new CylinderGeometry(0.1, 0.12, 0.52, 8), bronze, [cx + dx, p + 0.26, cz + dz], [0, 0, lean]));
+  return parts;
+}
+
+/** A blue-and-gold campus shuttle parked on Westwood Plaza. */
+function bus(w: Wall): BufferGeometry[] {
+  const parts = [
+    block("#2b5aa0", w.x + 0.05, w.y + 0.05, w.w - 0.1, w.h - 0.1, 1.1, 0.25),
+    block("#e9eef2", w.x + 0.1, w.y + 0.1, w.w - 0.2, w.h - 0.2, 0.06, 1.35),
+    block("#f2c65d", w.x + 0.03, w.y + 0.3, w.w - 0.06, w.h - 0.6, 0.1, 0.5),
+    block("#2a3340", w.x + 0.02, w.y + 0.4, w.w - 0.04, w.h - 0.8, 0.32, 0.8),
+    block("#2a3340", w.x + 0.15, w.y + w.h - 0.08, w.w - 0.3, 0.06, 0.45, 0.72),
+  ];
+  for (const z of [w.y + 1, w.y + w.h - 1])
+    for (const x of [w.x + 0.05, w.x + w.w - 0.05])
+      parts.push(part(new CylinderGeometry(0.26, 0.26, 0.2, 10), "#25272b", [x, 0.26, z], [0, 0, Math.PI / 2]));
+  return parts;
+}
+
+const TABLECLOTHS = ["#3d7cc2", "#d8606d", "#f2c65d", "#77d5b9", "#9b7fd1", "#e98b4a", "#5fae6e", "#3d7cc2"];
+
+/** A club's table on Bruin Walk: cloth to the ground, flyers, a small sign. */
+function table(w: Wall, i: number): BufferGeometry[] {
+  const cloth = TABLECLOTHS[i % TABLECLOTHS.length];
+  const parts = [
+    block(cloth, w.x + 0.05, w.y + 0.05, w.w - 0.1, w.h - 0.1, 0.7),
+    block("#f4f1ea", w.x + 0.02, w.y + 0.02, w.w - 0.04, w.h - 0.04, 0.04, 0.7),
+    block(cloth, w.x + w.w / 2 - 0.45, w.y + w.h / 2 - 0.03, 0.9, 0.06, 0.38, 0.74),
+  ];
+  for (let k = 0; k < 3; k++) parts.push(block("#ffffff", w.x + 0.25 + k * 0.7, w.y + 0.12, 0.3, 0.22, 0.02, 0.74));
+  return parts;
+}
+
+/** A brick planter with a shrub and a lamp post. */
+function planter(w: Wall, i: number): BufferGeometry[] {
+  const cx = w.x + w.w / 2,
+    cz = w.y + w.h / 2;
+  const parts = [
+    block(BRICK, w.x, w.y, w.w, w.h, 0.5),
+    block(STONE, w.x - 0.04, w.y - 0.04, w.w + 0.08, w.h + 0.08, 0.08, 0.5),
+    block("#6b4e36", w.x + 0.12, w.y + 0.12, w.w - 0.24, w.h - 0.24, 0.02, 0.56),
+    part(new CylinderGeometry(0.05, 0.07, 2.2, 6), "#3b4148", [w.x + 0.3, 1.6, w.y + 0.3]),
+    part(new IcosahedronGeometry(0.16, 0), "#fff3c4", [w.x + 0.3, 2.75, w.y + 0.3]),
+  ];
+  for (let k = 0; k < 4; k++) {
+    const r = 0.28 + noise(i * 7 + k) * 0.1;
+    parts.push(
+      part(new IcosahedronGeometry(r, 0), ["#3a8752", "#409157", "#2f754b"][k % 3], [
+        cx + (k % 2 ? 0.25 : -0.25),
+        0.6 + r * 0.7,
+        cz + (k < 2 ? -0.25 : 0.25),
+      ]),
+    );
+  }
+  return parts;
+}
+
+const CAMPUS_PIECES: Record<string, (w: Wall, i: number) => BufferGeometry[]> = {
+  bear: bruinBear,
+  bus,
+  table,
+  planter,
+};
+
+/**
+ * Steps rising away from the field (east with `dir` 1, west with -1) from
+ * `x0`, between z0 and z0 + width, to a grassy campus terrace beyond that
+ * spans `terrace` along z. Returns the parts, the terrace edge x and height.
+ */
+function stairs(
+  x0: number,
+  dir: 1 | -1,
+  z0: number,
+  width: number,
+  terrace: readonly [number, number],
+): { parts: BufferGeometry[]; edge: number; top: number } {
+  const steps = 10,
+    run = 0.7,
+    rise = 0.3,
+    parts: BufferGeometry[] = [];
+  for (let k = 0; k < steps; k++) {
+    const x = dir > 0 ? x0 + k * run : x0 - (k + 1) * run,
+      h = (k + 1) * rise;
+    parts.push(
+      block("#d7d0c3", x, z0, run, width, h),
+      flat("#c58066", dir > 0 ? x : x + run - 0.12, z0, 0.12, width, h + 0.003),
+      block(BRICK, x, z0 - 0.5, run, 0.5, h + 0.35),
+      block(BRICK, x, z0 + width, run, 0.5, h + 0.35),
+    );
+  }
+  const edge = x0 + dir * steps * run,
+    top = steps * rise;
+  const x = dir > 0 ? edge : edge - 60,
+    [t0, t1] = terrace;
+  parts.push(block("#6b9450", x, t0, 60, t1 - t0, top), flat("#7fae63", x, t0, 60, t1 - t0, top + 0.002));
+  return { parts, edge, top };
+}
+
+/** Royce Hall above Janss Steps: brick, twin towers, an arched loggia. */
+function royce(x: number, z: number, base: number): BufferGeometry[] {
+  const w = 15,
+    d = 7,
+    face = z + d + 0.012,
+    roof = "#8c4f3c",
+    glass = "#4b5d70";
+  const parts = [
+    block(BRICK, x, z, w, d, 4.2, base),
+    block(STONE, x - 0.08, z - 0.08, w + 0.16, d + 0.16, 0.18, base + 4.1),
+    block(roof, x + 0.3, z + 0.3, w - 0.6, d - 0.6, 0.6, base + 4.2),
+  ];
+  for (let k = 0; k < 3; k++) {
+    const cx = x + w / 2 + (k - 1) * 1.3;
+    parts.push(
+      pane("#3a3330", cx, base + 0.8, 0.9, 1.6, face),
+      part(new CircleGeometry(0.45, 12, 0, Math.PI), "#3a3330", [cx, base + 1.6, face]),
+    );
+  }
+  for (let cx = x + 4.3; cx < x + w - 4; cx += 1.1)
+    parts.push(pane(glass, cx, base + 2.9, 0.4, 0.8, face), part(new CircleGeometry(0.2, 10, 0, Math.PI), glass, [cx, base + 3.3, face]));
+  for (const tx of [x + 0.9, x + w - 3.5]) {
+    const tz = z + d - 2.6;
+    parts.push(block(BRICK, tx, tz, 2.6, 2.6, 8.2, base));
+    for (const y of [4.2, 6.2, 8.1]) parts.push(block(STONE, tx - 0.06, tz - 0.06, 2.72, 2.72, 0.14, base + y));
+    parts.push(
+      pane(glass, tx + 1.3, base + 5.2, 0.5, 1.1, face),
+      pane(glass, tx + 1.3, base + 7.2, 0.4, 0.6, face),
+      part(new CylinderGeometry(0.85, 1.05, 1.5, 8), STONE, [tx + 1.3, base + 9, tz + 1.3]),
+      part(new ConeGeometry(1, 1.4, 8), roof, [tx + 1.3, base + 10.45, tz + 1.3]),
+    );
+  }
+  return parts;
+}
+
+/** A plain brick campus building in the backdrop. */
+function backdrop(x: number, z: number, w: number, d: number, h: number, base = 0): BufferGeometry[] {
+  const st = { windows: "grid" as const, glass: "#4f6378", trim: STONE };
+  return [
+    block(BRICK, x, z, w, d, h, base),
+    block(STONE, x - 0.06, z - 0.06, w + 0.12, d + 0.12, 0.14, base + h - 0.1),
+    block("#8a8f94", x + 0.2, z + 0.2, w - 0.4, d - 0.4, 0.05, base + h),
+    ...windows(st, x, x + w, h, z + d + 0.012).map((g) => g.translate(0, base, 0)),
+  ];
+}
+
+/** Bruin Plaza: the campus field, its paths, buildings and what lies beyond. */
+function campusArt(m: Arena): BufferGeometry {
+  const parts: BufferGeometry[] = [
+    flat("#5f8f4f", -40, -40, m.w + 80, m.h + 80, -0.02),
+    flat("#83b66a", 0, 0, m.w, m.h, 0),
+  ];
+  for (let x = 0; x < m.w; x += 2)
+    for (let y = 0; y < m.h; y += 2) if ((x + y) % 4 === 0) parts.push(flat("#7aab61", x, y, 2, 2, 0.004));
+  // Bruin Walk, with brick edges and paving joints, running on to both stairs.
+  const [w0, w1] = WALK,
+    [r0, r1] = ROAD;
+  parts.push(
+    flat("#dcd5c7", -8, w0, m.w + 16, w1 - w0, 0.008),
+    flat("#b07763", -8, w0, m.w + 16, 0.3, 0.01),
+    flat("#b07763", -8, w1 - 0.3, m.w + 16, 0.3, 0.01),
+  );
+  for (let x = -8; x < m.w + 8; x += 2) parts.push(flat("#cbc3b3", x, w0 + 0.3, 0.06, w1 - w0 - 0.6, 0.009));
+  // Westwood Plaza: asphalt, curbs and a dashed center line outside the plaza.
+  parts.push(
+    flat("#61656c", r0, -40, r1 - r0, m.h + 80, 0.0095),
+    flat("#c9c4ba", r0 - 0.2, -40, 0.2, m.h + 80, 0.0097),
+    flat("#c9c4ba", r1, -40, 0.2, m.h + 80, 0.0097),
+  );
+  for (let y = -40; y < m.h + 40; y += 2.4)
+    if (y + 1.2 < PLAZA.y || y > PLAZA.y + PLAZA.h) parts.push(flat("#f2c65d", (r0 + r1) / 2 - 0.07, y, 0.14, 1.2, 0.012));
+  // Bruin Plaza: brick pavers, rings around the Bear, and the Janss landing.
+  const cx = PLAZA.x + PLAZA.w / 2,
+    cz = PLAZA.y + PLAZA.h / 2;
+  parts.push(
+    flat("#c58066", PLAZA.x, PLAZA.y, PLAZA.w, PLAZA.h, 0.011),
+    disc("#b7b1a6", cx, cz, 1.9, 0.013),
+    ring("#e0b39e", cx, cz, 3, 3.25, 0.014),
+    ring("#e0b39e", cx, cz, 5, 5.2, 0.014),
+    flat("#c58066", m.w - 4, w0 - 2, 12, w1 - w0 + 4, 0.0105),
+  );
+  for (let x = PLAZA.x + 1; x < PLAZA.x + PLAZA.w; x += 1) parts.push(flat("#d39a82", x, PLAZA.y, 0.05, PLAZA.h, 0.012));
+  for (let z = PLAZA.y + 1; z < PLAZA.y + PLAZA.h; z += 1) parts.push(flat("#d39a82", PLAZA.x, z, PLAZA.w, 0.05, 0.012));
+  // Field pieces: buildings and props by wall id, plain cover otherwise.
+  m.walls.forEach((w, i) => {
+    if (w.hp !== undefined) return;
+    const kind = w.id.replace(/\d+$/, "");
+    const style = CAMPUS_BUILDINGS[kind];
+    parts.push(...(style ? building(w, style) : (CAMPUS_PIECES[kind]?.(w, i) ?? wall(w))));
+  });
+  // Hedges around the field, open where the walk and the road leave it, and
+  // bollards across those openings.
+  const e = 0.7;
+  const hedges = [
+    [-e, -e, r0 + e, e],
+    [r1, -e, m.w - r1 + e, e],
+    [-e, m.h, r0 + e, e],
+    [r1, m.h, m.w - r1 + e, e],
+    [-e, 0, e, w0],
+    [-e, w1, e, m.h - w1],
+    [m.w, 0, e, w0],
+    [m.w, w1, e, m.h - w1],
+  ];
+  for (const [x, z, w, d] of hedges)
+    parts.push(block("#3f7a4b", x, z, w, d, 0.62), block("#4f9259", x - 0.03, z - 0.03, w + 0.06, d + 0.06, 0.1, 0.6));
+  const bollard = (x: number, z: number) => part(new CylinderGeometry(0.09, 0.11, 0.7, 8), "#e9e4da", [x, 0.35, z]);
+  for (let t = 0.4; t < 6; t += 1.3) parts.push(bollard(r0 + t, -0.35), bollard(r0 + t, m.h + 0.35), bollard(-0.35, w0 + t), bollard(m.w + 0.35, w0 + t));
+  // Janss Steps in the east, with Royce Hall beside their top; stairs up to
+  // the Hill in the west.
+  const janss = stairs(m.w + 1.5, 1, w0 - 3, w1 - w0 + 6, [w0 - 3.5, 80]);
+  const hill = stairs(-1.5, -1, w0 - 3, w1 - w0 + 6, [-40, 80]);
+  parts.push(...janss.parts, ...hill.parts, ...royce(m.w + 2.5, w0 - 15.5, 0));
+  parts.push(...backdrop(hill.edge - 14, w0 - 8, 12, 6, 4.2, hill.top), ...backdrop(hill.edge - 14, w1 + 6, 12, 6, 4.2, hill.top));
+  // More of campus north of the field, set back behind a row of trees.
+  parts.push(...backdrop(2, -12, 20, 6, 3.6), ...backdrop(38, -12, 20, 6, 3.6));
+  let seed = 0;
+  for (let x = -3; x <= m.w + 3; x += 3.1) {
+    if (x > r0 - 2.5 && x < r1 + 1.5) {
+      seed += 2;
+      continue;
     }
+    parts.push(...tree(x + noise(seed) * 1.2, -2.6 - noise(seed + 1) * 1.2, 2.8 + noise(seed + 2) * 0.9, seed++));
+    parts.push(...tree(x + noise(seed) * 1.2, m.h + 4.4 + noise(seed + 1) * 2, 2.2 + noise(seed + 2) * 0.5, seed++));
+  }
+  for (let z = 0; z <= m.h; z += 3.2) {
+    if (z > w0 - 4.5 && z < w1 + 3.5) {
+      seed += 2;
+      continue;
+    }
+    parts.push(...tree(-2.6 - noise(seed) * 2.2, z + noise(seed + 1), 2.8 + noise(seed + 2) * 0.9, seed++));
+    // No trees in front of Royce Hall.
+    if (z < w0 - 7) seed++;
+    else parts.push(...tree(m.w + 2.6 + noise(seed) * 2.2, z + noise(seed + 1), 2.8 + noise(seed + 2) * 0.9, seed++));
+  }
   return merge(parts);
 }
 
@@ -388,9 +683,9 @@ export interface ArenaMap {
 
 /** Each mode's static field art. */
 const SCENERY: Record<Mode, () => BufferGeometry> = {
-  showdown: () => lawnArt(MAPS.showdown, false),
+  showdown: lawnArt,
   broomball: rinkArt,
-  fishing: () => lawnArt(MAPS.fishing, true),
+  fishing: () => campusArt(MAPS.fishing),
 };
 
 export function buildArenaMap(mode: Mode, mats: ArenaMaterials): ArenaMap {
