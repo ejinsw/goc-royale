@@ -45,7 +45,7 @@ Maintain clear ownership:
 | Layer | Owns | Must not own |
 |---|---|---|
 | Shared simulation | Rules, collision, damage, cooldowns, scoring, authoritative positions | DOM, camera, animation playback, renderer objects |
-| Room authority | Sessions, validation, fixed simulation stepping, authoritative event production | Local visual prediction, HUD layout |
+| Room authority | Sessions, validation, fixed simulation stepping, bot input (`shared/bot.ts`, through `Engine.setInput` only), authoritative event production | Local visual prediction, HUD layout |
 | Network transport | Input delivery, snapshots, acknowledgements, latency measurement | Game rules, animation selection |
 | Arena presentation | Interpolation, predicted local cues, animation, VFX, camera, world audio | Authoritative damage, scoring, collision |
 | React UI | Menus, lobby, low-frequency HUD, settings, results | Per-frame transforms or full snapshot processing |

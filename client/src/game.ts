@@ -16,7 +16,7 @@ import { metrics } from "./metrics";
 import { uiPrefs } from "./ui/core/feedback";
 import { preloadFighterAssets } from "./arena/fighters";
 import { createArenaView, type ArenaView, type CueKind } from "./arena/view";
-import type { AimIntent } from "./arena/aimPreview";
+import type { AimIntent } from "../../shared/footprints";
 import { cameraFocusId } from "./arena/cameraFocus";
 import type { PresentationEvents } from "./gameStore";
 

@@ -7,16 +7,22 @@ import {
   type FighterId,
   type ItemKind,
   type WeaveSpec,
-} from "../../../shared/definitions";
+  shotPoint,
+} from "./definitions";
 
-/** Local-only intent shown while an action control is held. */
+/**
+ * Exact action footprints, derived from the fighter table. The aim preview
+ * draws them and bots aim with them; neither decides gameplay, and
+ * tests/aimPreview.test.ts checks every footprint against the authority's
+ * real hits, so both stay honest when an ability changes.
+ */
+
+/** An action being aimed: the attack, the Super, or a held item. */
 export type AimIntent = "attack" | "super" | "item";
 
 /**
  * A stable, data-derived ground footprint: exactly where a rival's center
- * must be for the action to hit, with the aim pointing along local +z. It
- * never participates in gameplay; tests check each fighter's footprint
- * against the authority's hits (tests/aimPreview.test.ts).
+ * must be for the action to hit, with the aim pointing along local +z.
  */
 export type AimShape =
   /**
@@ -202,4 +208,127 @@ export function aimPreviewFor(
   if (intent === "attack" && FIGHTERS[id].abilities.attack.kind === "lob" && shape.kind === "circle")
     return { ...shape, distance: FIGHTERS[id].range * held };
   return shape;
+}
+
+/** A point in footprint space: the shooter at the origin, the aim along +z. */
+export interface FootPoint {
+  x: number;
+  z: number;
+}
+
+/**
+ * Footprint space for a world aim: `z` along the aim, `x` across it, the
+ * same turn the authority applies to spread angles.
+ */
+export function toFootprint(
+  rel: { x: number; y: number },
+  aim: { x: number; y: number },
+): FootPoint {
+  return { x: rel.x * aim.y - rel.y * aim.x, z: rel.x * aim.x + rel.y * aim.y };
+}
+
+const segment = (p: FootPoint, a: FootPoint, b: FootPoint) => {
+  const vx = b.x - a.x,
+    vz = b.z - a.z;
+  const t = Math.max(
+    0,
+    Math.min(1, ((p.x - a.x) * vx + (p.z - a.z) * vz) / (vx * vx + vz * vz || 1)),
+  );
+  return Math.hypot(p.x - (a.x + vx * t), p.z - (a.z + vz * t));
+};
+const box = (p: FootPoint, hx: number, z0: number, z1: number) => {
+  const dx = Math.abs(p.x) - hx,
+    dz = Math.max(z0 - p.z, p.z - z1);
+  const out = Math.hypot(Math.max(dx, 0), Math.max(dz, 0));
+  return out > 0 ? -out : -Math.max(dx, dz);
+};
+/** The local direction of a spread angle (aim along +z), as the authority turns it. */
+const heading = (angle: number): FootPoint => ({
+  x: -Math.sin(angle),
+  z: Math.cos(angle),
+});
+
+/**
+ * Signed distance from a footprint's edge, positive inside, for a rival's
+ * center at `p` (footprint space). Mirrors how AimGuide draws each kind.
+ * `firstSide` keeps only the first bend of an alternating weave, which is
+ * the one the next shot takes when its owner has not fired yet.
+ */
+export function footprintEdge(
+  shape: AimShape,
+  p: FootPoint,
+  firstSide = false,
+): number {
+  const O = { x: 0, z: 0 };
+  switch (shape.kind) {
+    case "lane": {
+      let d = box(p, shape.width / 2, shape.from ?? 0, shape.range);
+      const end = { x: 0, z: shape.range };
+      if (shape.cap)
+        d = Math.max(d, shape.width / 2 - Math.hypot(p.x, p.z - shape.range));
+      for (const a of shape.tail?.angles ?? []) {
+        const h = heading(a);
+        const tip = {
+          x: end.x + h.x * shape.tail!.range,
+          z: end.z + h.z * shape.tail!.range,
+        };
+        d = Math.max(d, shape.tail!.width / 2 - segment(p, end, tip));
+      }
+      return d;
+    }
+    case "sector": {
+      const r = Math.hypot(p.x, p.z),
+        a = Math.abs(Math.atan2(p.x, p.z));
+      const edge =
+        a <= shape.half
+          ? r * Math.sin(Math.min(Math.PI / 2, shape.half - a))
+          : -(a - shape.half < Math.PI / 2 ? r * Math.sin(a - shape.half) : r);
+      return Math.min(shape.radius - r, edge);
+    }
+    case "fan":
+      return Math.max(
+        ...shape.angles.map((a) => {
+          const h = heading(a);
+          return (
+            shape.width / 2 -
+            segment(p, O, { x: h.x * shape.range, z: h.z * shape.range })
+          );
+        }),
+      );
+    case "path": {
+      let best = -Infinity;
+      for (const path of shape.paths) {
+        if (firstSide && shape.weave.alternate && path.side !== 1) continue;
+        const dir = {
+          x: Math.cos(Math.PI / 2 + path.angle),
+          y: Math.sin(Math.PI / 2 + path.angle),
+        };
+        let prev: FootPoint | null = null;
+        for (let t = 0; t <= shape.range + 1e-9; t += 0.05) {
+          const at = shotPoint(
+            { x: dir.x * t, y: dir.y * t },
+            dir,
+            t,
+            shape.weave,
+            path.side,
+          );
+          const q = { x: at.x, z: at.y };
+          if (prev) best = Math.max(best, shape.width / 2 - segment(p, prev, q));
+          prev = q;
+        }
+      }
+      return best;
+    }
+    case "taper": {
+      const k = Math.max(0, Math.min(1, p.z / shape.range));
+      const half = (shape.near + (shape.far - shape.near) * k) / 2;
+      const body = Math.min(half - Math.abs(p.x), p.z, shape.range - p.z);
+      return Math.max(body, shape.far / 2 - Math.hypot(p.x, p.z - shape.range));
+    }
+    case "circle":
+      return shape.radius - Math.hypot(p.x, p.z - shape.distance);
+    case "bar":
+    case "global":
+      return -1;
+  }
 }

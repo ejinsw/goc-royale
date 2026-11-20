@@ -32,6 +32,7 @@ const PATHS = {
   dot: "M12 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z",
   timer: "M12 7.5v5l3 2M9.5 2.5h5M12 21a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17Z",
   expand: "M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5",
+  bot: "M5 8.5h14v11H5zM12 8.5V5M10.5 4.5h3M9 12.5v2M15 12.5v2M2.5 12.5v3.5M21.5 12.5v3.5",
 } as const;
 
 export type IconName = keyof typeof PATHS;

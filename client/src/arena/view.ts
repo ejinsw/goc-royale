@@ -52,7 +52,7 @@ import {
   lobHeight,
   type ProjectileView,
 } from "./fx";
-import { aimPreviewFor, itemAimPreviewFor, type AimIntent } from "./aimPreview";
+import { aimPreviewFor, itemAimPreviewFor, type AimIntent } from "../../../shared/footprints";
 import { cameraFocusId } from "./cameraFocus";
 import { buildArenaMap, type ArenaMap } from "./map";
 import { createArenaMaterials } from "./materials";

@@ -317,6 +317,22 @@ export const AREAS: Record<AreaKind, AreaSpec> = {
   barrier: { radius: 2, duration: 6, hp: 3000, wall: { thickness: 0.5 } },
 };
 
+/**
+ * A bot's personality for one fighter. Every fighter has one, so every
+ * fighter can be a bot. The brain (shared/bot.ts) is the same for all of
+ * them: when to attack and when to use the Super come from the fighter's
+ * abilities through their exact footprints (shared/footprints.ts); this
+ * row only says how it likes to move.
+ */
+export interface BotSpec {
+  /** Preferred distance from its target, as a share of the attack's range. */
+  keep: number;
+  /** Health share below which it backs away to recover. */
+  retreat: number;
+  /** How much it sidesteps while fighting, 0 (walks straight) to 1. */
+  strafe: number;
+}
+
 export interface Fighter {
   id: FighterId;
   name: string;
@@ -337,6 +353,8 @@ export interface Fighter {
   attackSound?: "mixed_voice";
   /** Super charge gained per point of damage dealt or healing given. Default 1. */
   chargeRate?: number;
+  /** How a bot plays this fighter (see shared/bot.ts). */
+  bot: BotSpec;
   /** How the attack and Super resolve on the authority. */
   abilities: { attack: AttackSpec; super: SuperSpec };
 }
@@ -360,6 +378,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
       "Throw a nametag that marks a rival for 5 seconds. A marked rival takes +350 from the follow-up.",
     superDescription:
       "A big welcoming circle for 7 seconds: rivals inside are slowed 40%, allies heal 400 per second.",
+    bot: { keep: 0.7, retreat: 0.35, strafe: 0.6 },
     abilities: {
       attack: { kind: "shot", reveal: 5, width: 0.2, followUp: 350 },
       super: { kind: "zone", area: "welcome", distance: 4 },
@@ -383,6 +402,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "Five keys. One close-range problem.",
     superDescription:
       "Wind up, then charge in a van. Knock enemies aside and break crates.",
+    bot: { keep: 0.45, retreat: 0.2, strafe: 0.3 },
     abilities: {
       attack: { kind: "shot", spread: [-0.25, -0.125, 0, 0.125, 0.25] },
       super: {
@@ -414,6 +434,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
       "Focus for a blink, then fire an instant flash down the line. Bonus damage at long range.",
     superDescription:
       "Frame the crowd, then stun everyone caught in the photo.",
+    bot: { keep: 0.85, retreat: 0.45, strafe: 0.4 },
     abilities: {
       attack: {
         kind: "beam",
@@ -452,6 +473,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
       "Lob a snack bag over cover. It bursts on landing: rivals get hurt, teammates get fed.",
     superDescription:
       "Deploy a destructible snack table that heals nearby allies.",
+    bot: { keep: 0.8, retreat: 0.45, strafe: 0.5 },
     abilities: {
       attack: { kind: "lob", radius: 1.2, healAllies: 850 },
       super: { kind: "zone", area: "table", distance: 4 },
@@ -475,6 +497,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "A wide sound cone hits every enemy in its path.",
     superDescription:
       "A huge sound blast pierces enemies and pushes them back.",
+    bot: { keep: 0.7, retreat: 0.35, strafe: 0.5 },
     abilities: {
       attack: { kind: "cone", halfAngle: Math.PI / 9 },
       super: {
@@ -507,6 +530,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "A glitching bug zigzags across the floor and ricochets once.",
     superDescription:
       "Rewind two seconds, recover up to 2,500 HP, leave an explosive glitch.",
+    bot: { keep: 0.65, retreat: 0.35, strafe: 0.8 },
     abilities: {
       attack: {
         kind: "shot",
@@ -540,6 +564,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
       "Strum two notes that spiral around each other, 380 damage each.",
     superDescription:
       "A pulse of aura: 1,200 damage and a shove to rivals within 3.5 units. Walls and spawn protection block it.",
+    bot: { keep: 0.55, retreat: 0.3, strafe: 0.6 },
     abilities: {
       attack: {
         kind: "shot",
@@ -577,6 +602,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     superDescription:
       "A judging gaze shoves rivals sideways and briefly slows them.",
     attackSound: "mixed_voice",
+    bot: { keep: 0.7, retreat: 0.35, strafe: 0.5 },
     abilities: {
       attack: {
         kind: "shot",
@@ -615,6 +641,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "Cast a hook that reels rivals a step closer.",
     superDescription:
       "Throw a net. Everyone caught is dragged to the middle and stunned.",
+    bot: { keep: 0.75, retreat: 0.35, strafe: 0.5 },
     abilities: {
       attack: { kind: "shot", tug: 1.2 },
       super: {
@@ -646,6 +673,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "Three staples in a quick burst per shot.",
     superDescription:
       "Set up folding tables that block enemy shots for 6 seconds.",
+    bot: { keep: 0.6, retreat: 0.3, strafe: 0.4 },
     abilities: {
       attack: { kind: "shot", burst: { count: 3, gap: 0.09 } },
       super: { kind: "zone", area: "barrier", distance: 1.8 },
@@ -668,6 +696,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     color: "#9ead2c",
     description: "A wide close-range swing hits everyone in front.",
     superDescription: "Leap over cover and slam down, knocking rivals back.",
+    bot: { keep: 0.5, retreat: 0.2, strafe: 0.3 },
     abilities: {
       attack: { kind: "cone", halfAngle: 0.96 },
       super: {
@@ -696,6 +725,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description:
       "A welcome wave that widens as it rolls out and passes through every rival.",
     superDescription: "Throw out a giant red panda that chases rivals down.",
+    bot: { keep: 0.65, retreat: 0.35, strafe: 0.5 },
     abilities: {
       attack: { kind: "shot", pierce: true, width: 0.18, grow: 0.1 },
       super: { kind: "zone", area: "panda", distance: 3 },
@@ -718,6 +748,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     color: "#ffb300",
     description: "A throw that flies out and back, hitting on both legs.",
     superDescription: "Swap places with the first rival hit and stun them.",
+    bot: { keep: 0.6, retreat: 0.3, strafe: 0.9 },
     abilities: {
       attack: { kind: "shot", pierce: true, returns: true },
       super: {
@@ -749,6 +780,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description:
       "A post that goes viral: on a hit or at full range it splits into three shares.",
     superDescription: "Lob a bundle of tees over cover. It bursts on landing.",
+    bot: { keep: 0.75, retreat: 0.4, strafe: 0.6 },
     abilities: {
       attack: {
         kind: "shot",
@@ -783,6 +815,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "A paper-plane note that curves toward rivals.",
     superDescription:
       "Heal yourself and every teammate 1,800 HP wherever they are, plus 1 s of protection.",
+    bot: { keep: 0.8, retreat: 0.5, strafe: 0.6 },
     abilities: {
       attack: { kind: "shot", homing: 2.6 },
       super: { kind: "burst", at: 0, radius: Infinity, heal: 1800, protect: 1 },
@@ -806,6 +839,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description:
       "A dove glides out in a gentle arc and slows rivals by 30% for 1.5 seconds.",
     superDescription: "Stun every rival around you for 1.25 seconds.",
+    bot: { keep: 0.7, retreat: 0.4, strafe: 0.5 },
     abilities: {
       attack: {
         kind: "shot",
@@ -833,6 +867,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description: "A ring of light hits every rival close around you.",
     superDescription:
       "Shield yourself and nearby teammates from 2,000 damage for 6 seconds.",
+    bot: { keep: 0.45, retreat: 0.25, strafe: 0.4 },
     abilities: {
       attack: { kind: "cone", halfAngle: Math.PI },
       super: {
@@ -861,6 +896,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
     description:
       "Toss a coin pouch over cover. It bursts on landing and refunds 35% of the damage as health.",
     superDescription: "Rivals around you take damage and lose all their ammo.",
+    bot: { keep: 0.75, retreat: 0.35, strafe: 0.4 },
     abilities: {
       attack: { kind: "lob", radius: 1.1, lifesteal: 0.35 },
       super: { kind: "burst", at: 0, radius: 4.5, damage: 700, drain: true },
@@ -887,6 +923,7 @@ export const FIGHTERS: Record<FighterId, Fighter> = {
       "All-you-can-eat: heal yourself and nearby teammates 1,200 HP, plus a 600 shield for 4 seconds. Charges 20% faster.",
     // His Super is ready after about 4,170 damage instead of 5,000.
     chargeRate: 1.2,
+    bot: { keep: 0.6, retreat: 0.3, strafe: 0.6 },
     abilities: {
       attack: { kind: "shot", spread: [-0.17, 0, 0.17] },
       super: {

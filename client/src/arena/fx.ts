@@ -43,7 +43,7 @@ import {
 } from "../../../shared/definitions";
 import type { Area, Item } from "../../../shared/types";
 import { merge, part } from "../ui/scene/geometry";
-import type { AimIntent, AimShape } from "./aimPreview";
+import type { AimIntent, AimShape } from "../../../shared/footprints";
 import { itemModel, projectileModel } from "./attackModels";
 import type { ArenaMaterials } from "./materials";
 

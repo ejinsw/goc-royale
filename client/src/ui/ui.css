@@ -841,11 +841,13 @@ input {
 }
 .dock-side,
 .dock-main,
-.join-row {
+.join-row,
+.picker-actions {
   display: flex;
   gap: 10px;
 }
 .dock-main > *,
+.picker-actions > *,
 .join-row > [data-input="text"] {
   flex: 1;
 }

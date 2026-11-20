@@ -1398,3 +1398,115 @@ Verification: `npm test` (148) and `npm run build` pass; engine tests cover
 each change and the aim accuracy test covers Russell's and Brandon
 Nguyen's new footprints. Russell's lob was captured in the game camera
 (aim circle, arc, landing). Not verified: phones, two clients, a playtest.
+
+## November 20, 2026 — Bots for every fighter (`feature/bots`)
+
+The host can add bots to the lobby. Every fighter can be a bot, and a new
+fighter row is a bot automatically.
+
+**Formula.** One brain (`shared/bot.ts`) plays every fighter and never
+branches on a fighter id:
+
+- **Attacks.** A bot attacks when its attack's exact footprint covers where
+  it predicts the rival will be. These are the same footprints the aim
+  preview draws.
+- **Super kind.** The Super's use is read from its data: `strike` (damage,
+  stun, slow, pull, drain or knock), `mend` (heal, shield or protect),
+  `guard` (a wall) or `summon` (a companion).
+- **Super timing.**
+  - Strikes fire when the Super footprint covers a rival.
+  - Mends fire under 55% health, or when a teammate in range is under 50%.
+  - Guards fire when the bot was just hit at attack range.
+  - Summons fire when a rival is within the companion's sight.
+- **Movement.** Every fighter row now requires a `bot` entry
+  (`BotSpec`: preferred distance as a share of range, retreat health, and
+  strafe). It only shapes movement.
+
+To make that possible, the footprint module moved from
+`client/src/arena/aimPreview.ts` to `shared/footprints.ts`. Its
+signed-distance test (`footprintEdge`) moved there from
+`tests/aimPreview.test.ts`. The accuracy test now checks the function bots
+aim with against the authority's real hits.
+
+**Room authority.**
+
+- **Members and messages.** A bot is a lobby member with `bot: true` that
+  is always connected and ready. It counts toward the 10 / 6 caps. It
+  receives no lobby or snapshot messages, so it adds no per-viewer snapshot
+  clones.
+- **Input.** Each tick the room calls `Bot.update`, which plans at 10 Hz
+  (staggered across bots) and sends input every tick through
+  `Engine.setInput`. Bots therefore obey the same cooldowns, speeds and
+  rules as people.
+- **Fairness.**
+  - Bots cannot see rivals concealed in bushes (`Engine.concealed`).
+  - They lead moving targets imperfectly and shake their aim by ±0.06 rad.
+  - They take about 70% of clean shots.
+  - They dodge rival shots, beam tells and landing markers about 65% of
+    the time.
+  - They ask for the short cutscene.
+- **Showdown play.** Bots stay inside the zone.
+- **Broomball play.**
+  - The nearest teammate chases a loose ball.
+  - The bot nearest its own goal keeps goal and steps into incoming shots.
+  - A carrier runs at the rival goal and shoots from 10 units.
+- **Commands.**
+  - New: `{type: "bot", fighter?}`, host only. Without a pick, the bot
+    takes a fighter nobody in the party has.
+  - `select` takes an optional `id`, so the host can pick a bot's fighter;
+    nobody picks for another person.
+  - `kick` removes a bot. Bots survive a return to the lobby (rematch).
+  - A room of only bots cannot start.
+
+**Lobby UI.** The changes use existing `menuKit` kinds only:
+
+- The host has a dock `button` "Add bot", using a new `bot` icon. It
+  denies with "The room holds N" when the party is full.
+- Bot plates show the bot icon and a "Bot" caption.
+- Tapping a bot plate (host only) opens the fighter sheet titled with the
+  bot's name. It adds "Move to Red/Blue" (Broomball) and "Remove bot"
+  buttons.
+- Bot plates carry no inline buttons, so a full party fits on a phone.
+
+**Measured.** Numbers are from a desktop (Apple silicon) and headless
+Chrome for Testing at 1100×680, DPR 1:
+
+- **Planning cost.** All bots together cost 0.02–0.08 ms per 33 ms tick in
+  a ten-bot Showdown; the test budget is < 1 ms.
+- **Frame pacing.** In the live app, a host with four bots fighting ran at
+  16.7 ms median and 17.4–17.5 ms p95 frame time, with no frame over
+  33 ms.
+- **Duels.** Each fighter's bot fought a juking, passive rival for 60 s.
+  Every bot dealt at least 12,000 damage and used its Super at least once;
+  all seven Super kinds fire.
+- **Broomball pace.** Over 24 random 3v3 bot lineups, the median match ran
+  the full 150 s regulation, and 21 of 24 had at least one goal.
+
+**Verification.** `npm test` (159) and `npm run build` pass.
+`tests/bot.test.ts` covers:
+
+- every row's bot and Super use
+- room add, pick, remove, caps, permissions and rematch
+- a bot playing through the real room
+- every fighter's duel
+- bush concealment
+- a ten-bot Showdown with a winner, within the planning budget
+- Broomball scoring and the keeper
+
+The live app checks were:
+
+- **Desktop, one browser.** Add bots, pick a bot's fighter, switch modes,
+  start, and watch the bots fight and use Supers in the game camera.
+- **Two clients over PeerJS.** The guest, on a phone-sized portrait
+  viewport, sees bot plates without host controls and has the bots in its
+  match.
+- **Host on a phone viewport.** A full room of 10 was checked, plus the
+  bot sheet's team and remove buttons.
+
+**Not verified.**
+
+- Physical phones.
+- Controlled latency or loss with bots in the room. Bots run on the host,
+  so they see no network delay; that is an advantage over guests.
+- A human playtest of bot difficulty. There is one difficulty level.
+- Bots do not pick up or use items.

@@ -77,6 +77,8 @@ export function lobbyStage(
   frame: StageFrame,
   actions: {
     openPicker: () => PressResult;
+    /** Host: choose a bot's fighter. */
+    pickFor: (id: string) => PressResult;
     setTeam: (id: string, team: 0 | 1) => PressResult;
     kick: (id: string) => PressResult;
   },
@@ -94,22 +96,26 @@ export function lobbyStage(
   // Plates stay compact so ten fit side by side on a phone: status is the
   // surface plus a leading icon, never color alone.
   const plates: StagePlate[] = lobby.members.map((m) => {
-    const status = !m.connected ? "reconnecting" : m.ready ? "ready" : "choosing";
+    const status = m.bot ? "bot" : !m.connected ? "reconnecting" : m.ready ? "ready" : "choosing";
     const team = m.team === 0 ? "Blue" : "Red";
     const self = m.id === selfId;
+    const fighter = FIGHTERS[m.fighter].name;
+    const pick = self ? actions.openPicker : m.bot && isHost ? () => actions.pickFor(m.id) : undefined;
     return {
       key: m.id,
-      label: `${m.name}${self ? " (you)" : ""}, ${FIGHTERS[m.fighter].name}, ${status}${
+      label: `${m.name}${self ? " (you)" : ""}, ${fighter}, ${status}${
         m.id === lobby.host ? ", host" : ""
       }${teams ? `, ${team} team` : ""}${
-        self ? ". Change fighter" : teams && isHost ? `. Move to ${m.team === 0 ? "Red" : "Blue"}` : ""
+        self ? ". Change fighter" : pick ? ". Change fighter, team or remove" : teams && isHost ? `. Move to ${m.team === 0 ? "Red" : "Blue"}` : ""
       }`,
       title: `${teams ? (m.team === 0 ? "▲ " : "◆ ") : ""}${m.name}`,
-      icon: !m.connected ? "refresh" : m.ready ? "check" : undefined,
-      caption: `${FIGHTERS[m.fighter].name}${m.id === lobby.host ? " · Host" : ""}`,
-      variant: !m.connected ? "dark" : m.ready ? "primary" : self ? "selected" : undefined,
-      onPress: self ? actions.openPicker : undefined,
-      actions: isHost
+      icon: m.bot ? "bot" : !m.connected ? "refresh" : m.ready ? "check" : undefined,
+      caption: `${m.bot ? "" : fighter}${m.id === lobby.host ? " · Host" : m.bot ? "Bot" : ""}`,
+      variant: !m.connected ? "dark" : m.bot ? undefined : m.ready ? "primary" : self ? "selected" : undefined,
+      onPress: pick,
+      // A bot's team and removal live in its own sheet (tap the plate), so
+      // a full party of bots does not stack ten rows of buttons on a phone.
+      actions: isHost && !m.bot
         ? [
             ...(teams
               ? [
